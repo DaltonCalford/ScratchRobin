@@ -5,6 +5,10 @@ set(SOURCES
     core/connection_manager.cpp
     core/metadata_manager.cpp
     core/config_manager.cpp
+    metadata/schema_collector.cpp
+    metadata/object_hierarchy.cpp
+    metadata/cache_manager.cpp
+    metadata/metadata_manager.cpp
     ui/main_window.cpp
     ui/connection_dialog.cpp
     ui/query_editor.cpp
@@ -24,6 +28,10 @@ set(HEADERS
     core/connection_manager.h
     core/metadata_manager.h
     core/config_manager.h
+    metadata/schema_collector.h
+    metadata/object_hierarchy.h
+    metadata/cache_manager.h
+    metadata/metadata_manager.h
     ui/main_window.h
     ui/connection_dialog.h
     ui/query_editor.h
