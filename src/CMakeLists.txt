@@ -14,6 +14,7 @@ set(SOURCES
     ui/query_editor.cpp
     ui/object_browser/tree_model.cpp
     ui/object_browser/object_browser.cpp
+    ui/properties/property_viewer.cpp
     ui/result_viewer.cpp
     utils/logger.cpp
     utils/string_utils.cpp
@@ -38,6 +39,7 @@ set(HEADERS
     ui/query_editor.h
     ui/object_browser/tree_model.h
     ui/object_browser/object_browser.h
+    ui/properties/property_viewer.h
     ui/result_viewer.h
     utils/logger.h
     utils/string_utils.h
