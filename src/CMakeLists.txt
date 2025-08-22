@@ -10,6 +10,7 @@ set(SOURCES
     metadata/cache_manager.cpp
     metadata/metadata_manager.cpp
     search/search_engine.cpp
+    editor/text_editor.cpp
     ui/main_window.cpp
     ui/connection_dialog.cpp
     ui/query_editor.cpp
@@ -36,6 +37,7 @@ set(HEADERS
     metadata/cache_manager.h
     metadata/metadata_manager.h
     search/search_engine.h
+    editor/text_editor.h
     ui/main_window.h
     ui/connection_dialog.h
     ui/query_editor.h
