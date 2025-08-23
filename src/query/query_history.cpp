@@ -222,39 +222,13 @@ public:
     QueryHistoryEntry resultToEntry(const QueryResult& result) {
         QueryHistoryEntry entry;
         entry.id = generateQueryHistoryId();
-        entry.queryId = result.queryId;
-        entry.queryText = result.queryText;
-        entry.queryType = result.queryType;
-        entry.connectionId = result.connectionId;
-        entry.databaseName = result.databaseName;
-        entry.userName = ""; // Would be set from session context
-        entry.startTime = chronoToQDateTime(result.startTime);
-        entry.endTime = chronoToQDateTime(result.endTime);
+        entry.sql = result.originalQuery;
+        entry.timestamp = result.startTime;
         entry.duration = result.executionTime;
-        entry.rowCount = result.rowCount;
-        entry.affectedRows = result.affectedRows;
+        entry.rowsAffected = result.affectedRows;
         entry.success = result.success;
         entry.errorMessage = result.errorMessage;
-        entry.executionPlan = result.executionPlan;
-
-        // Convert statistics to string format
-        QJsonObject statsObj;
-        for (const auto& [key, value] : result.statistics) {
-            statsObj[QString::fromStdString(key)] = QJsonValue::fromVariant(value);
-        }
-        entry.statistics = QString::fromUtf8(QJsonDocument(statsObj).toJson()).toStdString();
-
-        // Convert metadata to string format
-        QJsonObject metaObj;
-        for (const auto& [key, value] : result.metadata) {
-            metaObj[QString::fromStdString(key)] = QString::fromStdString(value);
-        }
-        entry.metadata = QString::fromUtf8(QJsonDocument(metaObj).toJson()).toStdString();
-
-        entry.isFavorite = false;
-        entry.executionCount = 1;
-        entry.createdAt = chronoToQDateTime(result.startTime);
-        entry.lastExecutedAt = chronoToQDateTime(result.endTime);
+        entry.connectionId = result.connectionId;
 
         return entry;
     }
@@ -271,34 +245,26 @@ public:
         )");
 
         query.addBindValue(QString::fromStdString(entry.id));
-        query.addBindValue(QString::fromStdString(entry.queryId));
-        query.addBindValue(QString::fromStdString(entry.queryText));
-        query.addBindValue(QString::fromStdString(queryTypeToString(entry.queryType)));
+        query.addBindValue(QString::fromStdString(entry.sql));
+        query.addBindValue(QString("UNKNOWN")); // QueryType not available in QueryHistoryEntry
         query.addBindValue(QString::fromStdString(entry.connectionId));
-        query.addBindValue(QString::fromStdString(entry.databaseName));
-        query.addBindValue(QString::fromStdString(entry.userName));
-        query.addBindValue(entry.startTime.toString(Qt::ISODate));
-        query.addBindValue(entry.endTime.toString(Qt::ISODate));
+        query.addBindValue(QString("")); // databaseName not available
+        query.addBindValue(QString("")); // userName not available
+        query.addBindValue(QDateTime::fromSecsSinceEpoch(std::chrono::duration_cast<std::chrono::seconds>(entry.timestamp.time_since_epoch()).count()).toString(Qt::ISODate));
+        query.addBindValue(QDateTime::fromSecsSinceEpoch(std::chrono::duration_cast<std::chrono::seconds>(entry.timestamp.time_since_epoch()).count()).toString(Qt::ISODate)); // No endTime, use timestamp
         query.addBindValue(static_cast<qint64>(entry.duration.count()));
-        query.addBindValue(entry.rowCount);
-        query.addBindValue(entry.affectedRows);
+        query.addBindValue(0); // rowCount not available in QueryHistoryEntry
+        query.addBindValue(entry.rowsAffected);
         query.addBindValue(entry.success ? 1 : 0);
         query.addBindValue(QString::fromStdString(entry.errorMessage));
-        query.addBindValue(QString::fromStdString(entry.executionPlan));
-        query.addBindValue(QString::fromStdString(entry.statistics));
-        query.addBindValue(QString::fromStdString(entry.metadata));
-
-        // Convert tags to JSON array
-        QJsonArray tagsArray;
-        for (const auto& tag : entry.tags) {
-            tagsArray.append(QString::fromStdString(tag));
-        }
-        query.addBindValue(QString::fromUtf8(QJsonDocument(tagsArray).toJson()));
-
-        query.addBindValue(entry.isFavorite ? 1 : 0);
-        query.addBindValue(entry.executionCount);
-        query.addBindValue(entry.createdAt.toString(Qt::ISODate));
-        query.addBindValue(entry.lastExecutedAt.toString(Qt::ISODate));
+        query.addBindValue(QString("")); // executionPlan not available
+        query.addBindValue(QString("")); // statistics not available
+        query.addBindValue(QString("")); // metadata not available
+        query.addBindValue(QString("[]")); // tags not available, use empty array
+        query.addBindValue(0); // isFavorite not available
+        query.addBindValue(1); // executionCount not available, use 1
+        query.addBindValue(QDateTime::fromSecsSinceEpoch(std::chrono::duration_cast<std::chrono::seconds>(entry.timestamp.time_since_epoch()).count()).toString(Qt::ISODate));
+        query.addBindValue(QDateTime::fromSecsSinceEpoch(std::chrono::duration_cast<std::chrono::seconds>(entry.timestamp.time_since_epoch()).count()).toString(Qt::ISODate));
 
         if (!query.exec()) {
             qWarning() << "Failed to insert history entry:" << query.lastError().text();
@@ -492,61 +458,15 @@ public:
         while (query.next()) {
             QueryHistoryEntry entry;
             entry.id = query.value("id").toString().toStdString();
-            entry.queryId = query.value("query_id").toString().toStdString();
-            entry.queryText = query.value("query_text").toString().toStdString();
-            entry.queryType = stringToQueryType(query.value("query_type").toString().toStdString());
+            entry.sql = query.value("query_text").toString().toStdString();
             entry.connectionId = query.value("connection_id").toString().toStdString();
-            entry.databaseName = query.value("database_name").toString().toStdString();
-            entry.userName = query.value("user_name").toString().toStdString();
-            entry.startTime = QDateTime::fromString(query.value("start_time").toString(), Qt::ISODate);
-            entry.endTime = QDateTime::fromString(query.value("end_time").toString(), Qt::ISODate);
+            entry.timestamp = std::chrono::system_clock::time_point(std::chrono::milliseconds(query.value("start_time").toDateTime().toMSecsSinceEpoch()));
             entry.duration = std::chrono::milliseconds(query.value("duration_ms").toLongLong());
-            entry.rowCount = query.value("row_count").toInt();
-            entry.affectedRows = query.value("affected_rows").toInt();
+            entry.rowsAffected = query.value("affected_rows").toInt();
             entry.success = query.value("success").toBool();
             entry.errorMessage = query.value("error_message").toString().toStdString();
-            entry.executionPlan = query.value("execution_plan").toString().toStdString();
 
-            // Parse statistics JSON
-            QString statsJson = query.value("statistics").toString();
-            if (!statsJson.isEmpty()) {
-                QJsonDocument statsDoc = QJsonDocument::fromJson(statsJson.toUtf8());
-                if (statsDoc.isObject()) {
-                    QJsonObject statsObj = statsDoc.object();
-                    for (const QString& key : statsObj.keys()) {
-                        entry.statistics[key.toStdString()] = statsObj[key].toVariant();
-                    }
-                }
-            }
-
-            // Parse metadata JSON
-            QString metaJson = query.value("metadata").toString();
-            if (!metaJson.isEmpty()) {
-                QJsonDocument metaDoc = QJsonDocument::fromJson(metaJson.toUtf8());
-                if (metaDoc.isObject()) {
-                    QJsonObject metaObj = metaDoc.object();
-                    for (const QString& key : metaObj.keys()) {
-                        entry.metadata[key.toStdString()] = metaObj[key].toString().toStdString();
-                    }
-                }
-            }
-
-            // Parse tags JSON
-            QString tagsJson = query.value("tags").toString();
-            if (!tagsJson.isEmpty()) {
-                QJsonDocument tagsDoc = QJsonDocument::fromJson(tagsJson.toUtf8());
-                if (tagsDoc.isArray()) {
-                    QJsonArray tagsArray = tagsDoc.array();
-                    for (const QJsonValue& tagValue : tagsArray) {
-                        entry.tags.insert(tagValue.toString().toStdString());
-                    }
-                }
-            }
-
-            entry.isFavorite = query.value("is_favorite").toBool();
-            entry.executionCount = query.value("execution_count").toInt();
-            entry.createdAt = QDateTime::fromString(query.value("created_at").toString(), Qt::ISODate);
-            entry.lastExecutedAt = QDateTime::fromString(query.value("last_executed_at").toString(), Qt::ISODate);
+            // Note: rowCount, executionPlan, statistics, metadata, tags, isFavorite, executionCount, createdAt, and lastExecutedAt not available in QueryHistoryEntry
 
             results.push_back(entry);
         }
@@ -615,8 +535,8 @@ void QueryHistory::addQuery(const QueryResult& queryResult) {
         auto entry = impl_->resultToEntry(queryResult);
 
         // Limit query text length
-        if (entry.queryText.length() > config_.maxQueryLength) {
-            entry.queryText = entry.queryText.substr(0, config_.maxQueryLength) + "...";
+        if (entry.sql.length() > config_.maxQueryLength) {
+            entry.sql = entry.sql.substr(0, config_.maxQueryLength) + "...";
         }
 
         impl_->insertHistoryEntry(entry);
@@ -677,59 +597,15 @@ QueryHistoryEntry QueryHistory::getQuery(const std::string& queryId) const {
     if (query.exec() && query.next()) {
         QueryHistoryEntry entry;
         entry.id = query.value("id").toString().toStdString();
-        entry.queryId = query.value("query_id").toString().toStdString();
-        entry.queryText = query.value("query_text").toString().toStdString();
-        entry.queryType = stringToQueryType(query.value("query_type").toString().toStdString());
+        entry.sql = query.value("query_text").toString().toStdString();
         entry.connectionId = query.value("connection_id").toString().toStdString();
-        entry.databaseName = query.value("database_name").toString().toStdString();
-        entry.userName = query.value("user_name").toString().toStdString();
-        entry.startTime = QDateTime::fromString(query.value("start_time").toString(), Qt::ISODate);
-        entry.endTime = QDateTime::fromString(query.value("end_time").toString(), Qt::ISODate);
+        entry.timestamp = std::chrono::system_clock::time_point(std::chrono::milliseconds(query.value("start_time").toDateTime().toMSecsSinceEpoch()));
         entry.duration = std::chrono::milliseconds(query.value("duration_ms").toLongLong());
-        entry.rowCount = query.value("row_count").toInt();
-        entry.affectedRows = query.value("affected_rows").toInt();
+        entry.rowsAffected = query.value("affected_rows").toInt();
         entry.success = query.value("success").toBool();
         entry.errorMessage = query.value("error_message").toString().toStdString();
-        entry.executionPlan = query.value("execution_plan").toString().toStdString();
 
-        // Parse JSON fields
-        QString statsJson = query.value("statistics").toString();
-        if (!statsJson.isEmpty()) {
-            QJsonDocument statsDoc = QJsonDocument::fromJson(statsJson.toUtf8());
-            if (statsDoc.isObject()) {
-                QJsonObject statsObj = statsDoc.object();
-                for (const QString& key : statsObj.keys()) {
-                    entry.statistics[key.toStdString()] = statsObj[key].toVariant();
-                }
-            }
-        }
-
-        QString metaJson = query.value("metadata").toString();
-        if (!metaJson.isEmpty()) {
-            QJsonDocument metaDoc = QJsonDocument::fromJson(metaJson.toUtf8());
-            if (metaDoc.isObject()) {
-                QJsonObject metaObj = metaDoc.object();
-                for (const QString& key : metaObj.keys()) {
-                    entry.metadata[key.toStdString()] = metaObj[key].toString().toStdString();
-                }
-            }
-        }
-
-        QString tagsJson = query.value("tags").toString();
-        if (!tagsJson.isEmpty()) {
-            QJsonDocument tagsDoc = QJsonDocument::fromJson(tagsJson.toUtf8());
-            if (tagsDoc.isArray()) {
-                QJsonArray tagsArray = tagsDoc.array();
-                for (const QJsonValue& tagValue : tagsArray) {
-                    entry.tags.insert(tagValue.toString().toStdString());
-                }
-            }
-        }
-
-        entry.isFavorite = query.value("is_favorite").toBool();
-        entry.executionCount = query.value("execution_count").toInt();
-        entry.createdAt = QDateTime::fromString(query.value("created_at").toString(), Qt::ISODate);
-        entry.lastExecutedAt = QDateTime::fromString(query.value("last_executed_at").toString(), Qt::ISODate);
+        // Note: rowCount, executionPlan, statistics, metadata, tags, isFavorite, executionCount, createdAt, and lastExecutedAt not available in QueryHistoryEntry
 
         return entry;
     }
@@ -757,7 +633,7 @@ void QueryHistory::addFavorite(const QueryHistoryEntry& entry, const std::string
     favorite.name = name.empty() ? "Favorite Query " + std::to_string(favorites_.size() + 1) : name;
     favorite.description = description;
     favorite.type = QueryFavoriteType::QUERY;
-    favorite.queryText = entry.queryText;
+    favorite.queryText = entry.sql;
     favorite.category = "history";
     favorite.createdAt = QDateTime::currentDateTime();
     favorite.lastUsedAt = QDateTime::currentDateTime();
@@ -1188,11 +1064,11 @@ void QueryHistory::cleanupHistory(int daysToKeep) {
     // Clean up caches
     recentHistory_.erase(std::remove_if(recentHistory_.begin(), recentHistory_.end(),
                                        [cutoffDate](const QueryHistoryEntry& e) {
-                                           return e.startTime < cutoffDate;
+                                           return std::chrono::system_clock::time_point(std::chrono::milliseconds(cutoffDate.toMSecsSinceEpoch())) > e.timestamp;
                                        }), recentHistory_.end());
 
     for (auto it = historyCache_.begin(); it != historyCache_.end();) {
-        if (it->second.startTime < cutoffDate) {
+        if (std::chrono::system_clock::time_point(std::chrono::milliseconds(cutoffDate.toMSecsSinceEpoch())) > it->second.timestamp) {
             it = historyCache_.erase(it);
         } else {
             ++it;
@@ -1218,8 +1094,9 @@ std::unordered_map<std::string, int> QueryHistory::getQueryStatistics(const Quer
     stats["successfulQueries"] = std::count_if(history.begin(), history.end(),
                                              [](const QueryHistoryEntry& e) { return e.success; });
     stats["failedQueries"] = stats["totalQueries"] - stats["successfulQueries"];
+    // Note: rowCount not available in QueryHistoryEntry, using rowsAffected as approximation
     stats["totalRows"] = std::accumulate(history.begin(), history.end(), 0,
-                                       [](int sum, const QueryHistoryEntry& e) { return sum + e.rowCount; });
+                                       [](int sum, const QueryHistoryEntry& e) { return sum + e.rowsAffected; });
     stats["totalExecutionTime"] = std::accumulate(history.begin(), history.end(), 0LL,
                                                 [](long long sum, const QueryHistoryEntry& e) {
                                                     return sum + e.duration.count();
