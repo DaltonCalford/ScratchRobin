@@ -16,6 +16,8 @@
 #include <algorithm>
 #include <sstream>
 #include <iomanip>
+#include <regex>
+#include <chrono>
 
 namespace scratchrobin {
 
@@ -570,7 +572,7 @@ public:
         return results;
     }
 
-private:
+public:
     QueryHistory* parent_;
     QueryHistoryConfiguration config_;
     QSqlDatabase database_;

@@ -165,11 +165,11 @@ private:
             if (result.success()) {
                 for (const auto& row : result.value().rows) {
                     SchemaObject schema;
-                    schema.name = row[0];
-                    schema.schema = row[0]; // Schema name is the same
+                    schema.name = row.at("schema_name");
+                    schema.schema = row.at("schema_name"); // Schema name is the same
                     schema.database = connection_->getDatabaseName();
                     schema.type = SchemaObjectType::SCHEMA;
-                    schema.owner = row[1];
+                    schema.owner = row.at("schema_owner");
                     schema.createdAt = std::chrono::system_clock::now(); // Approximate
                     schema.isSystemObject = false;
                     schema.properties["owner"] = row[1];

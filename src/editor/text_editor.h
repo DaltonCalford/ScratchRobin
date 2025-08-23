@@ -13,6 +13,7 @@
 #include <QSyntaxHighlighter>
 #include <QCompleter>
 #include <QTimer>
+#include <QDateTime>
 #include <QMenu>
 #include <QAction>
 

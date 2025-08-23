@@ -13,6 +13,7 @@
 #include <atomic>
 #include <QObject>
 #include <QTimer>
+#include "ui/object_browser/tree_model.h"
 #include <QThread>
 
 namespace scratchrobin {
@@ -55,7 +56,7 @@ enum class SearchField {
     ALL
 };
 
-enum class IndexType {
+enum class SearchIndexType {
     INVERTED_INDEX,
     TRIE_INDEX,
     HASH_INDEX,
@@ -96,7 +97,7 @@ struct SearchResult {
 };
 
 struct SearchIndex {
-    IndexType type;
+    SearchIndexType type;
     std::string name;
     std::unordered_map<std::string, std::vector<std::string>> termIndex;
     std::unordered_map<std::string, std::unordered_map<std::string, double>> tfidfIndex;
@@ -129,9 +130,9 @@ struct SearchConfiguration {
     int maxHistorySize = 100;
     bool enableAnalytics = true;
     std::vector<SearchAlgorithm> enabledAlgorithms;
-    std::vector<IndexType> enabledIndexTypes;
+    std::vector<SearchIndexType> enabledIndexTypes;
     std::unordered_map<SearchAlgorithm, int> algorithmWeights;
-    std::unordered_map<IndexType, int> indexWeights;
+    std::unordered_map<SearchIndexType, int> indexWeights;
     bool enableStemming = false;
     bool enableStopWords = true;
     std::vector<std::string> stopWords;
@@ -150,18 +151,20 @@ public:
     virtual std::vector<SearchResult> search(const SearchQuery& query) = 0;
     virtual void searchAsync(const SearchQuery& query) = 0;
 
-    virtual void buildIndex(IndexType type = IndexType::INVERTED_INDEX) = 0;
-    virtual void rebuildIndex(IndexType type = IndexType::INVERTED_INDEX) = 0;
-    virtual void clearIndex(IndexType type = IndexType::INVERTED_INDEX) = 0;
+
     virtual std::vector<SearchIndex> getIndexInfo() const = 0;
+
+    virtual void buildIndex(SearchIndexType type = SearchIndexType::INVERTED_INDEX) = 0;
+    virtual void rebuildIndex(SearchIndexType type = SearchIndexType::INVERTED_INDEX) = 0;
+    virtual void clearIndex(SearchIndexType type = SearchIndexType::INVERTED_INDEX) = 0;
 
     virtual std::vector<SearchSuggestion> getSuggestions(const std::string& partialQuery, int maxSuggestions = 10) = 0;
     virtual std::vector<std::string> getSearchHistory() const = 0;
     virtual void clearSearchHistory() = 0;
 
-    virtual void addToIndex(const std::string& objectId, const std::string& content, SearchField field, IndexType type = IndexType::INVERTED_INDEX) = 0;
-    virtual void removeFromIndex(const std::string& objectId, IndexType type = IndexType::INVERTED_INDEX) = 0;
-    virtual void updateIndex(const std::string& objectId, const std::string& oldContent, const std::string& newContent, SearchField field, IndexType type = IndexType::INVERTED_INDEX) = 0;
+    virtual void addToIndex(const std::string& objectId, const std::string& content, SearchField field, SearchIndexType type = SearchIndexType::INVERTED_INDEX) = 0;
+    virtual void removeFromIndex(const std::string& objectId, SearchIndexType type = SearchIndexType::INVERTED_INDEX) = 0;
+    virtual void updateIndex(const std::string& objectId, const std::string& oldContent, const std::string& newContent, SearchField field, SearchIndexType type = SearchIndexType::INVERTED_INDEX) = 0;
 
     virtual SearchConfiguration getConfiguration() const = 0;
     virtual void updateConfiguration(const SearchConfiguration& config) = 0;
@@ -189,18 +192,18 @@ public:
     std::vector<SearchResult> search(const SearchQuery& query) override;
     void searchAsync(const SearchQuery& query) override;
 
-    void buildIndex(IndexType type = IndexType::INVERTED_INDEX) override;
-    void rebuildIndex(IndexType type = IndexType::INVERTED_INDEX) override;
-    void clearIndex(IndexType type = IndexType::INVERTED_INDEX) override;
+    void buildIndex(SearchIndexType type = SearchIndexType::INVERTED_INDEX) override;
+    void rebuildIndex(SearchIndexType type = SearchIndexType::INVERTED_INDEX) override;
+    void clearIndex(SearchIndexType type = SearchIndexType::INVERTED_INDEX) override;
     std::vector<SearchIndex> getIndexInfo() const override;
 
     std::vector<SearchSuggestion> getSuggestions(const std::string& partialQuery, int maxSuggestions = 10) override;
     std::vector<std::string> getSearchHistory() const override;
     void clearSearchHistory() override;
 
-    void addToIndex(const std::string& objectId, const std::string& content, SearchField field, IndexType type = IndexType::INVERTED_INDEX) override;
-    void removeFromIndex(const std::string& objectId, IndexType type = IndexType::INVERTED_INDEX) override;
-    void updateIndex(const std::string& objectId, const std::string& oldContent, const std::string& newContent, SearchField field, IndexType type = IndexType::INVERTED_INDEX) override;
+    void addToIndex(const std::string& objectId, const std::string& content, SearchField field, SearchIndexType type = SearchIndexType::INVERTED_INDEX) override;
+    void removeFromIndex(const std::string& objectId, SearchIndexType type = SearchIndexType::INVERTED_INDEX) override;
+    void updateIndex(const std::string& objectId, const std::string& oldContent, const std::string& newContent, SearchField field, SearchIndexType type = SearchIndexType::INVERTED_INDEX) override;
 
     SearchConfiguration getConfiguration() const override;
     void updateConfiguration(const SearchConfiguration& config) override;
@@ -222,7 +225,7 @@ private:
     std::shared_ptr<ICacheManager> cacheManager_;
 
     // Search infrastructure
-    std::unordered_map<IndexType, SearchIndex> searchIndexes_;
+    std::unordered_map<SearchIndexType, SearchIndex> searchIndexes_;
     SearchConfiguration config_;
     std::deque<std::string> searchHistory_;
     std::vector<SearchSuggestion> searchSuggestions_;

@@ -18,6 +18,8 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <QSpinBox>
+#include "constraint/constraint_manager.h"
+#include "index/index_manager.h"
 #include <QTextEdit>
 #include <QPushButton>
 #include <QTabWidget>
@@ -54,26 +56,9 @@ enum class ColumnType {
     CUSTOM
 };
 
-enum class ConstraintType {
-    PRIMARY_KEY,
-    FOREIGN_KEY,
-    UNIQUE,
-    CHECK,
-    NOT_NULL,
-    DEFAULT_VALUE,
-    AUTO_INCREMENT
-};
 
-enum class IndexType {
-    BTREE,
-    HASH,
-    GIN,
-    GIST,
-    SPGIST,
-    BRIN,
-    UNIQUE,
-    PARTIAL
-};
+
+
 
 enum class TableStorageType {
     REGULAR,
@@ -101,30 +86,9 @@ struct ColumnDefinition {
     std::unordered_map<std::string, std::string> properties;
 };
 
-struct ConstraintDefinition {
-    std::string name;
-    ConstraintType type = ConstraintType::PRIMARY_KEY;
-    std::vector<std::string> columns;
-    std::string referenceTable;
-    std::vector<std::string> referenceColumns;
-    std::string checkExpression;
-    std::string onDeleteAction;
-    std::string onUpdateAction;
-    bool isDeferrable = false;
-    bool isInitiallyDeferred = false;
-    std::unordered_map<std::string, std::string> properties;
-};
 
-struct IndexDefinition {
-    std::string name;
-    IndexType type = IndexType::BTREE;
-    std::vector<std::string> columns;
-    std::string expression;
-    std::string tablespace;
-    bool isUnique = false;
-    std::string whereClause;
-    std::unordered_map<std::string, std::string> properties;
-};
+
+
 
 struct TableDefinition {
     std::string name;
@@ -132,8 +96,8 @@ struct TableDefinition {
     std::string database;
     TableStorageType storageType = TableStorageType::REGULAR;
     std::vector<ColumnDefinition> columns;
-    std::vector<ConstraintDefinition> constraints;
-    std::vector<IndexDefinition> indexes;
+    std::vector<scratchrobin::ConstraintDefinition> constraints;
+    std::vector<scratchrobin::IndexDefinition> indexes;
     std::string tablespace;
     std::string comment;
     bool hasOids = false;

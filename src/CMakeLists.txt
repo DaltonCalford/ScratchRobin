@@ -64,6 +64,7 @@ set(HEADERS
     types/database_types.h
     types/connection_types.h
     types/query_types.h
+    types/result.h
 )
 
 # Create library first
@@ -74,6 +75,12 @@ target_link_libraries(scratchrobin_lib
     PRIVATE
         Threads::Threads
         ${CMAKE_DL_LIBS}
+        Qt5::Core
+        Qt5::Widgets
+        Qt5::Gui
+        Qt5::Network
+        Qt5::Sql
+        Qt5::Xml
 )
 
 # Include directories for the library

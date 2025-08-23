@@ -422,10 +422,10 @@ TextEditor::TextEditor(QWidget* parent)
 TextEditor::~TextEditor() = default;
 
 void TextEditor::setupConnections() {
-    connect(impl_->textEdit_, &QPlainTextEdit::textChanged, this, &TextEditor::onTextChanged);
-    connect(impl_->textEdit_, &QPlainTextEdit::cursorPositionChanged, this, &TextEditor::onCursorPositionChanged);
-    connect(impl_->textEdit_, &QPlainTextEdit::selectionChanged, this, &TextEditor::onSelectionChanged);
-    connect(impl_->textEdit_, &QPlainTextEdit::modificationChanged, this, &TextEditor::onDocumentModified);
+    connect(textEdit_, &QPlainTextEdit::textChanged, this, &TextEditor::onTextChanged);
+    connect(textEdit_, &QPlainTextEdit::cursorPositionChanged, this, &TextEditor::onCursorPositionChanged);
+    connect(textEdit_, &QPlainTextEdit::selectionChanged, this, &TextEditor::onSelectionChanged);
+    connect(textEdit_, &QPlainTextEdit::modificationChanged, this, &TextEditor::onDocumentModified);
 }
 
 void TextEditor::initialize(const EditorConfiguration& config) {
@@ -486,7 +486,7 @@ bool TextEditor::newDocument() {
     documentInfo_.modifiedAt = QDateTime::currentDateTimeUtc();
     documentInfo_.title = "Untitled";
 
-    impl_->textEdit_->clear();
+    textEdit_->clear();
     setDocumentInfo(documentInfo_);
 
     return true;
@@ -512,21 +512,21 @@ bool TextEditor::closeDocument() {
 }
 
 QString TextEditor::getText() const {
-    return impl_->textEdit_->toPlainText();
+    return textEdit_->toPlainText();
 }
 
 void TextEditor::setText(const QString& text) {
-    impl_->textEdit_->setPlainText(text);
+    textEdit_->setPlainText(text);
     documentInfo_.isModified = false;
     documentInfo_.modifiedAt = QDateTime::currentDateTimeUtc();
 }
 
 QString TextEditor::getSelectedText() const {
-    return impl_->textEdit_->textCursor().selectedText();
+    return textEdit_->textCursor().selectedText();
 }
 
 void TextEditor::setSelectedText(const QString& text) {
-    impl_->textEdit_->textCursor().insertText(text);
+    textEdit_->textCursor().insertText(text);
 }
 
 EditorPosition TextEditor::getCursorPosition() const {
@@ -550,17 +550,17 @@ void TextEditor::setSelection(const TextSelection& selection) {
 }
 
 void TextEditor::insertText(const QString& text) {
-    impl_->textEdit_->textCursor().insertText(text);
+    textEdit_->textCursor().insertText(text);
 }
 
 void TextEditor::insertTextAt(const QString& text, const EditorPosition& position) {
-    QTextCursor cursor = impl_->textEdit_->textCursor();
+    QTextCursor cursor = textEdit_->textCursor();
     cursor.setPosition(impl_->convertPositionToCursor(position));
     cursor.insertText(text);
 }
 
 void TextEditor::replaceText(const QString& oldText, const QString& newText) {
-    QTextCursor cursor = impl_->textEdit_->textCursor();
+    QTextCursor cursor = textEdit_->textCursor();
     cursor.beginEditBlock();
     cursor.removeSelectedText();
     cursor.insertText(newText);
@@ -568,54 +568,54 @@ void TextEditor::replaceText(const QString& oldText, const QString& newText) {
 }
 
 void TextEditor::replaceSelection(const QString& text) {
-    impl_->textEdit_->textCursor().insertText(text);
+    textEdit_->textCursor().insertText(text);
 }
 
 void TextEditor::deleteText(const EditorPosition& start, const EditorPosition& end) {
-    QTextCursor cursor = impl_->textEdit_->textCursor();
+    QTextCursor cursor = textEdit_->textCursor();
     cursor.setPosition(impl_->convertPositionToCursor(start));
     cursor.setPosition(impl_->convertPositionToCursor(end), QTextCursor::KeepAnchor);
     cursor.removeSelectedText();
 }
 
 void TextEditor::undo() {
-    if (impl_->textEdit_->document()->isUndoAvailable()) {
-        impl_->textEdit_->undo();
+    if (textEdit_->document()->isUndoAvailable()) {
+        textEdit_->undo();
     }
 }
 
 void TextEditor::redo() {
-    if (impl_->textEdit_->document()->isRedoAvailable()) {
-        impl_->textEdit_->redo();
+    if (textEdit_->document()->isRedoAvailable()) {
+        textEdit_->redo();
     }
 }
 
 bool TextEditor::canUndo() const {
-    return impl_->textEdit_->document()->isUndoAvailable();
+    return textEdit_->document()->isUndoAvailable();
 }
 
 bool TextEditor::canRedo() const {
-    return impl_->textEdit_->document()->isRedoAvailable();
+    return textEdit_->document()->isRedoAvailable();
 }
 
 void TextEditor::clearUndoRedoHistory() {
-    impl_->textEdit_->document()->clearUndoRedoStacks();
+    textEdit_->document()->clearUndoRedoStacks();
 }
 
 void TextEditor::cut() {
-    impl_->textEdit_->cut();
+    textEdit_->cut();
 }
 
 void TextEditor::copy() {
-    impl_->textEdit_->copy();
+    textEdit_->copy();
 }
 
 void TextEditor::paste() {
-    impl_->textEdit_->paste();
+    textEdit_->paste();
 }
 
 void TextEditor::selectAll() {
-    impl_->textEdit_->selectAll();
+    textEdit_->selectAll();
 }
 
 void TextEditor::findText(const QString& text, bool caseSensitive, bool wholeWords, bool regex) {
@@ -623,29 +623,29 @@ void TextEditor::findText(const QString& text, bool caseSensitive, bool wholeWor
     if (caseSensitive) flags |= QTextDocument::FindCaseSensitively;
     if (wholeWords) flags |= QTextDocument::FindWholeWords;
 
-    QTextCursor cursor = impl_->textEdit_->textCursor();
+    QTextCursor cursor = textEdit_->textCursor();
     if (regex) {
         // Handle regex search
         QRegularExpression regexPattern(text, caseSensitive ? QRegularExpression::NoPatternOption : QRegularExpression::CaseInsensitiveOption);
-        cursor = impl_->textEdit_->document()->find(regexPattern, cursor, flags);
+        cursor = textEdit_->document()->find(regexPattern, cursor, flags);
     } else {
-        cursor = impl_->textEdit_->document()->find(text, cursor, flags);
+        cursor = textEdit_->document()->find(text, cursor, flags);
     }
 
     if (!cursor.isNull()) {
-        impl_->textEdit_->setTextCursor(cursor);
-        impl_->textEdit_->ensureCursorVisible();
+        textEdit_->setTextCursor(cursor);
+        textEdit_->ensureCursorVisible();
     }
 }
 
 void TextEditor::replaceText(const QString& findText, const QString& replaceText, bool caseSensitive, bool wholeWords, bool regex) {
-    QTextCursor cursor = impl_->textEdit_->textCursor();
+    QTextCursor cursor = textEdit_->textCursor();
     if (cursor.hasSelection() && cursor.selectedText() == findText) {
         cursor.insertText(replaceText);
     } else {
         findText(findText, caseSensitive, wholeWords, regex);
-        if (impl_->textEdit_->textCursor().hasSelection()) {
-            impl_->textEdit_->textCursor().insertText(replaceText);
+        if (textEdit_->textCursor().hasSelection()) {
+            textEdit_->textCursor().insertText(replaceText);
         }
     }
 }
@@ -659,27 +659,27 @@ void TextEditor::findPrevious() {
 }
 
 void TextEditor::gotoLine(int lineNumber) {
-    QTextBlock block = impl_->textEdit_->document()->findBlockByNumber(lineNumber - 1);
+    QTextBlock block = textEdit_->document()->findBlockByNumber(lineNumber - 1);
     if (block.isValid()) {
         QTextCursor cursor(block);
-        impl_->textEdit_->setTextCursor(cursor);
-        impl_->textEdit_->ensureCursorVisible();
+        textEdit_->setTextCursor(cursor);
+        textEdit_->ensureCursorVisible();
     }
 }
 
 void TextEditor::gotoPosition(int position) {
-    QTextCursor cursor(impl_->textEdit_->document());
+    QTextCursor cursor(textEdit_->document());
     cursor.setPosition(position);
-    impl_->textEdit_->setTextCursor(cursor);
-    impl_->textEdit_->ensureCursorVisible();
+    textEdit_->setTextCursor(cursor);
+    textEdit_->ensureCursorVisible();
 }
 
 void TextEditor::indent() {
-    QTextCursor cursor = impl_->textEdit_->textCursor();
+    QTextCursor cursor = textEdit_->textCursor();
     if (cursor.hasSelection()) {
         // Indent selected lines
-        QTextBlock startBlock = impl_->textEdit_->document()->findBlock(cursor.selectionStart());
-        QTextBlock endBlock = impl_->textEdit_->document()->findBlock(cursor.selectionEnd());
+        QTextBlock startBlock = textEdit_->document()->findBlock(cursor.selectionStart());
+        QTextBlock endBlock = textEdit_->document()->findBlock(cursor.selectionEnd());
 
         cursor.beginEditBlock();
         for (QTextBlock block = startBlock; block != endBlock.next(); block = block.next()) {
@@ -697,11 +697,11 @@ void TextEditor::indent() {
 }
 
 void TextEditor::unindent() {
-    QTextCursor cursor = impl_->textEdit_->textCursor();
+    QTextCursor cursor = textEdit_->textCursor();
     if (cursor.hasSelection()) {
         // Unindent selected lines
-        QTextBlock startBlock = impl_->textEdit_->document()->findBlock(cursor.selectionStart());
-        QTextBlock endBlock = impl_->textEdit_->document()->findBlock(cursor.selectionEnd());
+        QTextBlock startBlock = textEdit_->document()->findBlock(cursor.selectionStart());
+        QTextBlock endBlock = textEdit_->document()->findBlock(cursor.selectionEnd());
 
         cursor.beginEditBlock();
         for (QTextBlock block = startBlock; block != endBlock.next(); block = block.next()) {
@@ -729,9 +729,9 @@ void TextEditor::unindent() {
 }
 
 void TextEditor::commentLine() {
-    QTextCursor cursor = impl_->textEdit_->textCursor();
-    QTextBlock startBlock = impl_->textEdit_->document()->findBlock(cursor.selectionStart());
-    QTextBlock endBlock = impl_->textEdit_->document()->findBlock(cursor.selectionEnd());
+    QTextCursor cursor = textEdit_->textCursor();
+    QTextBlock startBlock = textEdit_->document()->findBlock(cursor.selectionStart());
+    QTextBlock endBlock = textEdit_->document()->findBlock(cursor.selectionEnd());
 
     cursor.beginEditBlock();
     for (QTextBlock block = startBlock; block != endBlock.next(); block = block.next()) {
@@ -745,9 +745,9 @@ void TextEditor::commentLine() {
 }
 
 void TextEditor::uncommentLine() {
-    QTextCursor cursor = impl_->textEdit_->textCursor();
-    QTextBlock startBlock = impl_->textEdit_->document()->findBlock(cursor.selectionStart());
-    QTextBlock endBlock = impl_->textEdit_->document()->findBlock(cursor.selectionEnd());
+    QTextCursor cursor = textEdit_->textCursor();
+    QTextBlock startBlock = textEdit_->document()->findBlock(cursor.selectionStart());
+    QTextBlock endBlock = textEdit_->document()->findBlock(cursor.selectionEnd());
 
     cursor.beginEditBlock();
     for (QTextBlock block = startBlock; block != endBlock.next(); block = block.next()) {
@@ -766,7 +766,7 @@ void TextEditor::uncommentLine() {
 }
 
 void TextEditor::duplicateLine() {
-    QTextCursor cursor = impl_->textEdit_->textCursor();
+    QTextCursor cursor = textEdit_->textCursor();
     QTextBlock currentBlock = cursor.block();
 
     cursor.beginEditBlock();
@@ -776,7 +776,7 @@ void TextEditor::duplicateLine() {
 }
 
 void TextEditor::deleteLine() {
-    QTextCursor cursor = impl_->textEdit_->textCursor();
+    QTextCursor cursor = textEdit_->textCursor();
     QTextBlock currentBlock = cursor.block();
 
     cursor.beginEditBlock();
@@ -790,7 +790,7 @@ void TextEditor::deleteLine() {
 }
 
 void TextEditor::toUpperCase() {
-    QTextCursor cursor = impl_->textEdit_->textCursor();
+    QTextCursor cursor = textEdit_->textCursor();
     if (cursor.hasSelection()) {
         QString text = cursor.selectedText().toUpper();
         cursor.insertText(text);
@@ -798,7 +798,7 @@ void TextEditor::toUpperCase() {
 }
 
 void TextEditor::toLowerCase() {
-    QTextCursor cursor = impl_->textEdit_->textCursor();
+    QTextCursor cursor = textEdit_->textCursor();
     if (cursor.hasSelection()) {
         QString text = cursor.selectedText().toLower();
         cursor.insertText(text);
@@ -806,7 +806,7 @@ void TextEditor::toLowerCase() {
 }
 
 void TextEditor::toTitleCase() {
-    QTextCursor cursor = impl_->textEdit_->textCursor();
+    QTextCursor cursor = textEdit_->textCursor();
     if (cursor.hasSelection()) {
         QString text = cursor.selectedText();
         QStringList words = text.split(' ');
@@ -857,7 +857,7 @@ TextEncoding TextEditor::getTextEncoding() const {
 }
 
 int TextEditor::getLineCount() const {
-    return impl_->textEdit_->blockCount();
+    return textEdit_->blockCount();
 }
 
 int TextEditor::getWordCount() const {
@@ -879,7 +879,7 @@ bool TextEditor::isModified() const {
 
 void TextEditor::setModified(bool modified) {
     documentInfo_.isModified = modified;
-    impl_->textEdit_->document()->setModified(modified);
+    textEdit_->document()->setModified(modified);
 }
 
 void TextEditor::setTextChangedCallback(TextChangedCallback callback) {
@@ -903,11 +903,11 @@ QWidget* TextEditor::getWidget() {
 }
 
 QTextDocument* TextEditor::getDocument() {
-    return impl_->textEdit_->document();
+    return textEdit_->document();
 }
 
 QPlainTextEdit* TextEditor::getTextEdit() {
-    return impl_->textEdit_;
+    return textEdit_;
 }
 
 // Private slot implementations
@@ -964,14 +964,14 @@ void TextEditor::onContextMenuRequested(const QPoint& pos) {
     menu.addAction("Paste", this, &TextEditor::paste)->setEnabled(!QApplication::clipboard()->text().isEmpty());
     menu.addAction("Select All", this, &TextEditor::selectAll);
 
-    menu.exec(impl_->textEdit_->mapToGlobal(pos));
+    menu.exec(textEdit_->mapToGlobal(pos));
 }
 
 void TextEditor::onCompletionActivated(const QModelIndex& index) {
     // Handle completion activation
-    if (impl_->completer_) {
-        QTextCursor cursor = impl_->textEdit_->textCursor();
-        cursor.insertText(impl_->completer_->completionModel()->data(index).toString());
+    if (completer_) {
+        QTextCursor cursor = textEdit_->textCursor();
+        cursor.insertText(completer_->completionModel()->data(index).toString());
     }
 }
 

@@ -474,11 +474,107 @@ public:
         return prefix + "_" + name + "_" + std::to_string(timestamp) + "_" + std::to_string(counter++);
     }
 
-private:
+public:
     TreeModel* parent_;
     std::shared_ptr<IMetadataManager> metadataManager_;
     TreeModelConfiguration config_;
     TreeStatistics statistics_;
+
+    // Missing member variables
+    std::shared_ptr<TreeNode> rootNode_;
+    std::unordered_map<std::string, std::shared_ptr<TreeNode>> nodeMap_;
+    NodeExpandedCallback nodeExpandedCallback_;
+    NodeCollapsedCallback nodeCollapsedCallback_;
+    NodeSelectedCallback nodeSelectedCallback_;
+    NodeLoadedCallback nodeLoadedCallback_;
+    StatisticsChangedCallback statisticsChangedCallback_;
+    QTimer* loadTimer_;
+    QTimer* refreshTimer_;
+    std::string activeFilter_;
+    std::vector<std::string> matchingNodes_;
+
+    // Filtering methods
+    void applyFilterToNode(const std::shared_ptr<TreeNode>& node, const TreeFilter& filter) {
+        if (!node) return;
+
+        bool matches = true;
+
+        // Check pattern match
+        if (!filter.pattern.empty()) {
+            std::string searchText = filter.caseSensitive ? node->name : toLower(node->name);
+            std::string pattern = filter.caseSensitive ? filter.pattern : toLower(filter.pattern);
+            matches = searchText.find(pattern) != std::string::npos;
+        }
+
+        // Check node type filter
+        if (matches && !filter.nodeTypes.empty()) {
+            matches = std::find(filter.nodeTypes.begin(), filter.nodeTypes.end(), node->type) != filter.nodeTypes.end();
+        }
+
+        // Check schema type filter
+        if (matches && !filter.schemaTypes.empty()) {
+            matches = std::find(filter.schemaTypes.begin(), filter.schemaTypes.end(), node->schemaType) != filter.schemaTypes.end();
+        }
+
+        node->isVisible = matches;
+        node->isFiltered = !matches;
+
+        // Apply to children
+        for (const auto& child : node->children) {
+            applyFilterToNode(child, filter);
+        }
+    }
+
+    // Statistics methods
+    void updateStatistics() {
+        statistics_.visibleNodes = 0;
+        statistics_.expandedNodes = 0;
+        statistics_.loadingNodes = 0;
+        statistics_.errorNodes = 0;
+        statistics_.lastUpdated = QDateTime::currentDateTime();
+
+        if (parent_->rootNode_) {
+            updateNodeStatistics(parent_->rootNode_);
+        }
+    }
+
+    void updateNodeStatistics(const std::shared_ptr<TreeNode>& node) {
+        if (!node) return;
+
+        if (node->isVisible) {
+            statistics_.visibleNodes++;
+        }
+
+        if (node->isExpanded) {
+            statistics_.expandedNodes++;
+        }
+
+        if (node->loadState == NodeLoadState::LOADING) {
+            statistics_.loadingNodes++;
+        }
+
+        if (node->loadState == NodeLoadState::ERROR) {
+            statistics_.errorNodes++;
+        }
+
+        for (const auto& child : node->children) {
+            updateNodeStatistics(child);
+        }
+    }
+
+    // Timer slots
+    void onLoadTimeout() {
+        // Handle load timeout
+        qDebug() << "Load timeout occurred";
+    }
+
+    void onRefreshTimer() {
+        // Handle refresh timer
+        if (config_.enableAutoRefresh && parent_->rootNode_ && !parent_->rootNode_->children.empty()) {
+            // Trigger refresh
+            refresh();
+        }
+    }
 };
 
 // TreeModel implementation

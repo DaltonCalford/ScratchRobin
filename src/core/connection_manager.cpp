@@ -10,15 +10,18 @@
 namespace scratchrobin {
 
 // Forward declaration for Connection class
-class Connection {
+class Connection : public IConnection {
 public:
     Connection(const ConnectionInfo& info);
     ~Connection();
 
-    bool connect();
-    void disconnect();
-    bool isConnected() const;
-    const ConnectionInfo& getInfo() const;
+    bool connect() override;
+    void disconnect() override;
+    bool isConnected() const override;
+    const ConnectionInfo& getInfo() const override;
+
+    Result<std::vector<std::unordered_map<std::string, std::string>>> executeQuery(const std::string& query) override;
+    std::string getDatabaseName() const override;
 
 private:
     ConnectionInfo info_;
@@ -68,6 +71,42 @@ bool Connection::isConnected() const {
 
 const ConnectionInfo& Connection::getInfo() const {
     return info_;
+}
+
+Result<std::vector<std::unordered_map<std::string, std::string>>> Connection::executeQuery(const std::string& query) {
+    if (!connected_) {
+        return Result<std::vector<std::unordered_map<std::string, std::string>>>::error(
+            ErrorCode::CONNECTION_FAILED, "Not connected to database");
+    }
+
+    try {
+        // Simulate query execution for now
+        Logger::info("Executing query: " + query);
+
+        // Simulate some processing time
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        // Return empty result set for now
+        std::vector<std::unordered_map<std::string, std::string>> results;
+
+        // For VERSION() queries, return a mock result
+        if (query.find("VERSION()") != std::string::npos) {
+            std::unordered_map<std::string, std::string> row;
+            row["VERSION()"] = "ScratchRobin Mock Database v0.1.0";
+            results.push_back(row);
+        }
+
+        return Result<std::vector<std::unordered_map<std::string, std::string>>>::success(results);
+
+    } catch (const std::exception& e) {
+        Logger::error("Query execution failed: " + std::string(e.what()));
+        return Result<std::vector<std::unordered_map<std::string, std::string>>>::error(
+            ErrorCode::DATABASE_ERROR, std::string("Query execution failed: ") + e.what());
+    }
+}
+
+std::string Connection::getDatabaseName() const {
+    return info_.database;
 }
 
 class ConnectionManager::Impl {

@@ -789,12 +789,7 @@ void ObjectBrowser::onLoadProgress(int current, int total) {
 }
 
 void ObjectBrowser::onLoadCompleted(bool success) {
-    impl_->showProgress(false);
-    if (success) {
-        statusLabel_->setText("Load completed successfully");
-    } else {
-        statusLabel_->setText("Load failed");
-    }
+    impl_->showProgress(false, success ? "Load completed successfully" : "Load failed");
 }
 
 } // namespace scratchrobin

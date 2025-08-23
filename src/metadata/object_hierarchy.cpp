@@ -12,11 +12,11 @@ public:
     Impl(std::shared_ptr<ISchemaCollector> schemaCollector)
         : schemaCollector_(schemaCollector) {}
 
-    Result<ObjectHierarchy> buildHierarchyInternal(
+    Result<ObjectHierarchyInfo> buildHierarchyInternal(
         const std::string& schema, const std::string& object, SchemaObjectType type,
         const HierarchyTraversalOptions& options) {
 
-        ObjectHierarchy hierarchy;
+        ObjectHierarchyInfo hierarchy;
         hierarchy.rootSchema = schema;
         hierarchy.rootObject = object;
         hierarchy.rootType = type;
@@ -24,15 +24,15 @@ public:
         try {
             // Collect direct dependencies
             auto dependenciesResult = collectDependencies(schema, object, type, options);
-            if (!dependenciesResult.success()) {
-                return Result<ObjectHierarchy>::failure(dependenciesResult.error());
+            if (!dependenciesResult.isSuccess()) {
+                return Result<ObjectHierarchyInfo>::error(dependenciesResult.error().code, dependenciesResult.error().message);
             }
             hierarchy.directDependencies = dependenciesResult.value();
 
             // Collect direct dependents
             auto dependentsResult = collectDependents(schema, object, type, options);
-            if (!dependentsResult.success()) {
-                return Result<ObjectHierarchy>::failure(dependentsResult.error());
+            if (!dependentsResult.isSuccess()) {
+                return Result<ObjectHierarchyInfo>::error(dependentsResult.error().code, dependentsResult.error().message);
             }
             hierarchy.directDependents = dependentsResult.value();
 
@@ -52,10 +52,10 @@ public:
             hierarchy.maxDepth = calculateMaxDepth(hierarchy);
 
         } catch (const std::exception& e) {
-            return Result<ObjectHierarchy>::failure(std::string("Failed to build hierarchy: ") + e.what());
+            return Result<ObjectHierarchyInfo>::error(ErrorCode::UNKNOWN_ERROR, std::string("Failed to build hierarchy: ") + e.what());
         }
 
-        return Result<ObjectHierarchy>::success(hierarchy);
+        return Result<ObjectHierarchyInfo>::success(hierarchy);
     }
 
     Result<std::vector<ObjectReference>> collectDependencies(
@@ -67,8 +67,8 @@ public:
         try {
             // Get object details to understand its structure
             auto objectResult = schemaCollector_->getObjectDetails(schema, object, type);
-            if (!objectResult.success()) {
-                return Result<std::vector<ObjectReference>>::failure(objectResult.error());
+            if (!objectResult.isSuccess()) {
+                return Result<std::vector<ObjectReference>>::error(objectResult.error().code, objectResult.error().message);
             }
 
             SchemaObject obj = objectResult.value();
@@ -110,7 +110,7 @@ public:
                 dependencies.end());
 
         } catch (const std::exception& e) {
-            return Result<std::vector<ObjectReference>>::failure(
+            return Result<std::vector<ObjectReference>>::error(
                 std::string("Failed to collect dependencies: ") + e.what());
         }
 
@@ -130,14 +130,14 @@ public:
             collectionOptions.includeSystemObjects = options.includeSystemObjects;
 
             auto collectionResult = schemaCollector_->collectSchema(collectionOptions);
-            if (!collectionResult.success()) {
-                return Result<std::vector<ObjectReference>>::failure(collectionResult.error());
+            if (!collectionResult.isSuccess()) {
+                return Result<std::vector<ObjectReference>>::error(collectionResult.error().code, collectionResult.error().message);
             }
 
             for (const auto& obj : collectionResult.value().objects) {
                 // Check if this object depends on our target object
                 auto depsResult = collectDependencies(obj.schema, obj.name, obj.type, options);
-                if (depsResult.success()) {
+                if (depsResult.isSuccess()) {
                     for (const auto& dep : depsResult.value()) {
                         if (dep.toSchema == schema && dep.toObject == object && dep.toType == type) {
                             // Create reverse reference (dependent)
@@ -159,7 +159,7 @@ public:
             }
 
         } catch (const std::exception& e) {
-            return Result<std::vector<ObjectReference>>::failure(
+            return Result<std::vector<ObjectReference>>::error(
                 std::string("Failed to collect dependents: ") + e.what());
         }
 
@@ -356,7 +356,7 @@ private:
         return dependencies;
     }
 
-    void buildDependencyGraph(ObjectHierarchy& hierarchy,
+    void buildDependencyGraph(ObjectHierarchyInfo& hierarchy,
                             const std::vector<ObjectReference>& dependencies,
                             const std::vector<ObjectReference>& dependents) {
 
@@ -373,7 +373,7 @@ private:
         }
     }
 
-    void detectCircularReferences(ObjectHierarchy& hierarchy) {
+    void detectCircularReferences(ObjectHierarchyInfo& hierarchy) {
         std::unordered_set<std::string> visited;
         std::vector<ObjectReference> currentChain;
 
@@ -425,7 +425,7 @@ private:
         visited.erase(currentKey);
     }
 
-    void calculateDependencyLevels(ObjectHierarchy& hierarchy) {
+    void calculateDependencyLevels(ObjectHierarchyInfo& hierarchy) {
         std::string rootKey = generateObjectKey(hierarchy.rootSchema, hierarchy.rootObject, hierarchy.rootType);
 
         // Use breadth-first search to calculate dependency levels
@@ -454,7 +454,7 @@ private:
         }
     }
 
-    int calculateMaxDepth(const ObjectHierarchy& hierarchy) {
+    int calculateMaxDepth(const ObjectHierarchyInfo& hierarchy) {
         int maxDepth = 0;
         for (const auto& [key, level] : hierarchy.dependencyLevels) {
             maxDepth = std::max(maxDepth, level);
@@ -544,8 +544,8 @@ Result<std::vector<ObjectReference>> ObjectHierarchy::getAllDependencies(
     const HierarchyTraversalOptions& options) {
 
     auto hierarchyResult = buildHierarchy(schema, object, type, options);
-    if (!hierarchyResult.success()) {
-        return Result<std::vector<ObjectReference>>::failure(hierarchyResult.error());
+    if (!hierarchyResult.isSuccess()) {
+        return Result<std::vector<ObjectReference>>::error(hierarchyResult.error().code, hierarchyResult.error().message);
     }
 
     std::vector<ObjectReference> allDependencies;
@@ -564,8 +564,8 @@ Result<std::vector<ObjectReference>> ObjectHierarchy::getAllDependents(
     const HierarchyTraversalOptions& options) {
 
     auto hierarchyResult = buildHierarchy(schema, object, type, options);
-    if (!hierarchyResult.success()) {
-        return Result<std::vector<ObjectReference>>::failure(hierarchyResult.error());
+    if (!hierarchyResult.isSuccess()) {
+        return Result<std::vector<ObjectReference>>::error(hierarchyResult.error().code, hierarchyResult.error().message);
     }
 
     std::vector<ObjectReference> allDependents;
@@ -583,8 +583,8 @@ Result<bool> ObjectHierarchy::hasCircularReference(
     const std::string& schema, const std::string& object, SchemaObjectType type) {
 
     auto hierarchyResult = buildHierarchy(schema, object, type);
-    if (!hierarchyResult.success()) {
-        return Result<bool>::failure(hierarchyResult.error());
+    if (!hierarchyResult.isSuccess()) {
+        return Result<bool>::error(hierarchyResult.error().code, hierarchyResult.error().message);
     }
 
     return Result<bool>::success(hierarchyResult.value().hasCircularReferences);
@@ -594,8 +594,8 @@ Result<std::vector<std::vector<ObjectReference>>> ObjectHierarchy::findCircularR
     const std::string& schema, const std::string& object, SchemaObjectType type) {
 
     auto hierarchyResult = buildHierarchy(schema, object, type);
-    if (!hierarchyResult.success()) {
-        return Result<std::vector<std::vector<ObjectReference>>>::failure(hierarchyResult.error());
+    if (!hierarchyResult.isSuccess()) {
+        return Result<std::vector<std::vector<ObjectReference>>>::error(hierarchyResult.error().code, hierarchyResult.error().message);
     }
 
     return Result<std::vector<std::vector<ObjectReference>>>::success(
@@ -661,7 +661,7 @@ Result<ObjectHierarchy> ObjectHierarchy::getCachedHierarchy(
 
     // Cache miss - build fresh hierarchy
     auto result = buildHierarchy(schema, object, type);
-    if (result.success()) {
+    if (result.isSuccess()) {
         updateHierarchyCache(cacheKey, result.value());
     }
 
@@ -673,8 +673,8 @@ Result<void> ObjectHierarchy::traverseHierarchy(
     const HierarchyTraversalOptions& options, TraversalCallback callback) {
 
     auto hierarchyResult = buildHierarchy(schema, object, type, options);
-    if (!hierarchyResult.success()) {
-        return Result<void>::failure(hierarchyResult.error());
+    if (!hierarchyResult.isSuccess()) {
+        return Result<void>::error(hierarchyResult.error().code, hierarchyResult.error().message);
     }
 
     const auto& hierarchy = hierarchyResult.value();
@@ -709,7 +709,7 @@ Result<ImpactAnalysis> ObjectHierarchy::analyzeDeletionImpact(
 
     // Get all dependents
     auto dependentsResult = getAllDependents(schema, object, type);
-    if (dependentsResult.success()) {
+    if (dependentsResult.isSuccess()) {
         analysis.affectedObjects = dependentsResult.value();
         analysis.impactLevel = std::min(5, 3 + static_cast<int>(analysis.affectedObjects.size() / 10));
     }
@@ -742,7 +742,7 @@ Result<ImpactAnalysis> ObjectHierarchy::analyzeModificationImpact(
 
     // Get all dependents
     auto dependentsResult = getAllDependents(schema, object, type);
-    if (dependentsResult.success()) {
+    if (dependentsResult.isSuccess()) {
         analysis.affectedObjects = dependentsResult.value();
         if (!analysis.affectedObjects.empty()) {
             analysis.hasBreakingChanges = true;

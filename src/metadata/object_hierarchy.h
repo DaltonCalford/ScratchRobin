@@ -10,6 +10,7 @@
 #include <stack>
 #include <functional>
 #include <mutex>
+#include "metadata/schema_collector.h"
 
 namespace scratchrobin {
 
@@ -42,7 +43,7 @@ struct ObjectReference {
     int dependencyLevel = 0;
 };
 
-struct ObjectHierarchy {
+struct ObjectHierarchyInfo {
     std::string rootSchema;
     std::string rootObject;
     SchemaObjectType rootType;
@@ -90,7 +91,7 @@ class IObjectHierarchy {
 public:
     virtual ~IObjectHierarchy() = default;
 
-    virtual Result<ObjectHierarchy> buildHierarchy(
+    virtual Result<ObjectHierarchyInfo> buildHierarchy(
         const std::string& schema, const std::string& object, SchemaObjectType type,
         const HierarchyTraversalOptions& options = {}) = 0;
 
@@ -123,7 +124,7 @@ public:
         const std::string& toSchema, const std::string& toObject, SchemaObjectType toType) = 0;
 
     virtual Result<void> refreshHierarchyCache() = 0;
-    virtual Result<ObjectHierarchy> getCachedHierarchy(
+    virtual Result<ObjectHierarchyInfo> getCachedHierarchy(
         const std::string& schema, const std::string& object, SchemaObjectType type) = 0;
 
     using TraversalCallback = std::function<void(const ObjectReference&, int)>;
@@ -137,7 +138,7 @@ public:
     ObjectHierarchy(std::shared_ptr<ISchemaCollector> schemaCollector);
     ~ObjectHierarchy() override;
 
-    Result<ObjectHierarchy> buildHierarchy(
+    Result<ObjectHierarchyInfo> buildHierarchy(
         const std::string& schema, const std::string& object, SchemaObjectType type,
         const HierarchyTraversalOptions& options = {}) override;
 
@@ -170,7 +171,7 @@ public:
         const std::string& toSchema, const std::string& toObject, SchemaObjectType toType) override;
 
     Result<void> refreshHierarchyCache() override;
-    Result<ObjectHierarchy> getCachedHierarchy(
+    Result<ObjectHierarchyInfo> getCachedHierarchy(
         const std::string& schema, const std::string& object, SchemaObjectType type) override;
 
     Result<void> traverseHierarchy(
@@ -184,11 +185,11 @@ private:
     std::shared_ptr<ISchemaCollector> schemaCollector_;
 
     mutable std::mutex cacheMutex_;
-    std::unordered_map<std::string, ObjectHierarchy> hierarchyCache_;
+    std::unordered_map<std::string, ObjectHierarchyInfo> hierarchyCache_;
     std::unordered_map<std::string, std::chrono::system_clock::time_point> cacheTimestamps_;
 
     // Helper methods for building hierarchies
-    Result<ObjectHierarchy> buildHierarchyInternal(
+    Result<ObjectHierarchyInfo> buildHierarchyInternal(
         const std::string& schema, const std::string& object, SchemaObjectType type,
         const HierarchyTraversalOptions& options);
 

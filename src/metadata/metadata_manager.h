@@ -10,8 +10,18 @@
 #include <mutex>
 #include <atomic>
 #include <condition_variable>
+#include "metadata/schema_collector.h"
+#include <future>
 
 namespace scratchrobin {
+
+// Forward declarations and type definitions
+struct SchemaChange {
+    std::string schema;
+    std::string objectName;
+    SchemaObjectType objectType;
+    std::chrono::system_clock::time_point timestamp;
+};
 
 enum class MetadataLoadStrategy {
     LAZY,           // Load metadata on demand
