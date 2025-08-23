@@ -15,8 +15,8 @@ public:
     DatabaseType detectDatabaseType() {
         try {
             auto result = connection_->executeQuery("SELECT VERSION()");
-            if (result.success() && !result.value().rows.empty()) {
-                std::string version = result.value().rows[0][0];
+            if (result.isSuccess() && !result.value().empty()) {
+                std::string version = result.value()[0].at("version");
                 if (version.find("ScratchBird") != std::string::npos) {
                     return DatabaseType::SCRATCHBIRD;
                 } else if (version.find("PostgreSQL") != std::string::npos) {
@@ -38,8 +38,8 @@ public:
     std::string getDatabaseVersionString() {
         try {
             auto result = connection_->executeQuery("SELECT VERSION()");
-            if (result.success() && !result.value().rows.empty()) {
-                return result.value().rows[0][0];
+            if (result.isSuccess() && !result.value().empty()) {
+                return result.value()[0].at("version");
             }
         } catch (...) {
             // Return unknown if version query fails
@@ -97,11 +97,11 @@ public:
                 resolveObjectDependencies(result.objects);
             }
 
-            result.success = true;
+
 
         } catch (const std::exception& e) {
             result.errors.push_back(std::string("Schema collection failed: ") + e.what());
-            result.success = false;
+
         }
 
         auto endTime = std::chrono::high_resolution_clock::now();
@@ -162,8 +162,8 @@ private:
             )";
 
             auto result = connection_->executeQuery(query);
-            if (result.success()) {
-                for (const auto& row : result.value().rows) {
+            if (result.isSuccess()) {
+                for (const auto& row : result.value()) {
                     SchemaObject schema;
                     schema.name = row.at("schema_name");
                     schema.schema = row.at("schema_name"); // Schema name is the same
@@ -172,7 +172,7 @@ private:
                     schema.owner = row.at("schema_owner");
                     schema.createdAt = std::chrono::system_clock::now(); // Approximate
                     schema.isSystemObject = false;
-                    schema.properties["owner"] = row[1];
+                    schema.properties["owner"] = row.at("schema_owner");
 
                     if (shouldIncludeSchema(schema.schema, options)) {
                         schemas.push_back(schema);
@@ -207,21 +207,21 @@ private:
             )";
 
             auto result = connection_->executeQuery(query);
-            if (result.success()) {
-                for (const auto& row : result.value().rows) {
+            if (result.isSuccess()) {
+                for (const auto& row : result.value()) {
                     SchemaObject table;
-                    table.name = row[1];
-                    table.schema = row[0];
+                    table.name = row.at("tablename");
+                    table.schema = row.at("schemaname");
                     table.database = connection_->getDatabaseName();
                     table.type = SchemaObjectType::TABLE;
-                    table.owner = row[2];
+                    table.owner = row.at("tableowner");
                     table.createdAt = std::chrono::system_clock::now(); // Approximate
                     table.isSystemObject = false;
-                    table.properties["tablespace"] = row[3];
-                    table.properties["hasindexes"] = row[4];
-                    table.properties["hasrules"] = row[5];
-                    table.properties["hastriggers"] = row[6];
-                    table.properties["rowsecurity"] = row[7];
+                    table.properties["tablespace"] = row.at("tablespace");
+                    table.properties["hasindexes"] = row.at("hasindexes");
+                    table.properties["hasrules"] = row.at("hasrules");
+                    table.properties["hastriggers"] = row.at("hastriggers");
+                    table.properties["rowsecurity"] = row.at("rowsecurity");
 
                     if (shouldIncludeSchema(table.schema, options)) {
                         tables.push_back(table);
@@ -252,17 +252,17 @@ private:
             )";
 
             auto result = connection_->executeQuery(query);
-            if (result.success()) {
-                for (const auto& row : result.value().rows) {
+            if (result.isSuccess()) {
+                for (const auto& row : result.value()) {
                     SchemaObject view;
-                    view.name = row[1];
-                    view.schema = row[0];
+                    view.name = row.at("viewname");
+                    view.schema = row.at("schemaname");
                     view.database = connection_->getDatabaseName();
                     view.type = SchemaObjectType::VIEW;
-                    view.owner = row[2];
+                    view.owner = row.at("viewowner");
                     view.createdAt = std::chrono::system_clock::now(); // Approximate
                     view.isSystemObject = false;
-                    view.properties["definition"] = row[3];
+                    view.properties["definition"] = row.at("definition");
 
                     if (shouldIncludeSchema(view.schema, options)) {
                         views.push_back(view);
@@ -318,44 +318,44 @@ private:
             )";
 
             auto result = connection_->executeQuery(query);
-            if (result.success()) {
-                for (const auto& row : result.value().rows) {
+            if (result.isSuccess()) {
+                for (const auto& row : result.value()) {
                     SchemaObject column;
-                    column.name = row[2];
-                    column.schema = row[0];
+                    column.name = row.at("column_name");
+                    column.schema = row.at("table_schema");
                     column.database = connection_->getDatabaseName();
                     column.type = SchemaObjectType::COLUMN;
                     column.createdAt = std::chrono::system_clock::now(); // Approximate
                     column.isSystemObject = false;
 
                     // Set column properties
-                    column.properties["table_name"] = row[1];
-                    column.properties["ordinal_position"] = row[3];
-                    column.properties["column_default"] = row[4] ? row[4] : "";
-                    column.properties["is_nullable"] = row[5];
-                    column.properties["data_type"] = row[6];
-                    if (row[7]) column.properties["character_maximum_length"] = row[7];
-                    if (row[8]) column.properties["character_octet_length"] = row[8];
-                    if (row[9]) column.properties["numeric_precision"] = row[9];
-                    if (row[10]) column.properties["numeric_precision_radix"] = row[10];
-                    if (row[11]) column.properties["numeric_scale"] = row[11];
-                    if (row[12]) column.properties["datetime_precision"] = row[12];
-                    if (row[13]) column.properties["interval_type"] = row[13];
-                    if (row[14]) column.properties["interval_precision"] = row[14];
-                    if (row[15]) column.properties["character_set_name"] = row[15];
-                    if (row[16]) column.properties["collation_name"] = row[16];
-                    if (row[17]) column.properties["domain_name"] = row[17];
-                    if (row[18]) column.properties["udt_name"] = row[18];
-                    if (row[19]) column.properties["is_identity"] = row[19];
-                    if (row[20]) column.properties["identity_generation"] = row[20];
-                    if (row[21]) column.properties["identity_start"] = row[21];
-                    if (row[22]) column.properties["identity_increment"] = row[22];
-                    if (row[23]) column.properties["identity_maximum"] = row[23];
-                    if (row[24]) column.properties["identity_minimum"] = row[24];
-                    if (row[25]) column.properties["identity_cycle"] = row[25];
-                    if (row[26]) column.properties["is_generated"] = row[26];
-                    if (row[27]) column.properties["generation_expression"] = row[27];
-                    if (row[28]) column.properties["is_updatable"] = row[28];
+                    column.properties["table_name"] = row.at("table_name");
+                    column.properties["ordinal_position"] = row.at("ordinal_position");
+                    column.properties["column_default"] = row.at("column_default");
+                    column.properties["is_nullable"] = row.at("is_nullable");
+                    column.properties["data_type"] = row.at("data_type");
+                    column.properties["character_maximum_length"] = row.at("character_maximum_length");
+                    column.properties["character_octet_length"] = row.at("character_octet_length");
+                    column.properties["numeric_precision"] = row.at("numeric_precision");
+                    column.properties["numeric_precision_radix"] = row.at("numeric_precision_radix");
+                    column.properties["numeric_scale"] = row.at("numeric_scale");
+                    column.properties["datetime_precision"] = row.at("datetime_precision");
+                    column.properties["interval_type"] = row.at("interval_type");
+                    column.properties["interval_precision"] = row.at("interval_precision");
+                    column.properties["character_set_name"] = row.at("character_set_name");
+                    column.properties["collation_name"] = row.at("collation_name");
+                    column.properties["domain_name"] = row.at("domain_name");
+                    column.properties["udt_name"] = row.at("udt_name");
+                    column.properties["is_identity"] = row.at("is_identity");
+                    column.properties["identity_generation"] = row.at("identity_generation");
+                    column.properties["identity_start"] = row.at("identity_start");
+                    column.properties["identity_increment"] = row.at("identity_increment");
+                    column.properties["identity_maximum"] = row.at("identity_maximum");
+                    column.properties["identity_minimum"] = row.at("identity_minimum");
+                    column.properties["identity_cycle"] = row.at("identity_cycle");
+                    column.properties["is_generated"] = row.at("is_generated");
+                    column.properties["generation_expression"] = row.at("generation_expression");
+                    column.properties["is_updatable"] = row.at("is_updatable");
 
                     if (shouldIncludeSchema(column.schema, options)) {
                         columns.push_back(column);
@@ -387,18 +387,18 @@ private:
             )";
 
             auto result = connection_->executeQuery(query);
-            if (result.success()) {
-                for (const auto& row : result.value().rows) {
+            if (result.isSuccess()) {
+                for (const auto& row : result.value()) {
                     SchemaObject index;
-                    index.name = row[2];
-                    index.schema = row[0];
+                    index.name = row.at("indexname");
+                    index.schema = row.at("schemaname");
                     index.database = connection_->getDatabaseName();
                     index.type = SchemaObjectType::INDEX;
                     index.createdAt = std::chrono::system_clock::now(); // Approximate
                     index.isSystemObject = false;
-                    index.properties["table_name"] = row[1];
-                    index.properties["tablespace"] = row[3];
-                    index.properties["indexdef"] = row[4];
+                    index.properties["table_name"] = row.at("tablename");
+                    index.properties["tablespace"] = row.at("tablespace");
+                    index.properties["indexdef"] = row.at("indexdef");
 
                     if (shouldIncludeSchema(index.schema, options)) {
                         indexes.push_back(index);
@@ -434,20 +434,20 @@ private:
             )";
 
             auto result = connection_->executeQuery(query);
-            if (result.success()) {
-                for (const auto& row : result.value().rows) {
+            if (result.isSuccess()) {
+                for (const auto& row : result.value()) {
                     SchemaObject constraint;
-                    constraint.name = row[1];
-                    constraint.schema = row[0];
+                    constraint.name = row.at("constraint_name");
+                    constraint.schema = row.at("constraint_schema");
                     constraint.database = connection_->getDatabaseName();
                     constraint.type = SchemaObjectType::CONSTRAINT;
                     constraint.createdAt = std::chrono::system_clock::now(); // Approximate
                     constraint.isSystemObject = false;
-                    constraint.properties["constraint_type"] = row[2];
-                    constraint.properties["table_name"] = row[3];
-                    constraint.properties["is_deferrable"] = row[4];
-                    constraint.properties["is_deferred"] = row[5];
-                    constraint.properties["constraint_def"] = row[6];
+                    constraint.properties["constraint_type"] = row.at("constraint_type");
+                    constraint.properties["table_name"] = row.at("table_name");
+                    constraint.properties["is_deferrable"] = row.at("is_deferrable");
+                    constraint.properties["is_deferred"] = row.at("is_deferred");
+                    constraint.properties["constraint_def"] = row.at("constraint_def");
 
                     if (shouldIncludeSchema(constraint.schema, options)) {
                         constraints.push_back(constraint);
@@ -613,8 +613,8 @@ Result<SchemaObject> SchemaCollector::getObjectDetails(
     // This is a simplified implementation
     // In a real implementation, this would query the database for specific object details
     auto result = collectSchema();
-    if (!result.success()) {
-        return Result<SchemaObject>::failure(result.error());
+    if (!result.isSuccess()) {
+        return Result<SchemaObject>::error(result.error().message);
     }
 
     for (const auto& obj : result.value().objects) {
@@ -623,15 +623,15 @@ Result<SchemaObject> SchemaCollector::getObjectDetails(
         }
     }
 
-    return Result<SchemaObject>::failure("Object not found: " + schema + "." + name);
+            return Result<SchemaObject>::error("Object not found: " + schema + "." + name);
 }
 
 Result<std::vector<SchemaObject>> SchemaCollector::getObjectDependencies(
     const std::string& schema, const std::string& name, SchemaObjectType type) {
 
     auto objResult = getObjectDetails(schema, name, type);
-    if (!objResult.success()) {
-        return Result<std::vector<SchemaObject>>::failure(objResult.error());
+    if (!objResult.isSuccess()) {
+        return Result<std::vector<SchemaObject>>::error(objResult.error().message);
     }
 
     std::vector<SchemaObject> dependencies;
@@ -644,8 +644,8 @@ Result<std::vector<SchemaObject>> SchemaCollector::getObjectDependents(
     const std::string& schema, const std::string& name, SchemaObjectType type) {
 
     auto objResult = getObjectDetails(schema, name, type);
-    if (!objResult.success()) {
-        return Result<std::vector<SchemaObject>>::failure(objResult.error());
+    if (!objResult.isSuccess()) {
+        return Result<std::vector<SchemaObject>>::error(objResult.error().message);
     }
 
     std::vector<SchemaObject> dependents;
@@ -658,15 +658,15 @@ Result<bool> SchemaCollector::objectExists(
     const std::string& schema, const std::string& name, SchemaObjectType type) {
 
     auto result = getObjectDetails(schema, name, type);
-    return Result<bool>::success(result.success());
+    return Result<bool>::success(result.isSuccess());
 }
 
 Result<std::chrono::system_clock::time_point> SchemaCollector::getObjectLastModified(
     const std::string& schema, const std::string& name, SchemaObjectType type) {
 
     auto result = getObjectDetails(schema, name, type);
-    if (!result.success()) {
-        return Result<std::chrono::system_clock::time_point>::failure(result.error());
+    if (!result.isSuccess()) {
+        return Result<std::chrono::system_clock::time_point>::error(result.error().message);
     }
 
     return Result<std::chrono::system_clock::time_point>::success(result.value().modifiedAt);
@@ -692,7 +692,7 @@ Result<SchemaCollectionResult> SchemaCollector::getCachedSchema(
 
     // Cache miss - collect fresh data
     auto result = collectSchema(options);
-    if (result.success()) {
+    if (result.isSuccess()) {
         updateCache(result.value(), options);
     }
 

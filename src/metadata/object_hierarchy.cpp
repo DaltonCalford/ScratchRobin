@@ -384,12 +384,12 @@ private:
         hierarchy.hasCircularReferences = !hierarchy.circularReferenceChains.empty();
     }
 
-    void findCircularReferenceChains(ObjectHierarchy& hierarchy,
+    void findCircularReferenceChains(ObjectHierarchyInfo& hierarchy,
                                    const std::string& currentKey,
                                    std::unordered_set<std::string>& visited,
                                    std::vector<ObjectReference>& currentChain) {
 
-        if (visited.count(currentKey)) {
+        if (localVisited.count(currentKey)) {
             // Check if this creates a circular reference
             auto it = std::find_if(currentChain.begin(), currentChain.end(),
                 [&](const ObjectReference& ref) {
@@ -410,7 +410,7 @@ private:
             return;
         }
 
-        visited.insert(currentKey);
+        localVisited.insert(currentKey);
 
         // Explore all dependencies of the current object
         if (hierarchy.dependencyGraph.count(currentKey)) {
@@ -422,10 +422,10 @@ private:
             }
         }
 
-        visited.erase(currentKey);
+        localVisited.erase(currentKey);
     }
 
-    void calculateDependencyLevels(ObjectHierarchyInfo& hierarchy) {
+    void calculateDependencyLevels(const ObjectHierarchyInfo& hierarchy) {
         std::string rootKey = generateObjectKey(hierarchy.rootSchema, hierarchy.rootObject, hierarchy.rootType);
 
         // Use breadth-first search to calculate dependency levels
@@ -433,7 +433,7 @@ private:
         std::unordered_set<std::string> visited;
 
         queue.push({rootKey, 0});
-        visited.insert(rootKey);
+        localVisited.insert(rootKey);
 
         while (!queue.empty()) {
             auto [currentKey, level] = queue.front();
@@ -445,8 +445,8 @@ private:
             if (hierarchy.dependencyGraph.count(currentKey)) {
                 for (const auto& dep : hierarchy.dependencyGraph.at(currentKey)) {
                     std::string nextKey = generateObjectKey(dep.toSchema, dep.toObject, dep.toType);
-                    if (visited.find(nextKey) == visited.end()) {
-                        visited.insert(nextKey);
+                    if (localVisited.find(nextKey) == localVisited.end()) {
+                        localVisited.insert(nextKey);
                         queue.push({nextKey, level + 1});
                     }
                 }
@@ -468,6 +468,7 @@ private:
         return schema + "." + object + "." + std::to_string(static_cast<int>(type));
     }
 
+public:
     bool shouldIncludeDependency(const ObjectReference& ref,
                                const HierarchyTraversalOptions& options) {
         // Check if dependency type is included
@@ -498,6 +499,7 @@ private:
         return true;
     }
 
+public:
     bool isSystemObject(const std::string& schema, const std::string& object) {
         // Common PostgreSQL system schemas
         static const std::unordered_set<std::string> systemSchemas = {
@@ -681,12 +683,16 @@ Result<void> ObjectHierarchy::traverseHierarchy(
     std::string rootKey = generateObjectKey(schema, object, type);
 
     switch (options.traversalType) {
-        case HierarchyTraversal::DEPTH_FIRST:
-            performDepthFirstTraversal(rootKey, hierarchy, callback, std::unordered_set<std::string>(), 0);
+        case HierarchyTraversal::DEPTH_FIRST: {
+            std::unordered_set<std::string> visited;
+            performDepthFirstTraversal(rootKey, hierarchy, callback, visited, 0);
             break;
-        case HierarchyTraversal::BREADTH_FIRST:
-            performBreadthFirstTraversal(rootKey, hierarchy, callback);
+        }
+        case HierarchyTraversal::BREADTH_FIRST: {
+            std::unordered_set<std::string> visited;
+            performBreadthFirstTraversal(rootKey, hierarchy, callback, visited);
             break;
+        }
         case HierarchyTraversal::TOPOLOGICAL:
             performTopologicalSort(hierarchy);
             break;
@@ -792,7 +798,7 @@ bool ObjectHierarchy::isHierarchyCacheValid(const std::string& cacheKey,
     return age < std::chrono::minutes(10);
 }
 
-void ObjectHierarchy::updateHierarchyCache(const std::string& cacheKey, const ObjectHierarchy& hierarchy) {
+void ObjectHierarchy::updateHierarchyCache(const std::string& cacheKey, const ObjectHierarchyInfo& hierarchy) {
     hierarchyCache_[cacheKey] = hierarchy;
     cacheTimestamps_[cacheKey] = std::chrono::system_clock::now();
 }
@@ -813,15 +819,15 @@ void ObjectHierarchy::cleanupExpiredHierarchyCache() {
 }
 
 void ObjectHierarchy::performDepthFirstTraversal(const std::string& key,
-                                               const ObjectHierarchy& hierarchy,
+                                               const ObjectHierarchyInfo& hierarchy,
                                                TraversalCallback callback,
                                                std::unordered_set<std::string>& visited,
                                                int depth) {
-    if (visited.count(key)) {
+    if (localVisited.count(key)) {
         return;
     }
 
-    visited.insert(key);
+    localVisited.insert(key);
 
     // Call callback for current object
     if (hierarchy.dependencyGraph.count(key)) {
@@ -840,13 +846,14 @@ void ObjectHierarchy::performDepthFirstTraversal(const std::string& key,
 }
 
 void ObjectHierarchy::performBreadthFirstTraversal(const std::string& key,
-                                                 const ObjectHierarchy& hierarchy,
-                                                 TraversalCallback callback) {
+                                                 const ObjectHierarchyInfo& hierarchy,
+                                                 TraversalCallback callback,
+                                                 const std::unordered_set<std::string>& visited) {
     std::queue<std::pair<std::string, int>> queue;
-    std::unordered_set<std::string> visited;
+    std::unordered_set<std::string> localVisited = visited;
 
     queue.push({key, 0});
-    visited.insert(key);
+    localVisited.insert(key);
 
     while (!queue.empty()) {
         auto [currentKey, depth] = queue.front();
@@ -863,8 +870,8 @@ void ObjectHierarchy::performBreadthFirstTraversal(const std::string& key,
         if (hierarchy.dependencyGraph.count(currentKey)) {
             for (const auto& ref : hierarchy.dependencyGraph.at(currentKey)) {
                 std::string nextKey = generateObjectKey(ref.toSchema, ref.toObject, ref.toType);
-                if (visited.find(nextKey) == visited.end()) {
-                    visited.insert(nextKey);
+                if (localVisited.find(nextKey) == localVisited.end()) {
+                    localVisited.insert(nextKey);
                     queue.push({nextKey, depth + 1});
                 }
             }
@@ -872,7 +879,7 @@ void ObjectHierarchy::performBreadthFirstTraversal(const std::string& key,
     }
 }
 
-void ObjectHierarchy::performTopologicalSort(ObjectHierarchy& hierarchy) {
+void ObjectHierarchy::performTopologicalSort(const ObjectHierarchyInfo& hierarchy) {
     // Implementation would perform topological sorting of the dependency graph
     // This is a placeholder for the actual implementation
 }

@@ -338,7 +338,7 @@ public:
         documentInfo_.filePath = filePath;
         documentInfo_.isModified = false;
         documentInfo_.isNew = false;
-        documentInfo_.lastSavedAt = QDateTime::currentDateTimeUtc();
+        documentInfo_.lastSavedAt = QDateTime::currentDateTime();
 
         return true;
     }
@@ -411,8 +411,8 @@ TextEditor::TextEditor(QWidget* parent)
     documentInfo_.indentationMode = IndentationMode::SPACES;
     documentInfo_.tabWidth = 4;
     documentInfo_.indentWidth = 4;
-    documentInfo_.createdAt = QDateTime::currentDateTimeUtc();
-    documentInfo_.modifiedAt = QDateTime::currentDateTimeUtc();
+    documentInfo_.createdAt = QDateTime::currentDateTime();
+    documentInfo_.modifiedAt = QDateTime::currentDateTime();
 
     // Set up auto-save timer
     autoSaveTimer_ = new QTimer(this);
@@ -482,8 +482,8 @@ bool TextEditor::newDocument() {
     documentInfo_.indentationMode = IndentationMode::SPACES;
     documentInfo_.tabWidth = 4;
     documentInfo_.indentWidth = 4;
-    documentInfo_.createdAt = QDateTime::currentDateTimeUtc();
-    documentInfo_.modifiedAt = QDateTime::currentDateTimeUtc();
+    documentInfo_.createdAt = QDateTime::currentDateTime();
+    documentInfo_.modifiedAt = QDateTime::currentDateTime();
     documentInfo_.title = "Untitled";
 
     textEdit_->clear();
@@ -518,7 +518,7 @@ QString TextEditor::getText() const {
 void TextEditor::setText(const QString& text) {
     textEdit_->setPlainText(text);
     documentInfo_.isModified = false;
-    documentInfo_.modifiedAt = QDateTime::currentDateTimeUtc();
+    documentInfo_.modifiedAt = QDateTime::currentDateTime();
 }
 
 QString TextEditor::getSelectedText() const {
@@ -643,7 +643,7 @@ void TextEditor::replaceText(const QString& findText, const QString& replaceText
     if (cursor.hasSelection() && cursor.selectedText() == findText) {
         cursor.insertText(replaceText);
     } else {
-        findText(findText, caseSensitive, wholeWords, regex);
+        this->findText(findText, caseSensitive, wholeWords, regex);
         if (textEdit_->textCursor().hasSelection()) {
             textEdit_->textCursor().insertText(replaceText);
         }
@@ -862,7 +862,7 @@ int TextEditor::getLineCount() const {
 
 int TextEditor::getWordCount() const {
     QString text = getText();
-    return text.split(QRegExp("\\s+"), QString::SkipEmptyParts).size();
+    return text.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts).size();
 }
 
 int TextEditor::getCharacterCount() const {
@@ -914,7 +914,7 @@ QPlainTextEdit* TextEditor::getTextEdit() {
 
 void TextEditor::onTextChanged() {
     documentInfo_.isModified = true;
-    documentInfo_.modifiedAt = QDateTime::currentDateTimeUtc();
+    documentInfo_.modifiedAt = QDateTime::currentDateTime();
 
     if (textChangedCallback_) {
         textChangedCallback_();

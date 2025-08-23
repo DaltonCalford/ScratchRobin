@@ -301,6 +301,14 @@ public:
     QTextDocument* getDocument() override;
     QPlainTextEdit* getTextEdit() override;
 
+signals:
+    void documentModified(bool modified);
+    void textChanged();
+    void cursorPositionChanged(int line, int column);
+    void selectionChanged();
+    void findResultFound(bool found);
+    void replaceResultFound(int count);
+
 private slots:
     void onTextChanged();
     void onCursorPositionChanged();
