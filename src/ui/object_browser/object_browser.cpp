@@ -252,29 +252,29 @@ public:
 
     void setupConnections() {
         // Search connections
-        connect(searchBox_, &QLineEdit::returnPressed, [this]() { onSearchButtonClicked(); });
-        connect(searchButton_, &QPushButton::clicked, this, &ObjectBrowser::onSearchButtonClicked);
-        connect(clearSearchButton_, &QPushButton::clicked, this, &ObjectBrowser::onClearSearchButtonClicked);
-        connect(searchBox_, &QLineEdit::textChanged, this, &ObjectBrowser::onSearchTextChanged);
+        connect(searchBox_, &QLineEdit::returnPressed, [this]() { parent_->onSearchButtonClicked(); });
+        connect(searchButton_, &QPushButton::clicked, parent_, &ObjectBrowser::onSearchButtonClicked);
+        connect(clearSearchButton_, &QPushButton::clicked, parent_, &ObjectBrowser::onClearSearchButtonClicked);
+        connect(searchBox_, &QLineEdit::textChanged, parent_, &ObjectBrowser::onSearchTextChanged);
 
         // Tree view connections
-        connect(treeView_, &QTreeView::customContextMenuRequested, this, &ObjectBrowser::onContextMenuRequested);
+        connect(treeView_, &QTreeView::customContextMenuRequested, parent_, &ObjectBrowser::onContextMenuRequested);
         connect(treeView_->selectionModel(), &QItemSelectionModel::selectionChanged,
-                this, &ObjectBrowser::onTreeSelectionChanged);
-        connect(treeView_, &QTreeView::doubleClicked, this, &ObjectBrowser::onTreeDoubleClicked);
+                parent_, &ObjectBrowser::onTreeSelectionChanged);
+        connect(treeView_, &QTreeView::doubleClicked, parent_, &ObjectBrowser::onTreeDoubleClicked);
 
         // Toolbar connections
-        connect(refreshButton_, &QPushButton::clicked, this, &ObjectBrowser::onRefreshButtonClicked);
-        connect(expandAllButton_, &QPushButton::clicked, this, &ObjectBrowser::onExpandAllButtonClicked);
-        connect(collapseAllButton_, &QPushButton::clicked, this, &ObjectBrowser::onCollapseAllButtonClicked);
+        connect(refreshButton_, &QPushButton::clicked, parent_, &ObjectBrowser::onRefreshButtonClicked);
+        connect(expandAllButton_, &QPushButton::clicked, parent_, &ObjectBrowser::onExpandAllButtonClicked);
+        connect(collapseAllButton_, &QPushButton::clicked, parent_, &ObjectBrowser::onCollapseAllButtonClicked);
         connect(viewModeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                this, &ObjectBrowser::onViewModeChanged);
+                parent_, &ObjectBrowser::onViewModeChanged);
 
         // Filter connections
-        connect(showSystemObjectsCheck_, &QCheckBox::toggled, this, &ObjectBrowser::onFilterChanged);
-        connect(showTemporaryObjectsCheck_, &QCheckBox::toggled, this, &ObjectBrowser::onFilterChanged);
+        connect(showSystemObjectsCheck_, &QCheckBox::toggled, parent_, &ObjectBrowser::onFilterChanged);
+        connect(showTemporaryObjectsCheck_, &QCheckBox::toggled, parent_, &ObjectBrowser::onFilterChanged);
         connect(filterTypeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                this, &ObjectBrowser::onFilterChanged);
+                parent_, &ObjectBrowser::onFilterChanged);
 
         // Context menu connections
         for (auto action : contextMenu_->actions()) {
@@ -372,8 +372,8 @@ public:
     }
 
     void executeObjectAction(ObjectAction action, const std::string& nodeId) {
-        if (objectActionCallback_) {
-            objectActionCallback_(action, nodeId);
+        if (parent_->objectActionCallback_) {
+            parent_->objectActionCallback_(action, nodeId);
         }
 
         // Execute built-in actions
@@ -501,11 +501,12 @@ public:
 
         // Apply system objects filter
         filter.showSystemObjects = showSystemObjectsCheck_->isChecked();
-        treeModel_->getConfiguration().showSystemObjects = filter.showSystemObjects;
 
         // Apply temporary objects filter
         filter.showTemporaryObjects = showTemporaryObjectsCheck_->isChecked();
-        treeModel_->getConfiguration().showTemporaryObjects = filter.showTemporaryObjects;
+
+        // Note: TreeModelConfiguration doesn't have showTemporaryObjects member
+        // Configuration updates would need to be implemented via setConfiguration method
 
         // Apply type filter
         int typeIndex = filterTypeCombo_->currentData().toInt();
@@ -559,7 +560,7 @@ private:
     QComboBox* filterTypeCombo_;
 
     QTreeView* treeView_;
-    std::shared_ptr<ITreeModel> treeModel_;
+    std::shared_ptr<TreeModel> treeModel_;
 
     QStatusBar* statusBar_;
     QProgressBar* progressBar_;

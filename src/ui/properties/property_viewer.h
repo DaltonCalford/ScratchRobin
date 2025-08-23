@@ -21,6 +21,7 @@
 #include <QScrollArea>
 #include <QLineEdit>
 #include <QComboBox>
+#include "metadata/schema_collector.h"
 
 namespace scratchrobin {
 
@@ -266,6 +267,10 @@ private:
 
     // Helper methods
     std::string toLower(const std::string& str);
+
+    // Missing method declarations
+    std::vector<PropertyDefinition> getAllProperties() const;
+    std::string toString(SchemaObjectType type) const;
 
 private slots:
     // Qt slots for UI events

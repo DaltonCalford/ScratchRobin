@@ -29,14 +29,7 @@ struct DatabaseConnection {
     std::unordered_map<std::string, std::string> options;
 };
 
-struct QueryResult {
-    std::vector<std::string> columns;
-    std::vector<std::vector<std::string>> rows;
-    int rowCount;
-    int affectedRows;
-    std::string errorMessage;
-    bool success;
-};
+// QueryResult is defined in execution/sql_executor.h
 
 struct DatabaseInfo {
     std::string name;

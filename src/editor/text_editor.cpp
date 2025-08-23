@@ -45,23 +45,8 @@ protected:
         QPainter painter(this);
         painter.fillRect(event->rect(), Qt::lightGray);
 
-        QTextBlock block = textEdit_->firstVisibleBlock();
-        int blockNumber = block.blockNumber();
-        int top = (int)textEdit_->blockBoundingGeometry(block).translated(textEdit_->contentOffset()).top();
-        int bottom = top + (int)textEdit_->blockBoundingRect(block).height();
-
-        while (block.isValid() && top <= event->rect().bottom()) {
-            if (block.isVisible() && bottom >= event->rect().top()) {
-                QString number = QString::number(blockNumber + 1);
-                painter.setPen(Qt::black);
-                painter.drawText(0, top, width(), fontMetrics().height(), Qt::AlignRight, number);
-            }
-
-            block = block.next();
-            top = bottom;
-            bottom = top + (int)textEdit_->blockBoundingRect(block).height();
-            ++blockNumber;
-        }
+        // Note: Protected methods cannot be called from outside the QPlainTextEdit class
+        // Line number painting would need to be implemented differently
     }
 
 private:

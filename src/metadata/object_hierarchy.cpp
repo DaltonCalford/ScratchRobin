@@ -389,7 +389,7 @@ private:
                                    std::unordered_set<std::string>& visited,
                                    std::vector<ObjectReference>& currentChain) {
 
-        if (localVisited.count(currentKey)) {
+        if (visited.count(currentKey)) {
             // Check if this creates a circular reference
             auto it = std::find_if(currentChain.begin(), currentChain.end(),
                 [&](const ObjectReference& ref) {
@@ -410,7 +410,7 @@ private:
             return;
         }
 
-        localVisited.insert(currentKey);
+        visited.insert(currentKey);
 
         // Explore all dependencies of the current object
         if (hierarchy.dependencyGraph.count(currentKey)) {
@@ -422,10 +422,10 @@ private:
             }
         }
 
-        localVisited.erase(currentKey);
+        visited.erase(currentKey);
     }
 
-    void calculateDependencyLevels(const ObjectHierarchyInfo& hierarchy) {
+    void calculateDependencyLevels(ObjectHierarchyInfo& hierarchy) {
         std::string rootKey = generateObjectKey(hierarchy.rootSchema, hierarchy.rootObject, hierarchy.rootType);
 
         // Use breadth-first search to calculate dependency levels
@@ -433,7 +433,7 @@ private:
         std::unordered_set<std::string> visited;
 
         queue.push({rootKey, 0});
-        localVisited.insert(rootKey);
+        visited.insert(rootKey);
 
         while (!queue.empty()) {
             auto [currentKey, level] = queue.front();
@@ -445,8 +445,8 @@ private:
             if (hierarchy.dependencyGraph.count(currentKey)) {
                 for (const auto& dep : hierarchy.dependencyGraph.at(currentKey)) {
                     std::string nextKey = generateObjectKey(dep.toSchema, dep.toObject, dep.toType);
-                    if (localVisited.find(nextKey) == localVisited.end()) {
-                        localVisited.insert(nextKey);
+                    if (visited.find(nextKey) == visited.end()) {
+                        visited.insert(nextKey);
                         queue.push({nextKey, level + 1});
                     }
                 }
@@ -518,7 +518,7 @@ ObjectHierarchy::ObjectHierarchy(std::shared_ptr<ISchemaCollector> schemaCollect
 
 ObjectHierarchy::~ObjectHierarchy() = default;
 
-Result<ObjectHierarchy> ObjectHierarchy::buildHierarchy(
+Result<ObjectHierarchyInfo> ObjectHierarchy::buildHierarchy(
     const std::string& schema, const std::string& object, SchemaObjectType type,
     const HierarchyTraversalOptions& options) {
 
@@ -647,7 +647,7 @@ Result<void> ObjectHierarchy::refreshHierarchyCache() {
     return Result<void>::success();
 }
 
-Result<ObjectHierarchy> ObjectHierarchy::getCachedHierarchy(
+Result<ObjectHierarchyInfo> ObjectHierarchy::getCachedHierarchy(
     const std::string& schema, const std::string& object, SchemaObjectType type) {
 
     std::string cacheKey = generateHierarchyCacheKey(schema, object, type);
@@ -657,7 +657,7 @@ Result<ObjectHierarchy> ObjectHierarchy::getCachedHierarchy(
     if (it != hierarchyCache_.end()) {
         HierarchyTraversalOptions defaultOptions;
         if (isHierarchyCacheValid(cacheKey, defaultOptions)) {
-            return Result<ObjectHierarchy>::success(it->second);
+            return Result<ObjectHierarchyInfo>::success(it->second);
         }
     }
 
@@ -823,11 +823,11 @@ void ObjectHierarchy::performDepthFirstTraversal(const std::string& key,
                                                TraversalCallback callback,
                                                std::unordered_set<std::string>& visited,
                                                int depth) {
-    if (localVisited.count(key)) {
+    if (visited.count(key)) {
         return;
     }
 
-    localVisited.insert(key);
+    visited.insert(key);
 
     // Call callback for current object
     if (hierarchy.dependencyGraph.count(key)) {

@@ -12,6 +12,9 @@
 #include <QIcon>
 #include <QFont>
 #include <QBrush>
+#include <QDateTime>
+#include <QTimer>
+#include "metadata/schema_collector.h"
 
 namespace scratchrobin {
 
@@ -37,19 +40,7 @@ enum class TreeNodeType {
     RULE
 };
 
-enum class SchemaObjectType {
-    UNKNOWN,
-    DATABASE,
-    SCHEMA,
-    TABLE,
-    VIEW,
-    COLUMN,
-    INDEX,
-    CONSTRAINT,
-    FUNCTION,
-    TRIGGER,
-    SEQUENCE
-};
+
 
 enum class NodeLoadState {
     NOT_LOADED,
@@ -85,6 +76,9 @@ struct TreeFilter {
     std::string pattern;
     bool caseSensitive = false;
     bool showOnlyMatching = false;
+    bool regex = false;
+    bool showSystemObjects = true;
+    bool showTemporaryObjects = true;
     std::vector<TreeNodeType> nodeTypes;
     std::vector<SchemaObjectType> schemaTypes;
 };
@@ -163,22 +157,24 @@ public:
     using NodeExpandedCallback = std::function<void(const QModelIndex&, const std::shared_ptr<TreeNode>&)>;
     using NodeCollapsedCallback = std::function<void(const QModelIndex&, const std::shared_ptr<TreeNode>&)>;
     using NodeSelectedCallback = std::function<void(const QModelIndex&, const std::shared_ptr<TreeNode>&)>;
+    using NodeLoadedCallback = std::function<void(const QModelIndex&, const std::shared_ptr<TreeNode>&)>;
+    using StatisticsChangedCallback = std::function<void(const TreeStatistics&)>;
+
+    // Missing method declarations
+    TreeStatistics getStatistics() const;
+    TreeModelConfiguration getConfiguration() const;
+    void updateConfiguration(const TreeModelConfiguration& config);
+    std::string toString(TreeNodeType type) const;
+    void applyFilter(const TreeFilter& filter);
+    NodeLoadedCallback getNodeLoadedCallback() const;
+    StatisticsChangedCallback getStatisticsChangedCallback() const;
+    void setNodeLoadedCallback(NodeLoadedCallback callback);
+    void setStatisticsChangedCallback(StatisticsChangedCallback callback);
 
     void setNodeExpandedCallback(NodeExpandedCallback callback);
     void setNodeCollapsedCallback(NodeCollapsedCallback callback);
     void setNodeSelectedCallback(NodeSelectedCallback callback);
 
-    // Additional callback methods
-    using NodeLoadedCallback = std::function<void(const QModelIndex&, const std::shared_ptr<TreeNode>&)>;
-    using StatisticsChangedCallback = std::function<void(const std::unordered_map<std::string, int>&)>;
-
-    void setNodeLoadedCallback(NodeLoadedCallback callback);
-    void setStatisticsChangedCallback(StatisticsChangedCallback callback);
-
-    // Additional methods
-    void getStatistics() const;
-    void updateConfiguration(const std::string& config);
-    void getConfiguration() const;
     void onLoadTimeout();
     void onRefreshTimer();
     std::string toString(TreeNodeType type);
