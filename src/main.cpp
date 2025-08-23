@@ -64,9 +64,16 @@ int main(int argc, char* argv[]) {
         auto metadataManager = std::make_unique<scratchrobin::MetadataManager>(connectionManager.get());
         auto application = std::make_unique<scratchrobin::Application>(connectionManager.get(), metadataManager.get());
 
+        // Initialize Qt application first
+        scratchrobin::Logger::info("Initializing Qt application...");
+        application->initializeQt();
+
         // Initialize UI
         scratchrobin::Logger::info("Initializing user interface...");
         auto mainWindow = std::make_unique<scratchrobin::MainWindow>(application.get());
+
+        // Set the main window in the application
+        application->setMainWindow(mainWindow.get());
 
         // Start the application
         scratchrobin::Logger::info("Starting application...");

@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <string>
+#include "ui/main_window.h"
 
 namespace scratchrobin {
 
@@ -25,6 +26,10 @@ public:
 
     void setApplicationVersion(const std::string& version);
     std::string getApplicationVersion() const;
+
+    // UI management
+    void setMainWindow(MainWindow* mainWindow);
+    void initializeQt();
 
     // Component access
     ConnectionManager* getConnectionManager() const;
