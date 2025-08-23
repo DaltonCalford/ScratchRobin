@@ -114,7 +114,7 @@ public:
 
         try {
             // Get connection
-            auto connection = getConnection(context.connectionId);
+            auto connection = this->getConnection(context.connectionId);
             if (!connection) {
                 throw std::runtime_error("Failed to obtain database connection");
             }
@@ -122,7 +122,7 @@ public:
             result.state = QueryState::EXECUTING;
 
             // Prepare query
-            std::string preparedQuery = prepareQuery(query, parameters);
+            std::string preparedQuery = this->prepareQuery(query, parameters);
             result.executedQuery = preparedQuery;
 
             // Execute query
@@ -258,7 +258,7 @@ public:
 
             // Try to return connection if we got one
             try {
-                auto connection = getConnection(context.connectionId);
+                auto connection = this->getConnection(context.connectionId);
                 if (connection) {
                     returnConnection(context.connectionId, connection);
                 }
@@ -284,15 +284,16 @@ public:
 
         try {
             // Get connection
-            auto connection = getConnection(context.connectionId);
+            auto connection = this->getConnection(context.connectionId);
             if (!connection) {
                 throw std::runtime_error("Failed to obtain database connection");
             }
 
             // Start transaction if needed
-            if (batch.transactional && // Database transaction support check would need proper database access) {
-                connection->getDatabaseName().transaction();
-            }
+            // Note: Batch transaction handling would need proper database access
+            // if (batch.transactional) {
+            //     connection->getDatabaseName().transaction();
+            // }
 
             batch.state = QueryState::EXECUTING;
 
@@ -324,7 +325,7 @@ public:
                     parent_->batchProgressCallback_(batchId, completedQueries, batch.totalQueries,
                                                   "Executing batch queries...");
                 }
-            }
+            }  // Missing closing brace for for loop
 
             batch.completedQueries = completedQueries;
 
@@ -342,7 +343,6 @@ public:
             }
 
             returnConnection(context.connectionId, connection);
-
         } catch (const std::exception& e) {
             batch.success = false;
             batch.errorMessage = std::string("Batch execution error: ") + e.what();
