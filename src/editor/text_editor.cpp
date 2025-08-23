@@ -71,7 +71,6 @@ public:
 };
 
 class TextEditor::Impl {
-    friend class LineNumberArea;
 public:
     Impl(TextEditor* parent)
         : parent_(parent), lineNumberArea_(nullptr), completer_(nullptr) {}
@@ -122,7 +121,20 @@ public:
     }
 
     void updateLineNumberAreaWidth(int /* newBlockCount */) {
-        textEdit_->setViewportMargins(calculateLineNumberAreaWidth(), 0, 0, 0);
+        updateLineNumberAreaMargins();
+    }
+
+    void updateLineNumberAreaMargins() {
+        // Create a temporary subclass to access protected method
+        class TextEditAccessor : public QPlainTextEdit {
+        public:
+            void setMargins(int left, int top, int right, int bottom) {
+                setViewportMargins(left, top, right, bottom);
+            }
+        };
+
+        static_cast<TextEditAccessor*>(textEdit_)->setMargins(
+            calculateLineNumberAreaWidth(), 0, 0, 0);
     }
 
     void updateLineNumberArea(const QRect& rect, int dy = 0) {
