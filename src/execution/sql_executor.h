@@ -209,7 +209,7 @@ public:
 
     // ISQLExecutor implementation
     void initialize(const QueryExecutionOptions& options) override;
-    void setConnectionManager(std::shared_ptr<IConnectionManager> connectionManager) override;
+    void setConnectionManager(std::shared_ptr<IConnection> connectionManager) override;
     void setMetadataManager(std::shared_ptr<IMetadataManager> metadataManager) override;
     void setTextEditor(std::shared_ptr<ITextEditor> textEditor) override;
 

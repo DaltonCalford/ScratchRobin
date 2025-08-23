@@ -612,6 +612,25 @@ public:
         }
     }
 
+    std::string toString(SchemaObjectType type) {
+        switch (type) {
+            case SchemaObjectType::SCHEMA: return "Schema";
+            case SchemaObjectType::TABLE: return "Table";
+            case SchemaObjectType::VIEW: return "View";
+            case SchemaObjectType::COLUMN: return "Column";
+            case SchemaObjectType::INDEX: return "Index";
+            case SchemaObjectType::CONSTRAINT: return "Constraint";
+            case SchemaObjectType::FUNCTION: return "Function";
+            case SchemaObjectType::TRIGGER: return "Trigger";
+            case SchemaObjectType::PROCEDURE: return "Procedure";
+            case SchemaObjectType::SEQUENCE: return "Sequence";
+            case SchemaObjectType::DOMAIN: return "Domain";
+            case SchemaObjectType::TYPE: return "Type";
+            case SchemaObjectType::RULE: return "Rule";
+            default: return "Unknown";
+        }
+    }
+
     std::string toString(PropertyCategory category) {
         switch (category) {
             case PropertyCategory::GENERAL: return "General";
@@ -922,12 +941,8 @@ bool PropertyViewer::isPropertyModified(const std::string& propertyId) const {
     return modifiedProperties_.count(propertyId) > 0;
 }
 
-std::vector<std::string> PropertyViewer::getModifiedProperties() const {
-    std::vector<std::string> modified;
-    for (const auto& [id, value] : modifiedProperties_) {
-        modified.push_back(id);
-    }
-    return modified;
+std::unordered_map<std::string, std::string> PropertyViewer::getModifiedProperties() const {
+    return modifiedProperties_;
 }
 
 void PropertyViewer::applyPropertyChanges() {
@@ -1030,11 +1045,11 @@ void PropertyViewer::highlightSearchResults() {
 }
 
 void PropertyViewer::updateObjectInfo() {
-    if (currentObject_.name.empty()) {
+    if (currentObject_ && currentObject_->name.empty()) {
         objectInfoLabel_->setText("No object selected");
-    } else {
+    } else if (currentObject_) {
         QString typeStr;
-        switch (currentObject_.type) {
+        switch (currentObject_->type) {
             case SchemaObjectType::TABLE: typeStr = "Table"; break;
             case SchemaObjectType::VIEW: typeStr = "View"; break;
             case SchemaObjectType::COLUMN: typeStr = "Column"; break;

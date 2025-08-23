@@ -71,6 +71,7 @@ public:
 };
 
 class TextEditor::Impl {
+    friend class LineNumberArea;
 public:
     Impl(TextEditor* parent)
         : parent_(parent), lineNumberArea_(nullptr), completer_(nullptr) {}
