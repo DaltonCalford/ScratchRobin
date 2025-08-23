@@ -14,6 +14,7 @@ set(SOURCES
     execution/sql_executor.cpp
     query/query_history.cpp
     table/table_designer.cpp
+    index/index_manager.cpp
     ui/main_window.cpp
     ui/connection_dialog.cpp
     ui/query_editor.cpp
@@ -44,6 +45,7 @@ set(HEADERS
     execution/sql_executor.h
     query/query_history.h
     table/table_designer.h
+    index/index_manager.h
     ui/main_window.h
     ui/connection_dialog.h
     ui/query_editor.h
