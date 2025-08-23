@@ -15,6 +15,8 @@ public:
     void expandNode(const std::string& path);
     void selectObject(const std::string& objectPath);
 
+    QWidget* getWidget();
+
 private:
     class Impl;
     std::unique_ptr<Impl> impl_;

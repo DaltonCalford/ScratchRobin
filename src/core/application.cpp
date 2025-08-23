@@ -2,10 +2,13 @@
 #include "connection_manager.h"
 #include "metadata_manager.h"
 #include "utils/logger.h"
+#include "ui/main_window.h"
 
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <QApplication>
+#include <QTimer>
 
 namespace scratchrobin {
 
@@ -14,6 +17,7 @@ public:
     Impl(ConnectionManager* connectionManager, MetadataManager* metadataManager)
         : connectionManager_(connectionManager)
         , metadataManager_(metadataManager)
+        , mainWindow_(nullptr)
         , isRunning_(false)
         , applicationName_("ScratchRobin")
         , applicationVersion_("0.1.0")
@@ -21,6 +25,7 @@ public:
 
     ConnectionManager* connectionManager_;
     MetadataManager* metadataManager_;
+    MainWindow* mainWindow_;
     bool isRunning_;
     std::string applicationName_;
     std::string applicationVersion_;
@@ -38,24 +43,48 @@ Application::~Application() {
     Logger::info("Application destroyed");
 }
 
+void Application::setMainWindow(MainWindow* mainWindow) {
+    impl_->mainWindow_ = mainWindow;
+    Logger::info("MainWindow set for application");
+}
+
+void Application::initializeQt() {
+    if (!qApp) {
+        Logger::info("Creating QApplication");
+        static int argc = 0;
+        static char* argv[] = {nullptr};
+        new QApplication(argc, argv);
+    }
+}
+
 int Application::run() {
     Logger::info("Starting application main loop");
 
     impl_->isRunning_ = true;
 
     try {
-        // Application main loop
-        while (impl_->isRunning_) {
-            // Process events, update UI, etc.
-            // This would be replaced with actual UI framework integration
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // Ensure Qt application is initialized
+        initializeQt();
 
-            // Check for shutdown signal
-            // In a real implementation, this would be handled by the UI framework
+        // Show the main window if available
+        if (impl_->mainWindow_) {
+            Logger::info("Showing main window");
+            impl_->mainWindow_->show();
+        } else {
+            Logger::warn("No main window set for application");
         }
 
-        Logger::info("Application main loop ended");
-        return 0;
+        // Start Qt application event loop
+        Logger::info("Starting Qt application event loop");
+        QApplication* app = qApp;
+        if (app) {
+            int result = app->exec();
+            Logger::info("Qt application event loop ended");
+            return result;
+        } else {
+            Logger::error("No QApplication available");
+            return 1;
+        }
 
     } catch (const std::exception& e) {
         Logger::error("Exception in application main loop: " + std::string(e.what()));

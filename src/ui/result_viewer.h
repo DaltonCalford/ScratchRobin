@@ -17,6 +17,8 @@ public:
     void clearResults();
     void exportResults(const std::string& format, const std::string& filename);
 
+    QWidget* getWidget();
+
 private:
     class Impl;
     std::unique_ptr<Impl> impl_;

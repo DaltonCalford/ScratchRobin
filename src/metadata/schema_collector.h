@@ -10,17 +10,9 @@
 #include <mutex>
 #include <iostream>
 #include "types/result.h"
+#include "types/database_types.h"
 
 namespace scratchrobin {
-
-enum class DatabaseType {
-    SCRATCHBIRD,
-    POSTGRESQL,
-    MYSQL,
-    SQLSERVER,
-    ORACLE,
-    SQLITE
-};
 
 enum class SchemaObjectType {
     SCHEMA,
