@@ -11,6 +11,7 @@ set(SOURCES
     metadata/metadata_manager.cpp
     search/search_engine.cpp
     editor/text_editor.cpp
+    execution/sql_executor.cpp
     ui/main_window.cpp
     ui/connection_dialog.cpp
     ui/query_editor.cpp
@@ -38,6 +39,7 @@ set(HEADERS
     metadata/metadata_manager.h
     search/search_engine.h
     editor/text_editor.h
+    execution/sql_executor.h
     ui/main_window.h
     ui/connection_dialog.h
     ui/query_editor.h
