@@ -7,10 +7,9 @@
 #include <unordered_map>
 #include <functional>
 #include <mutex>
+#include "types/result.h"
 
 namespace scratchrobin {
-
-class Connection;
 
 struct ConnectionInfo {
     std::string id;
@@ -23,6 +22,21 @@ struct ConnectionInfo {
     bool isConnected;
     std::string lastError;
 };
+
+class IConnection {
+public:
+    virtual ~IConnection() = default;
+
+    virtual bool connect() = 0;
+    virtual void disconnect() = 0;
+    virtual bool isConnected() const = 0;
+
+    virtual Result<std::vector<std::unordered_map<std::string, std::string>>> executeQuery(const std::string& query) = 0;
+    virtual std::string getDatabaseName() const = 0;
+    virtual const ConnectionInfo& getInfo() const = 0;
+};
+
+class Connection;
 
 class ConnectionManager {
 public:

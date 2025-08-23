@@ -2,6 +2,7 @@
 #include "metadata/metadata_manager.h"
 #include "metadata/object_hierarchy.h"
 #include "metadata/cache_manager.h"
+#include "metadata/schema_collector.h"
 #include <QApplication>
 #include <QHeaderView>
 #include <QSplitter>
@@ -27,10 +28,14 @@
 #include <QInputDialog>
 #include <QFileDialog>
 #include <QClipboard>
+#include <QRegularExpressionValidator>
 #include <QDebug>
 #include <algorithm>
 #include <sstream>
 #include <iomanip>
+#include <regex>
+#include <chrono>
+#include <functional>
 
 namespace scratchrobin {
 
@@ -38,6 +43,20 @@ class PropertyViewer::Impl {
 public:
     Impl(PropertyViewer* parent)
         : parent_(parent) {}
+
+    // Property change callback
+    std::function<void(const std::string&, const std::string&, const std::string&)> propertyChangedCallback_;
+
+    // Property groups and display options
+    std::vector<PropertyGroup> propertyGroups_;
+    PropertyDisplayOptions displayOptions_;
+    std::vector<PropertyDefinition> searchResults_;
+
+    // UI Widgets
+    QTableWidget* gridView_;
+    QScrollArea* formView_;
+    QTreeWidget* treeView_;
+    QTextEdit* textView_;
 
     std::shared_ptr<QWidget> createPropertyEditor(const PropertyDefinition& property) {
         switch (property.dataType) {
@@ -255,7 +274,7 @@ public:
 
                 // Property value
                 auto valueItem = new QTableWidgetItem(QString::fromStdString(property.currentValue));
-                if (!property.isEditable) {
+                if (property.isReadOnly) {
                     valueItem->setFlags(valueItem->flags() & ~Qt::ItemIsEditable);
                 }
                 valueItem->setBackground(QBrush(getPropertyColor(property.category)));
@@ -319,7 +338,7 @@ public:
                 propertyItem->setText(1, QString::fromStdString(property.currentValue));
                 propertyItem->setText(2, QString::fromStdString(toString(property.dataType)));
 
-                if (!property.isEditable) {
+                if (property.isReadOnly) {
                     propertyItem->setFlags(propertyItem->flags() & ~Qt::ItemIsEditable);
                 }
 
@@ -802,7 +821,7 @@ void PropertyViewer::displayObjectProperties(const std::string& nodeId) {
 }
 
 void PropertyViewer::displayObjectProperties(const SchemaObject& object) {
-    currentObject_ = object;
+    currentObject_ = std::make_shared<SchemaObject>(object);
     impl_->createPropertyGroups(object);
     refreshDisplay();
     updateObjectInfo();
@@ -861,7 +880,7 @@ void PropertyViewer::searchProperties(const PropertySearchOptions& options) {
                 std::string searchText = options.caseSensitive ? property.name : toLower(property.name);
                 std::string pattern = options.caseSensitive ? options.pattern : toLower(options.pattern);
 
-                if (options.regex) {
+                if (options.regexMode) {
                     try {
                         std::regex regexPattern(pattern);
                         matches = std::regex_search(searchText, regexPattern);
@@ -949,7 +968,7 @@ void PropertyViewer::refreshProperties() {
 
 void PropertyViewer::clearProperties() {
     currentNodeId_.clear();
-    currentObject_ = SchemaObject();
+    currentObject_ = std::make_shared<SchemaObject>();
     propertyGroups_.clear();
     searchResults_.clear();
     modifiedProperties_.clear();
@@ -1014,11 +1033,32 @@ void PropertyViewer::updateObjectInfo() {
     if (currentObject_.name.empty()) {
         objectInfoLabel_->setText("No object selected");
     } else {
-        QString info = QString("Object: %1.%2 (%3)")
-            .arg(QString::fromStdString(currentObject_.schema))
-            .arg(QString::fromStdString(currentObject_.name))
-            .arg(QString::fromStdString(impl_->toString(currentObject_.type)));
-        objectInfoLabel_->setText(info);
+        QString typeStr;
+        switch (currentObject_.type) {
+            case SchemaObjectType::TABLE: typeStr = "Table"; break;
+            case SchemaObjectType::VIEW: typeStr = "View"; break;
+            case SchemaObjectType::COLUMN: typeStr = "Column"; break;
+            case SchemaObjectType::INDEX: typeStr = "Index"; break;
+            case SchemaObjectType::CONSTRAINT: typeStr = "Constraint"; break;
+            case SchemaObjectType::TRIGGER: typeStr = "Trigger"; break;
+            case SchemaObjectType::FUNCTION: typeStr = "Function"; break;
+            case SchemaObjectType::PROCEDURE: typeStr = "Procedure"; break;
+            case SchemaObjectType::SEQUENCE: typeStr = "Sequence"; break;
+            case SchemaObjectType::DOMAIN: typeStr = "Domain"; break;
+            case SchemaObjectType::TYPE: typeStr = "Type"; break;
+            case SchemaObjectType::RULE: typeStr = "Rule"; break;
+            default: typeStr = "Unknown"; break;
+        }
+
+        if (currentObject_) {
+            QString info = QString("Object: %1.%2 (%3)")
+                .arg(QString::fromStdString(currentObject_->schema))
+                .arg(QString::fromStdString(currentObject_->name))
+                .arg(typeStr);
+            objectInfoLabel_->setText(info);
+        } else {
+            objectInfoLabel_->setText("No object selected");
+        }
     }
 }
 
@@ -1056,7 +1096,7 @@ void PropertyViewer::onSearchButtonClicked() {
     PropertySearchOptions options;
     options.pattern = searchBox_->text().toStdString();
     options.caseSensitive = false;
-    options.regex = false;
+    options.regexMode = false;
     searchProperties(options);
 }
 

@@ -10,6 +10,8 @@
 #include <mutex>
 #include <atomic>
 #include <condition_variable>
+#include <thread>
+#include "types/result.h"
 
 namespace scratchrobin {
 
@@ -76,9 +78,45 @@ struct CacheMetrics {
     std::atomic<std::size_t> memoryUsage{0};
     std::atomic<std::size_t> diskUsage{0};
     std::atomic<std::size_t> totalItems{0};
-    std::chrono::milliseconds averageAccessTime{0};
-    std::chrono::milliseconds averageWriteTime{0};
-    std::chrono::system_clock::time_point lastUpdated;
+    std::atomic<std::chrono::milliseconds::rep> averageAccessTime{0};
+    std::atomic<std::chrono::milliseconds::rep> averageWriteTime{0};
+    std::atomic<std::chrono::system_clock::time_point::rep> lastUpdated{0};
+
+    // Copy constructor and assignment (atomic-safe)
+    CacheMetrics(const CacheMetrics& other) {
+        totalRequests.store(other.totalRequests.load());
+        cacheHits.store(other.cacheHits.load());
+        cacheMisses.store(other.cacheMisses.load());
+        evictions.store(other.evictions.load());
+        invalidations.store(other.invalidations.load());
+        memoryUsage.store(other.memoryUsage.load());
+        diskUsage.store(other.diskUsage.load());
+        totalItems.store(other.totalItems.load());
+        averageAccessTime.store(other.averageAccessTime.load());
+        averageWriteTime.store(other.averageWriteTime.load());
+        lastUpdated.store(other.lastUpdated.load());
+    }
+
+    CacheMetrics& operator=(const CacheMetrics& other) {
+        if (this != &other) {
+            totalRequests.store(other.totalRequests.load());
+            cacheHits.store(other.cacheHits.load());
+            cacheMisses.store(other.cacheMisses.load());
+            evictions.store(other.evictions.load());
+            invalidations.store(other.invalidations.load());
+            memoryUsage.store(other.memoryUsage.load());
+            diskUsage.store(other.diskUsage.load());
+            totalItems.store(other.totalItems.load());
+            averageAccessTime.store(other.averageAccessTime.load());
+            averageWriteTime.store(other.averageWriteTime.load());
+            lastUpdated.store(other.lastUpdated.load());
+        }
+        return *this;
+    }
+
+    // Default constructor and destructor
+    CacheMetrics() = default;
+    ~CacheMetrics() = default;
 };
 
 struct CacheEntryMetadata {

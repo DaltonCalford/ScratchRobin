@@ -3,7 +3,19 @@
 #include "execution/sql_executor.h"
 #include "core/connection_manager.h"
 #include <QApplication>
+#include <set>
+#include <regex>
 #include <QDialog>
+
+// Qt meta-type declarations for custom types
+Q_DECLARE_METATYPE(scratchrobin::TableStorageType)
+Q_DECLARE_METATYPE(scratchrobin::ColumnType)
+Q_DECLARE_METATYPE(scratchrobin::ConstraintDefinition)
+Q_DECLARE_METATYPE(scratchrobin::IndexDefinition)
+Q_DECLARE_METATYPE(scratchrobin::TreeNodeType)
+Q_DECLARE_METATYPE(scratchrobin::SchemaObjectType)
+Q_DECLARE_METATYPE(scratchrobin::PropertyDataType)
+Q_DECLARE_METATYPE(scratchrobin::PropertyCategory)
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -725,7 +737,7 @@ public:
         return result;
     }
 
-private:
+public:
     TableDesigner* parent_;
     TableDesignOptions options_;
 

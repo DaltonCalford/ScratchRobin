@@ -8,6 +8,7 @@
 #include <chrono>
 #include <functional>
 #include <mutex>
+#include "types/result.h"
 
 namespace scratchrobin {
 

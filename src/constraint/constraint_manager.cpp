@@ -416,7 +416,7 @@ public:
             QueryResult result = sqlExecutor_->executeQuery(ddl, context);
 
             if (result.success) {
-                parent_->emitConstraintCreated(definition.name, connectionId);
+                parent_->constraintCreated(definition.name, connectionId);
                 return true;
             } else {
                 qWarning() << "Failed to create constraint:" << result.errorMessage.c_str();
@@ -445,7 +445,7 @@ public:
             QueryResult result = sqlExecutor_->executeQuery(ddl, context);
 
             if (result.success) {
-                parent_->emitConstraintDropped(constraintName, connectionId);
+                parent_->constraintDropped(constraintName, connectionId);
                 return true;
             } else {
                 qWarning() << "Failed to drop constraint:" << result.errorMessage.c_str();
@@ -474,7 +474,7 @@ public:
             QueryResult result = sqlExecutor_->executeQuery(ddl, context);
 
             if (result.success) {
-                parent_->emitConstraintModified(constraintName, connectionId);
+                parent_->constraintModified(constraintName, connectionId);
                 return true;
             } else {
                 qWarning() << "Failed to enable constraint:" << result.errorMessage.c_str();
@@ -503,7 +503,7 @@ public:
             QueryResult result = sqlExecutor_->executeQuery(ddl, context);
 
             if (result.success) {
-                parent_->emitConstraintModified(constraintName, connectionId);
+                parent_->constraintModified(constraintName, connectionId);
                 return true;
             } else {
                 qWarning() << "Failed to disable constraint:" << result.errorMessage.c_str();
@@ -532,7 +532,7 @@ public:
             QueryResult result = sqlExecutor_->executeQuery(ddl, context);
 
             if (result.success) {
-                parent_->emitConstraintModified(constraintName, connectionId);
+                parent_->constraintModified(constraintName, connectionId);
                 return true;
             } else {
                 qWarning() << "Failed to validate constraint:" << result.errorMessage.c_str();
@@ -560,7 +560,7 @@ public:
             QueryResult result = sqlExecutor_->executeQuery(ddl, context);
 
             if (result.success) {
-                parent_->emitConstraintModified(constraintName, connectionId);
+                parent_->constraintModified(constraintName, connectionId);
                 return true;
             } else {
                 qWarning() << "Failed to defer constraint:" << result.errorMessage.c_str();
@@ -588,7 +588,7 @@ public:
             QueryResult result = sqlExecutor_->executeQuery(ddl, context);
 
             if (result.success) {
-                parent_->emitConstraintModified(constraintName, connectionId);
+                parent_->constraintModified(constraintName, connectionId);
                 return true;
             } else {
                 qWarning() << "Failed to make constraint immediate:" << result.errorMessage.c_str();
@@ -668,10 +668,10 @@ public:
             maintenanceOp.completedAt = QDateTime::currentDateTime();
 
             if (maintenanceOp.success) {
-                parent_->emitConstraintModified(constraintName, connectionId);
+                parent_->constraintModified(constraintName, connectionId);
             }
 
-            parent_->emitMaintenanceCompleted(maintenanceOp);
+            parent_->maintenanceCompleted(maintenanceOp);
 
         } catch (const std::exception& e) {
             maintenanceOp.success = false;
@@ -768,7 +768,7 @@ public:
                 }
             }
 
-            definition.name = "new_" + it->type + "_constraint";
+            definition.name = "new_" + std::to_string(static_cast<int>(it->type)) + "_constraint";
             definition.type = it->type;
             definition.definition = ddl;
         }
@@ -969,7 +969,7 @@ public:
         // This would collect statistics for all constraints
     }
 
-private:
+public:
     ConstraintManager* parent_;
     std::shared_ptr<IMetadataManager> metadataManager_;
     std::shared_ptr<ISQLExecutor> sqlExecutor_;

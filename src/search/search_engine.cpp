@@ -47,7 +47,7 @@ public:
         return allResults;
     }
 
-    std::vector<SearchResult> searchIndex(const SearchIndex& index, const SearchQuery& query, IndexType type) {
+    std::vector<SearchResult> searchIndex(const SearchIndex& index, const SearchQuery& query, SearchIndexType type) {
         std::vector<SearchResult> results;
 
         // Tokenize the search pattern
@@ -689,43 +689,86 @@ public:
 
     // Placeholder implementations for different search algorithms
     std::vector<SearchResult> exactSearch(const SearchIndex& index, const std::vector<std::string>& tokens,
-                                        const SearchQuery& query, IndexType type) {
+                                        const SearchQuery& query, SearchIndexType type) {
         return performDirectSearch(query); // Fallback to direct search
     }
 
     std::vector<SearchResult> prefixSearch(const SearchIndex& index, const std::vector<std::string>& tokens,
-                                         const SearchQuery& query, IndexType type) {
+                                         const SearchQuery& query, SearchIndexType type) {
         return performDirectSearch(query);
     }
 
     std::vector<SearchResult> substringSearch(const SearchIndex& index, const std::vector<std::string>& tokens,
-                                            const SearchQuery& query, IndexType type) {
+                                            const SearchQuery& query, SearchIndexType type) {
         return performDirectSearch(query);
     }
 
     std::vector<SearchResult> fuzzySearch(const SearchIndex& index, const std::vector<std::string>& tokens,
-                                        const SearchQuery& query, IndexType type) {
+                                        const SearchQuery& query, SearchIndexType type) {
         return performDirectSearch(query);
     }
 
     std::vector<SearchResult> regexSearch(const SearchIndex& index, const std::vector<std::string>& tokens,
-                                        const SearchQuery& query, IndexType type) {
+                                        const SearchQuery& query, SearchIndexType type) {
         return performDirectSearch(query);
     }
 
     std::vector<SearchResult> wildcardSearch(const SearchIndex& index, const std::vector<std::string>& tokens,
-                                           const SearchQuery& query, IndexType type) {
+                                           const SearchQuery& query, SearchIndexType type) {
         return performDirectSearch(query);
     }
 
     std::vector<SearchResult> phoneticSearch(const SearchIndex& index, const std::vector<std::string>& tokens,
-                                           const SearchQuery& query, IndexType type) {
+                                           const SearchQuery& query, SearchIndexType type) {
         return performDirectSearch(query);
     }
 
     std::vector<SearchResult> semanticSearch(const SearchIndex& index, const std::vector<std::string>& tokens,
-                                           const SearchQuery& query, IndexType type) {
+                                           const SearchQuery& query, SearchIndexType type) {
         return performDirectSearch(query);
+    }
+
+    // Missing member variables
+    SearchEngineConfiguration config_;
+    std::unordered_map<SearchIndexType, SearchIndex> searchIndexes_;
+    std::vector<std::string> searchHistory_;
+    std::shared_ptr<IMetadataManager> metadataManager_;
+    std::shared_ptr<ITreeModel> treeModel_;
+    std::shared_ptr<ICacheManager> cacheManager_;
+
+    // Index building methods
+    void buildInvertedIndex() {
+        // Placeholder implementation
+    }
+
+    void buildTrieIndex() {
+        // Placeholder implementation
+    }
+
+    void buildHashIndex() {
+        // Placeholder implementation
+    }
+
+    void buildSuffixArrayIndex() {
+        // Placeholder implementation
+    }
+
+    void buildFullTextIndex() {
+        // Placeholder implementation
+    }
+
+    void buildVectorIndex() {
+        // Placeholder implementation
+    }
+
+    // Search suggestion method
+    std::vector<SearchSuggestion> generateSuggestions(const std::string& partialQuery, int maxSuggestions) {
+        return std::vector<SearchSuggestion>();
+    }
+
+    // Object indexing method
+    void indexObject(const SchemaObject& object, SearchIndexType type) {
+        // Placeholder implementation
     }
 };
 
@@ -747,7 +790,7 @@ SearchEngine::SearchEngine(QObject* parent)
     config_.enableStopWords = true;
     config_.enabledAlgorithms = {SearchAlgorithm::SUBSTRING_MATCH, SearchAlgorithm::EXACT_MATCH,
                                SearchAlgorithm::FUZZY_MATCH};
-    config_.enabledIndexTypes = {IndexType::INVERTED_INDEX};
+    config_.enabledIndexTypes = {SearchIndexType::INVERTED_INDEX};
 
     // Initialize index timer
     indexTimer_ = new QTimer(this);
@@ -835,24 +878,36 @@ void SearchEngine::searchAsync(const SearchQuery& query) {
     }).detach();
 }
 
-void SearchEngine::buildIndex(IndexType type) {
+void SearchEngine::rebuildIndex(SearchIndexType type) {
+    // Clear existing index
+    impl_->searchIndexes_.erase(type);
+
+    // Build new index
+    buildIndex(type);
+}
+
+void SearchEngine::clearIndex(SearchIndexType type) {
+    impl_->searchIndexes_.erase(type);
+}
+
+void SearchEngine::buildIndex(SearchIndexType type) {
     switch (type) {
-        case IndexType::INVERTED_INDEX:
+        case SearchIndexType::INVERTED_INDEX:
             impl_->buildInvertedIndex();
             break;
-        case IndexType::TRIE_INDEX:
+        case SearchIndexType::TRIE_INDEX:
             impl_->buildTrieIndex();
             break;
-        case IndexType::HASH_INDEX:
+        case SearchIndexType::HASH_INDEX:
             impl_->buildHashIndex();
             break;
-        case IndexType::SUFFIX_ARRAY:
+        case SearchIndexType::SUFFIX_ARRAY:
             impl_->buildSuffixArrayIndex();
             break;
-        case IndexType::FULL_TEXT_INDEX:
+        case SearchIndexType::FULL_TEXT_INDEX:
             impl_->buildFullTextIndex();
             break;
-        case IndexType::VECTOR_INDEX:
+        case SearchIndexType::VECTOR_INDEX:
             impl_->buildVectorIndex();
             break;
     }

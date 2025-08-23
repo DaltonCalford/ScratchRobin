@@ -28,6 +28,26 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # Dependencies
 find_package(Threads REQUIRED)
 
+# Qt5 Configuration
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
+
+find_package(Qt5 REQUIRED COMPONENTS
+    Core
+    Widgets
+    Gui
+    Network
+    Sql
+    Xml
+)
+
+if(Qt5_FOUND)
+    message(STATUS "Qt5 found: ${Qt5_VERSION}")
+else()
+    message(FATAL_ERROR "Qt5 not found. Please install Qt5 development packages.")
+endif()
+
 # Include directories
 include_directories(include)
 include_directories(src)

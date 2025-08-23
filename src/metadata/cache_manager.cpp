@@ -7,6 +7,10 @@
 #include <iomanip>
 #include <openssl/evp.h>
 #include <zlib.h>
+#include <iostream>
+#include <regex>
+#include <thread>
+#include "types/result.h"
 
 namespace scratchrobin {
 
@@ -901,9 +905,9 @@ Result<void> CacheManager::resetMetrics() {
     metrics_.memoryUsage = 0;
     metrics_.diskUsage = 0;
     metrics_.totalItems = 0;
-    metrics_.averageAccessTime = std::chrono::milliseconds(0);
-    metrics_.averageWriteTime = std::chrono::milliseconds(0);
-    metrics_.lastUpdated = std::chrono::system_clock::now();
+    metrics_.averageAccessTime.store(0);
+    metrics_.averageWriteTime.store(0);
+    metrics_.lastUpdated.store(std::chrono::system_clock::now().time_since_epoch().count());
 
     return Result<void>::success();
 }
@@ -957,16 +961,18 @@ void CacheManager::updateMetrics(const std::string& operation, bool success,
         }
         // Update average access time
         auto currentAvg = metrics_.averageAccessTime.load();
-        metrics_.averageAccessTime = std::chrono::milliseconds(
-            (currentAvg.count() + duration.count()) / 2);
+        auto newAvg = std::chrono::milliseconds::rep(
+            (currentAvg + duration.count()) / 2);
+        metrics_.averageAccessTime.store(newAvg);
     } else if (operation == "put" && success) {
         // Update average write time
         auto currentAvg = metrics_.averageWriteTime.load();
-        metrics_.averageWriteTime = std::chrono::milliseconds(
-            (currentAvg.count() + duration.count()) / 2);
+        auto newAvg = std::chrono::milliseconds::rep(
+            (currentAvg + duration.count()) / 2);
+        metrics_.averageWriteTime.store(newAvg);
     }
 
-    metrics_.lastUpdated = std::chrono::system_clock::now();
+    metrics_.lastUpdated.store(std::chrono::system_clock::now().time_since_epoch().count());
 }
 
 void CacheManager::cleanupThreadFunction() {

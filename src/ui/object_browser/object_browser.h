@@ -18,12 +18,15 @@
 #include <QStatusBar>
 #include <QTimer>
 #include <QSplitter>
+#include "ui/object_browser/tree_model.h"
 
 namespace scratchrobin {
 
-class ITreeModel;
+
 class IConnectionManager;
 class IMetadataManager;
+
+
 
 enum class BrowserViewMode {
     TREE,
