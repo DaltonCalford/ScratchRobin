@@ -14,6 +14,7 @@
 #include <sstream>
 #include <iomanip>
 #include <regex>
+#include <set>
 
 namespace scratchrobin {
 
@@ -280,7 +281,7 @@ public:
             QueryResult result = sqlExecutor_->executeQuery(ddl, context);
 
             if (result.success) {
-                parent_->emitIndexCreated(definition.name, connectionId);
+                parent_->indexCreated(definition.name, connectionId);
                 return true;
             } else {
                 qWarning() << "Failed to create index:" << result.errorMessage.c_str();
@@ -308,7 +309,7 @@ public:
             QueryResult result = sqlExecutor_->executeQuery(ddl, context);
 
             if (result.success) {
-                parent_->emitIndexDropped(indexName, connectionId);
+                parent_->indexDropped(indexName, connectionId);
                 return true;
             } else {
                 qWarning() << "Failed to drop index:" << result.errorMessage.c_str();
@@ -336,7 +337,7 @@ public:
             QueryResult result = sqlExecutor_->executeQuery(ddl, context);
 
             if (result.success) {
-                parent_->emitIndexModified(indexName, connectionId);
+                parent_->indexModified(indexName, connectionId);
                 return true;
             } else {
                 qWarning() << "Failed to rebuild index:" << result.errorMessage.c_str();
@@ -364,7 +365,7 @@ public:
             QueryResult result = sqlExecutor_->executeQuery(ddl, context);
 
             if (result.success) {
-                parent_->emitIndexModified(newName, connectionId);
+                parent_->indexModified(newName, connectionId);
                 return true;
             } else {
                 qWarning() << "Failed to rename index:" << result.errorMessage.c_str();
@@ -441,10 +442,10 @@ public:
             maintenanceOp.completedAt = QDateTime::currentDateTime();
 
             if (maintenanceOp.success) {
-                parent_->emitIndexModified(indexName, connectionId);
+                parent_->indexModified(indexName, connectionId);
             }
 
-            parent_->emitMaintenanceCompleted(maintenanceOp);
+            parent_->maintenanceCompleted(maintenanceOp);
 
         } catch (const std::exception& e) {
             maintenanceOp.success = false;
@@ -694,11 +695,13 @@ public:
         }
     }
 
-private:
+public:
     IndexManager* parent_;
     std::shared_ptr<IMetadataManager> metadataManager_;
     std::shared_ptr<ISQLExecutor> sqlExecutor_;
     std::shared_ptr<IConnectionManager> connectionManager_;
+
+private:
 
     IndexDefinition parseIndexDefinitionFromSQL(const std::string& sql) {
         IndexDefinition definition;
@@ -780,12 +783,10 @@ void IndexManager::initialize() {
 }
 
 void IndexManager::setMetadataManager(std::shared_ptr<IMetadataManager> metadataManager) {
-    metadataManager_ = metadataManager;
     impl_->metadataManager_ = metadataManager;
 }
 
 void IndexManager::setSQLExecutor(std::shared_ptr<ISQLExecutor> sqlExecutor) {
-    sqlExecutor_ = sqlExecutor;
     impl_->sqlExecutor_ = sqlExecutor;
 }
 

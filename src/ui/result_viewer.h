@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include "types/database_types.h"
+#include "execution/sql_executor.h"
 
 namespace scratchrobin {
 

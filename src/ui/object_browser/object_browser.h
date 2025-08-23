@@ -13,6 +13,7 @@
 #include <QCheckBox>
 #include <QPushButton>
 #include <QMenu>
+#include <QLabel>
 #include <QAction>
 #include <QProgressBar>
 #include <QStatusBar>
@@ -189,7 +190,7 @@ private:
 
     // Tree view
     QTreeView* treeView_;
-    std::shared_ptr<ITreeModel> treeModel_;
+    std::shared_ptr<TreeModel> treeModel_;
 
     // Status and progress
     QStatusBar* statusBar_;

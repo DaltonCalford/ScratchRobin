@@ -211,6 +211,8 @@ public:
     void setSearchCompletedCallback(SearchCompletedCallback callback) override;
     void setIndexProgressCallback(IndexProgressCallback callback) override;
 
+
+
 private slots:
     void onIndexTimer();
     void onSearchCompleted();

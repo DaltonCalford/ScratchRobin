@@ -13,6 +13,9 @@
 #include <chrono>
 #include <QObject>
 #include <QTimer>
+#include <QVariant>
+#include <QMetaType>
+#include "types/query_types.h"
 #include <QThreadPool>
 
 namespace scratchrobin {
@@ -22,37 +25,9 @@ class IConnection;
 class IMetadataManager;
 class ITextEditor;
 
-enum class QueryState {
-    PENDING,
-    PREPARING,
-    EXECUTING,
-    PROCESSING_RESULTS,
-    COMPLETED,
-    CANCELLED,
-    ERROR
-};
+// QueryState is defined in types/query_types.h
 
-enum class QueryType {
-    SELECT,
-    INSERT,
-    UPDATE,
-    DELETE,
-    CREATE,
-    ALTER,
-    DROP,
-    TRUNCATE,
-    MERGE,
-    CALL,
-    EXPLAIN,
-    DESCRIBE,
-    SHOW,
-    USE,
-    SET,
-    COMMIT,
-    ROLLBACK,
-    SAVEPOINT,
-    UNKNOWN
-};
+// QueryType is defined in types/query_types.h
 
 enum class ExecutionMode {
     SYNCHRONOUS,

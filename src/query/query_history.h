@@ -13,11 +13,18 @@
 #include <QObject>
 #include <QDateTime>
 #include <QJsonObject>
+#include <QSqlDatabase>
+#include "types/query_types.h"
+#include "execution/sql_executor.h"
 
 namespace scratchrobin {
 
 class ISQLExecutor;
 class ITextEditor;
+
+// QueryType is defined in types/query_types.h
+
+// QueryResult is defined in execution/sql_executor.h
 
 enum class QueryHistoryFilter {
     ALL,
@@ -57,30 +64,7 @@ enum class QueryFavoriteType {
     BOOKMARK
 };
 
-struct QueryHistoryEntry {
-    std::string id;
-    std::string queryId;
-    std::string queryText;
-    QueryType queryType;
-    std::string connectionId;
-    std::string databaseName;
-    std::string userName;
-    QDateTime startTime;
-    QDateTime endTime;
-    std::chrono::milliseconds duration{0};
-    int rowCount = 0;
-    int affectedRows = 0;
-    bool success = false;
-    std::string errorMessage;
-    std::string executionPlan;
-    std::unordered_map<std::string, QVariant> statistics;
-    std::unordered_map<std::string, std::string> metadata;
-    std::set<std::string> tags;
-    bool isFavorite = false;
-    int executionCount = 1;
-    QDateTime createdAt;
-    QDateTime lastExecutedAt;
-};
+// QueryHistoryEntry is defined in types/query_types.h
 
 struct QueryFavorite {
     std::string id;
@@ -326,6 +310,8 @@ private:
     void emitHistoryChanged();
     void emitFavoritesChanged();
     void emitTemplatesChanged();
+
+
 };
 
 } // namespace scratchrobin

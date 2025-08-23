@@ -28,7 +28,7 @@ public:
 
             return Result<void>::success();
         } catch (const std::exception& e) {
-            return Result<void>::failure(std::string("Failed to initialize memory cache: ") + e.what());
+            return Result<void>::error(std::string("Failed to initialize memory cache: ") + e.what());
         }
     }
 
@@ -42,14 +42,14 @@ public:
 
             return Result<void>::success();
         } catch (const std::exception& e) {
-            return Result<void>::failure(std::string("Failed to initialize disk cache: ") + e.what());
+            return Result<void>::error(std::string("Failed to initialize disk cache: ") + e.what());
         }
     }
 
     Result<void> initializeDistributedCache(const CacheConfiguration& config) {
         // Placeholder for distributed cache initialization
         // This would initialize connections to Redis, Memcached, etc.
-        return Result<void>::failure("Distributed cache not yet implemented");
+        return Result<void>::error("Distributed cache not yet implemented");
     }
 
     Result<bool> putMemory(const std::string& key, const std::vector<char>& data,
@@ -97,7 +97,7 @@ public:
             return Result<bool>::success(true);
 
         } catch (const std::exception& e) {
-            return Result<bool>::failure(std::string("Failed to put item in memory cache: ") + e.what());
+            return Result<bool>::error(std::string("Failed to put item in memory cache: ") + e.what());
         }
     }
 
@@ -109,7 +109,7 @@ public:
             // Create cache file
             std::ofstream file(filePath, std::ios::binary);
             if (!file) {
-                return Result<bool>::failure("Failed to create cache file: " + filePath);
+                return Result<bool>::error("Failed to create cache file: " + filePath);
             }
 
             // Write metadata header
@@ -129,14 +129,14 @@ public:
             return Result<bool>::success(true);
 
         } catch (const std::exception& e) {
-            return Result<bool>::failure(std::string("Failed to put item in disk cache: ") + e.what());
+            return Result<bool>::error(std::string("Failed to put item in disk cache: ") + e.what());
         }
     }
 
     Result<std::vector<char>> getMemory(const std::string& key) {
         auto it = memoryCache_.find(key);
         if (it == memoryCache_.end()) {
-            return Result<std::vector<char>>::failure("Item not found in memory cache");
+            return Result<std::vector<char>>::error("Item not found in memory cache");
         }
 
         auto& item = it->second;
@@ -144,7 +144,7 @@ public:
         // Check if item has expired
         if (isExpired(item)) {
             memoryCache_.erase(it);
-            return Result<std::vector<char>>::failure("Item has expired");
+            return Result<std::vector<char>>::error("Item has expired");
         }
 
         // Update access statistics
@@ -165,19 +165,19 @@ public:
             std::string filePath = generateCacheFilePath(key);
 
             if (!std::filesystem::exists(filePath)) {
-                return Result<std::vector<char>>::failure("Cache file not found: " + filePath);
+                return Result<std::vector<char>>::error("Cache file not found: " + filePath);
             }
 
             std::ifstream file(filePath, std::ios::binary);
             if (!file) {
-                return Result<std::vector<char>>::failure("Failed to open cache file: " + filePath);
+                return Result<std::vector<char>>::error("Failed to open cache file: " + filePath);
             }
 
             // Read header
             std::string line;
             std::getline(file, line); // Version
             if (line != "SCRATCHROBIN_CACHE_V1") {
-                return Result<std::vector<char>>::failure("Invalid cache file format");
+                return Result<std::vector<char>>::error("Invalid cache file format");
             }
 
             std::getline(file, line); // Data size
@@ -191,7 +191,7 @@ public:
 
             std::getline(file, line); // End header
             if (line != "---END_HEADER---") {
-                return Result<std::vector<char>>::failure("Invalid cache file header");
+                return Result<std::vector<char>>::error("Invalid cache file header");
             }
 
             // Read data
@@ -201,17 +201,20 @@ public:
             // Check if file has expired
             auto fileTime = std::filesystem::last_write_time(filePath);
             auto now = std::chrono::system_clock::now();
-            auto age = now - std::chrono::time_point_cast<std::chrono::system_clock::duration>(fileTime);
+            // Convert filesystem time to system time for comparison
+            auto fileTimeDuration = fileTime.time_since_epoch();
+            auto nowDuration = now.time_since_epoch();
+            auto age = nowDuration - fileTimeDuration;
 
             if (age > ttl) {
                 std::filesystem::remove(filePath);
-                return Result<std::vector<char>>::failure("Cache file has expired");
+                return Result<std::vector<char>>::error("Cache file has expired");
             }
 
             return Result<std::vector<char>>::success(data);
 
         } catch (const std::exception& e) {
-            return Result<std::vector<char>>::failure(std::string("Failed to get item from disk cache: ") + e.what());
+            return Result<std::vector<char>>::error(std::string("Failed to get item from disk cache: ") + e.what());
         }
     }
 
@@ -469,8 +472,9 @@ public:
         uLongf decompressedSize = data.size() * 4; // Estimate
         std::vector<char> decompressed(decompressedSize);
 
+        uLongf sourceSize = data.size();
         if (uncompress2(reinterpret_cast<Bytef*>(decompressed.data()), &decompressedSize,
-                       reinterpret_cast<const Bytef*>(data.data()), data.size()) == Z_OK) {
+                       reinterpret_cast<const Bytef*>(data.data()), &sourceSize) == Z_OK) {
             decompressed.resize(decompressedSize);
             data = decompressed;
         }
@@ -527,11 +531,22 @@ private:
     std::unordered_map<std::string, CacheItem> memoryCache_;
     std::unordered_map<std::string, CacheEntryMetadata> metadataCache_;
 
-    // Statistics
+public:
+    // Statistics (made public for CacheManager access)
     std::atomic<std::size_t> memoryUsage_{0};
     std::atomic<std::size_t> diskUsage_{0};
     std::atomic<std::size_t> totalItems_{0};
     std::atomic<std::size_t> evictions_{0};
+
+    // Missing methods
+    Result<bool> existsMemory(const std::string& key) {
+        return Result<bool>::success(memoryCache_.count(key) > 0);
+    }
+
+    Result<bool> existsDisk(const std::string& key) {
+        std::string filePath = generateCacheFilePath(key);
+        return Result<bool>::success(std::filesystem::exists(filePath));
+    }
 };
 
 // CacheManager implementation
@@ -551,17 +566,17 @@ Result<void> CacheManager::initialize(const CacheConfiguration& config) {
         // Initialize appropriate cache level
         switch (config.level) {
             case CacheLevel::L1_MEMORY:
-                if (auto result = impl_->initializeMemoryCache(config); !result.success()) {
+                if (auto result = impl_->initializeMemoryCache(config); !result.isSuccess()) {
                     return result;
                 }
                 break;
             case CacheLevel::L2_DISK:
-                if (auto result = impl_->initializeDiskCache(config); !result.success()) {
+                if (auto result = impl_->initializeDiskCache(config); !result.isSuccess()) {
                     return result;
                 }
                 break;
             case CacheLevel::L3_DISTRIBUTED:
-                if (auto result = impl_->initializeDistributedCache(config); !result.success()) {
+                if (auto result = impl_->initializeDistributedCache(config); !result.isSuccess()) {
                     return result;
                 }
                 break;
@@ -575,7 +590,7 @@ Result<void> CacheManager::initialize(const CacheConfiguration& config) {
         return Result<void>::success();
 
     } catch (const std::exception& e) {
-        return Result<void>::failure(std::string("Failed to initialize cache manager: ") + e.what());
+        return Result<void>::error(std::string("Failed to initialize cache manager: ") + e.what());
     }
 }
 
@@ -597,14 +612,14 @@ Result<void> CacheManager::shutdown() {
         return Result<void>::success();
 
     } catch (const std::exception& e) {
-        return Result<void>::failure(std::string("Failed to shutdown cache manager: ") + e.what());
+        return Result<void>::error(std::string("Failed to shutdown cache manager: ") + e.what());
     }
 }
 
 Result<bool> CacheManager::put(const std::string& key, const std::vector<char>& data,
                              const std::chrono::seconds& ttl, const std::string& etag) {
     if (key.empty()) {
-        return Result<bool>::failure("Cache key cannot be empty");
+        return Result<bool>::error("Cache key cannot be empty");
     }
 
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -617,7 +632,7 @@ Result<bool> CacheManager::put(const std::string& key, const std::vector<char>& 
         // Try to store in memory cache first
         if (config_.level == CacheLevel::L1_MEMORY || config_.level == CacheLevel::L2_DISK) {
             auto result = impl_->putMemory(key, data, ttl, etag);
-            if (result.success()) {
+            if (result.isSuccess()) {
                 success = true;
             }
         }
@@ -625,7 +640,7 @@ Result<bool> CacheManager::put(const std::string& key, const std::vector<char>& 
         // If memory cache failed or disk cache is enabled, try disk cache
         if (!success && config_.level == CacheLevel::L2_DISK) {
             auto result = impl_->putDisk(key, data, ttl, etag);
-            if (result.success()) {
+            if (result.isSuccess()) {
                 success = true;
             }
         }
@@ -642,13 +657,13 @@ Result<bool> CacheManager::put(const std::string& key, const std::vector<char>& 
         return Result<bool>::success(success);
 
     } catch (const std::exception& e) {
-        return Result<bool>::failure(std::string("Failed to put cache item: ") + e.what());
+        return Result<bool>::error(std::string("Failed to put cache item: ") + e.what());
     }
 }
 
 Result<std::vector<char>> CacheManager::get(const std::string& key) {
     if (key.empty()) {
-        return Result<std::vector<char>>::failure("Cache key cannot be empty");
+        return Result<std::vector<char>>::error("Cache key cannot be empty");
     }
 
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -659,7 +674,7 @@ Result<std::vector<char>> CacheManager::get(const std::string& key) {
         // Try memory cache first
         if (config_.level == CacheLevel::L1_MEMORY || config_.level == CacheLevel::L2_DISK) {
             auto result = impl_->getMemory(key);
-            if (result.success()) {
+            if (result.isSuccess()) {
                 auto endTime = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
 
@@ -677,7 +692,7 @@ Result<std::vector<char>> CacheManager::get(const std::string& key) {
         // Try disk cache if memory cache failed
         if (config_.level == CacheLevel::L2_DISK) {
             auto result = impl_->getDisk(key);
-            if (result.success()) {
+            if (result.isSuccess()) {
                 auto endTime = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
 
@@ -703,10 +718,10 @@ Result<std::vector<char>> CacheManager::get(const std::string& key) {
             eventCallback_(key, "GET_MISS");
         }
 
-        return Result<std::vector<char>>::failure("Cache item not found");
+        return Result<std::vector<char>>::error("Cache item not found");
 
     } catch (const std::exception& e) {
-        return Result<std::vector<char>>::failure(std::string("Failed to get cache item: ") + e.what());
+        return Result<std::vector<char>>::error(std::string("Failed to get cache item: ") + e.what());
     }
 }
 
@@ -716,7 +731,7 @@ Result<bool> CacheManager::exists(const std::string& key) {
     // Check memory cache
     if (config_.level == CacheLevel::L1_MEMORY || config_.level == CacheLevel::L2_DISK) {
         auto result = impl_->existsMemory(key);
-        if (result.success() && result.value()) {
+        if (result.isSuccess() && result.value()) {
             return Result<bool>::success(true);
         }
     }
@@ -724,7 +739,7 @@ Result<bool> CacheManager::exists(const std::string& key) {
     // Check disk cache
     if (config_.level == CacheLevel::L2_DISK) {
         auto result = impl_->existsDisk(key);
-        if (result.success() && result.value()) {
+        if (result.isSuccess() && result.value()) {
             return Result<bool>::success(true);
         }
     }
@@ -776,7 +791,7 @@ Result<void> CacheManager::clear() {
                 }
             }
         } catch (const std::exception& e) {
-            return Result<void>::failure(std::string("Failed to clear disk cache: ") + e.what());
+            return Result<void>::error(std::string("Failed to clear disk cache: ") + e.what());
         }
     }
 
@@ -823,11 +838,11 @@ Result<void> CacheManager::invalidateByAge(const std::chrono::seconds& maxAge) {
 }
 
 Result<void> CacheManager::invalidateBySize(std::size_t maxSize) {
-    if (memoryUsage_ <= maxSize) {
+    if (impl_->memoryUsage_ <= maxSize) {
         return Result<void>::success();
     }
 
-    std::size_t sizeToFree = memoryUsage_ - maxSize;
+    std::size_t sizeToFree = impl_->memoryUsage_ - maxSize;
     impl_->evictMemoryItems(sizeToFree);
 
     return Result<void>::success();
@@ -841,7 +856,7 @@ Result<CacheEntryMetadata> CacheManager::getMetadata(const std::string& key) {
         return Result<CacheEntryMetadata>::success(it->second);
     }
 
-    return Result<CacheEntryMetadata>::failure("Metadata not found for key: " + key);
+    return Result<CacheEntryMetadata>::error("Metadata not found for key: " + key);
 }
 
 Result<std::vector<CacheEntryMetadata>> CacheManager::listEntries(const std::string& pattern) {
@@ -864,7 +879,7 @@ Result<std::vector<CacheEntryMetadata>> CacheManager::listEntries(const std::str
         }
     }
 
-    return Result<CacheEntryMetadata>::success(entries);
+    return Result<std::vector<CacheEntryMetadata>>::success(entries);
 }
 
 Result<void> CacheManager::setTTL(const std::string& key, const std::chrono::seconds& ttl) {
@@ -876,7 +891,7 @@ Result<void> CacheManager::setTTL(const std::string& key, const std::chrono::sec
         return Result<void>::success();
     }
 
-    return Result<void>::failure("Cache item not found: " + key);
+    return Result<void>::error("Cache item not found: " + key);
 }
 
 Result<std::chrono::seconds> CacheManager::getTTL(const std::string& key) {
@@ -889,7 +904,7 @@ Result<std::chrono::seconds> CacheManager::getTTL(const std::string& key) {
         return Result<std::chrono::seconds>::success(remaining);
     }
 
-    return Result<std::chrono::seconds>::failure("Cache item not found: " + key);
+    return Result<std::chrono::seconds>::error("Cache item not found: " + key);
 }
 
 CacheMetrics CacheManager::getMetrics() const {
@@ -1002,8 +1017,8 @@ void CacheManager::metricsThreadFunction() {
 
         // Update memory usage metrics
         std::lock_guard<std::mutex> lock(cacheMutex_);
-        metrics_.memoryUsage = memoryUsage_;
-        metrics_.totalItems = totalItems_;
+        metrics_.memoryUsage.store(impl_->memoryUsage_.load());
+        metrics_.totalItems.store(impl_->totalItems_.load());
     }
 }
 

@@ -61,17 +61,8 @@ std::string queryTypeToString(QueryType type) {
         case QueryType::CREATE: return "CREATE";
         case QueryType::ALTER: return "ALTER";
         case QueryType::DROP: return "DROP";
-        case QueryType::TRUNCATE: return "TRUNCATE";
-        case QueryType::MERGE: return "MERGE";
-        case QueryType::CALL: return "CALL";
-        case QueryType::EXPLAIN: return "EXPLAIN";
-        case QueryType::DESCRIBE: return "DESCRIBE";
-        case QueryType::SHOW: return "SHOW";
-        case QueryType::USE: return "USE";
-        case QueryType::SET: return "SET";
         case QueryType::COMMIT: return "COMMIT";
         case QueryType::ROLLBACK: return "ROLLBACK";
-        case QueryType::SAVEPOINT: return "SAVEPOINT";
         default: return "UNKNOWN";
     }
 }
@@ -84,17 +75,8 @@ QueryType stringToQueryType(const std::string& str) {
     if (str == "CREATE") return QueryType::CREATE;
     if (str == "ALTER") return QueryType::ALTER;
     if (str == "DROP") return QueryType::DROP;
-    if (str == "TRUNCATE") return QueryType::TRUNCATE;
-    if (str == "MERGE") return QueryType::MERGE;
-    if (str == "CALL") return QueryType::CALL;
-    if (str == "EXPLAIN") return QueryType::EXPLAIN;
-    if (str == "DESCRIBE") return QueryType::DESCRIBE;
-    if (str == "SHOW") return QueryType::SHOW;
-    if (str == "USE") return QueryType::USE;
-    if (str == "SET") return QueryType::SET;
     if (str == "COMMIT") return QueryType::COMMIT;
     if (str == "ROLLBACK") return QueryType::ROLLBACK;
-    if (str == "SAVEPOINT") return QueryType::SAVEPOINT;
     return QueryType::UNKNOWN;
 }
 

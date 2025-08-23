@@ -85,6 +85,8 @@ struct MetadataQuery {
     int limit = 100;
     int offset = 0;
     bool includeSystemObjects = false;
+    std::vector<SchemaObjectType> includedTypes;
+    std::string database;
     bool includeTemporaryObjects = false;
 };
 
@@ -144,7 +146,7 @@ public:
                                           const std::string& object = "",
                                           SchemaObjectType type = SchemaObjectType::TABLE) = 0;
 
-    virtual Result<MetadataMetrics> getMetrics() const = 0;
+    virtual Result<std::shared_ptr<MetadataMetrics>> getMetrics() const = 0;
     virtual Result<void> resetMetrics() = 0;
 
     virtual Result<MetadataConfiguration> getConfiguration() const = 0;
@@ -191,7 +193,7 @@ public:
                                   const std::string& object = "",
                                   SchemaObjectType type = SchemaObjectType::TABLE) override;
 
-    Result<MetadataMetrics> getMetrics() const override;
+    Result<std::shared_ptr<MetadataMetrics>> getMetrics() const override;
     Result<void> resetMetrics() override;
 
     Result<MetadataConfiguration> getConfiguration() const override;
