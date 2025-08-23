@@ -201,26 +201,27 @@ private:
         const std::string& schema, const std::string& object, SchemaObjectType type,
         const HierarchyTraversalOptions& options);
 
-    void buildDependencyGraph(ObjectHierarchy& hierarchy,
+    void buildDependencyGraph(ObjectHierarchyInfo& hierarchy,
                             const std::vector<ObjectReference>& dependencies,
                             const std::vector<ObjectReference>& dependents);
 
-    void detectCircularReferences(ObjectHierarchy& hierarchy);
-    void findCircularReferenceChains(ObjectHierarchy& hierarchy,
+    void detectCircularReferences(ObjectHierarchyInfo& hierarchy);
+    void findCircularReferenceChains(ObjectHierarchyInfo& hierarchy,
                                    const std::string& startKey,
                                    std::unordered_set<std::string>& visited,
                                    std::vector<ObjectReference>& currentChain);
 
-    void calculateDependencyLevels(ObjectHierarchy& hierarchy);
-    void performTopologicalSort(ObjectHierarchy& hierarchy);
+    void calculateDependencyLevels(const ObjectHierarchyInfo& hierarchy);
+    void performTopologicalSort(const ObjectHierarchyInfo& hierarchy);
     void performDepthFirstTraversal(const std::string& key,
-                                  const ObjectHierarchy& hierarchy,
+                                  const ObjectHierarchyInfo& hierarchy,
                                   TraversalCallback callback,
                                   std::unordered_set<std::string>& visited,
                                   int depth);
     void performBreadthFirstTraversal(const std::string& key,
-                                    const ObjectHierarchy& hierarchy,
-                                    TraversalCallback callback);
+                                    const ObjectHierarchyInfo& hierarchy,
+                                    TraversalCallback callback,
+                                    const std::unordered_set<std::string>& visited);
 
     // Impact analysis methods
     Result<ImpactAnalysis> analyzeDeletionImpact(
@@ -236,7 +237,7 @@ private:
                                         SchemaObjectType type);
     bool isHierarchyCacheValid(const std::string& cacheKey,
                              const HierarchyTraversalOptions& options);
-    void updateHierarchyCache(const std::string& cacheKey, const ObjectHierarchy& hierarchy);
+    void updateHierarchyCache(const std::string& cacheKey, const ObjectHierarchyInfo& hierarchy);
     void cleanupExpiredHierarchyCache();
 
     // Utility methods
