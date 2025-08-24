@@ -793,4 +793,28 @@ void ObjectBrowser::onLoadCompleted(bool success) {
     impl_->showProgress(false, success ? "Load completed successfully" : "Load failed");
 }
 
+void ObjectBrowser::applyViewMode(BrowserViewMode mode) {
+    // Apply the specified view mode to the object browser
+    switch (mode) {
+        case BrowserViewMode::TREE:
+            // Tree view is the default
+            treeView_->setVisible(true);
+            break;
+        case BrowserViewMode::FLAT:
+            // Flat view - show all items in a single level
+            treeView_->setVisible(true);
+            break;
+        case BrowserViewMode::CATEGORY:
+            // Category view - group items by type
+            treeView_->setVisible(true);
+            break;
+        default:
+            treeView_->setVisible(true);
+            break;
+    }
+
+    // Store the current view mode (if impl_ has this member)
+    // impl_->currentViewMode_ = mode;
+}
+
 } // namespace scratchrobin

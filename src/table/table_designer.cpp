@@ -8,6 +8,7 @@
 #include <set>
 #include <regex>
 #include <QDialog>
+#include "utils/string_utils.h"
 
 // Qt meta-type declarations for custom types
 Q_DECLARE_METATYPE(scratchrobin::TableStorageType)
@@ -91,33 +92,9 @@ ColumnType stringToColumnType(const std::string& str) {
     return ColumnType::TEXT;
 }
 
-std::string constraintTypeToString(ConstraintType type) {
-    switch (type) {
-        case ConstraintType::PRIMARY_KEY: return "PRIMARY KEY";
-        case ConstraintType::FOREIGN_KEY: return "FOREIGN KEY";
-        case ConstraintType::UNIQUE: return "UNIQUE";
-        case ConstraintType::CHECK: return "CHECK";
-        case ConstraintType::NOT_NULL: return "NOT NULL";
-        case ConstraintType::DEFAULT: return "DEFAULT";
-        case ConstraintType::EXCLUDE: return "EXCLUDE";
-        case ConstraintType::DOMAIN: return "DOMAIN";
-        default: return "UNKNOWN";
-    }
-}
 
-std::string indexTypeToString(IndexType type) {
-    switch (type) {
-        case IndexType::BTREE: return "BTREE";
-        case IndexType::HASH: return "HASH";
-        case IndexType::GIN: return "GIN";
-        case IndexType::GIST: return "GIST";
-        case IndexType::SPGIST: return "SPGIST";
-        case IndexType::BRIN: return "BRIN";
-        case IndexType::UNIQUE: return "UNIQUE";
-        case IndexType::PARTIAL: return "PARTIAL";
-        default: return "BTREE";
-    }
-}
+
+
 
 std::string storageTypeToString(TableStorageType type) {
     switch (type) {

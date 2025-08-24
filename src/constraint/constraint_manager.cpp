@@ -18,23 +18,12 @@
 #include <regex>
 #include <random>
 #include <chrono>
+#include "utils/string_utils.h"
 
 namespace scratchrobin {
 
 // Helper functions
-std::string constraintTypeToString(ConstraintType type) {
-    switch (type) {
-        case ConstraintType::PRIMARY_KEY: return "PRIMARY KEY";
-        case ConstraintType::FOREIGN_KEY: return "FOREIGN KEY";
-        case ConstraintType::UNIQUE: return "UNIQUE";
-        case ConstraintType::CHECK: return "CHECK";
-        case ConstraintType::NOT_NULL: return "NOT NULL";
-        case ConstraintType::DEFAULT: return "DEFAULT";
-        case ConstraintType::EXCLUDE: return "EXCLUDE";
-        case ConstraintType::DOMAIN: return "DOMAIN";
-        default: return "UNKNOWN";
-    }
-}
+
 
 ConstraintType stringToConstraintType(const std::string& str) {
     if (str == "PRIMARY KEY" || str == "p") return ConstraintType::PRIMARY_KEY;
@@ -109,12 +98,7 @@ std::string generateConstraintId() {
     return "constraint_" + std::to_string(timestamp) + "_" + std::to_string(++counter);
 }
 
-std::string generateOperationId() {
-    static std::atomic<int> counter{0};
-    auto now = std::chrono::system_clock::now();
-    auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-    return "constraint_op_" + std::to_string(timestamp) + "_" + std::to_string(++counter);
-}
+
 
 class ConstraintManager::Impl {
 public:

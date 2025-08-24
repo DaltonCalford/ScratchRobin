@@ -3,10 +3,13 @@
 #include <exception>
 #include <string>
 
+#include <QApplication>
+
 #include "core/application.h"
 #include "core/connection_manager.h"
 #include "core/metadata_manager.h"
 #include "ui/main_window.h"
+// #include "ui/splash_screen.h"
 #include "utils/logger.h"
 
 namespace scratchrobin {
