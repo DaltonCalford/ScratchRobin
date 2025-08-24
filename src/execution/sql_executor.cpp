@@ -18,25 +18,11 @@
 #include <sstream>
 #include <iomanip>
 #include <regex>
+#include "utils/string_utils.h"
 
 namespace scratchrobin {
 
-// Helper function to convert QueryType to string
-std::string queryTypeToString(QueryType type) {
-    switch (type) {
-        case QueryType::SELECT: return "SELECT";
-        case QueryType::INSERT: return "INSERT";
-        case QueryType::UPDATE: return "UPDATE";
-        case QueryType::DELETE: return "DELETE";
-        case QueryType::CREATE: return "CREATE";
-        case QueryType::ALTER: return "ALTER";
-        case QueryType::DROP: return "DROP";
-        case QueryType::UNKNOWN: return "UNKNOWN";
-        case QueryType::COMMIT: return "COMMIT";
-        case QueryType::ROLLBACK: return "ROLLBACK";
-        default: return "UNKNOWN";
-    }
-}
+
 
 // Helper function to determine query type from SQL
 QueryType determineQueryType(const std::string& query) {

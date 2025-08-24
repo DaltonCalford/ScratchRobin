@@ -13,27 +13,14 @@
 #include <algorithm>
 #include <sstream>
 #include <iomanip>
+#include "utils/string_utils.h"
 #include <regex>
 #include <set>
 
 namespace scratchrobin {
 
 // Helper functions
-std::string indexTypeToString(IndexType type) {
-    switch (type) {
-        case IndexType::BTREE: return "BTREE";
-        case IndexType::HASH: return "HASH";
-        case IndexType::GIN: return "GIN";
-        case IndexType::GIST: return "GIST";
-        case IndexType::SPGIST: return "SPGIST";
-        case IndexType::BRIN: return "BRIN";
-        case IndexType::UNIQUE: return "UNIQUE";
-        case IndexType::PARTIAL: return "PARTIAL";
-        case IndexType::EXPRESSION: return "EXPRESSION";
-        case IndexType::COMPOSITE: return "COMPOSITE";
-        default: return "BTREE";
-    }
-}
+
 
 IndexType stringToIndexType(const std::string& str) {
     if (str == "HASH") return IndexType::HASH;
@@ -97,12 +84,7 @@ std::string generateIndexId() {
     return "idx_" + std::to_string(timestamp) + "_" + std::to_string(++counter);
 }
 
-std::string generateOperationId() {
-    static std::atomic<int> counter{0};
-    auto now = std::chrono::system_clock::now();
-    auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-    return "op_" + std::to_string(timestamp) + "_" + std::to_string(++counter);
-}
+
 
 class IndexManager::Impl {
 public:

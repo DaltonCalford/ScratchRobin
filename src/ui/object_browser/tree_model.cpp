@@ -919,4 +919,51 @@ std::string TreeModel::toString(TreeNodeType type) {
     }
 }
 
+// Missing method implementations
+bool TreeModel::setData(const QModelIndex& index, const QVariant& value, int role) {
+    if (!index.isValid() || role != Qt::EditRole) {
+        return false;
+    }
+
+    // For now, return false as we're not implementing editing functionality
+    return false;
+}
+
+QVariant TreeModel::headerData(int section, Qt::Orientation orientation, int role) const {
+    if (orientation == Qt::Horizontal && role == Qt::DisplayRole) {
+        switch (section) {
+            case 0: return "Name";
+            case 1: return "Type";
+            case 2: return "Size";
+            default: return QVariant();
+        }
+    }
+    return QVariant();
+}
+
+std::string TreeModel::toString(TreeNodeType type) const {
+    switch (type) {
+        case TreeNodeType::ROOT: return "Root";
+        case TreeNodeType::CONNECTION: return "Connection";
+        case TreeNodeType::DATABASE: return "Database";
+        case TreeNodeType::SCHEMA: return "Schema";
+        case TreeNodeType::TABLE: return "Table";
+        case TreeNodeType::VIEW: return "View";
+        case TreeNodeType::COLUMN: return "Column";
+        case TreeNodeType::INDEX: return "Index";
+        case TreeNodeType::CONSTRAINT: return "Constraint";
+        case TreeNodeType::TRIGGER: return "Trigger";
+        case TreeNodeType::FUNCTION: return "Function";
+        case TreeNodeType::PROCEDURE: return "Procedure";
+        case TreeNodeType::DOMAIN: return "Domain";
+        case TreeNodeType::TYPE: return "Type";
+        case TreeNodeType::RULE: return "Rule";
+        default: return "Unknown";
+    }
+}
+
+void TreeModel::setConnectionManager(std::shared_ptr<IConnectionManager> connectionManager) {
+    connectionManager_ = connectionManager;
+}
+
 } // namespace scratchrobin

@@ -17,8 +17,25 @@ set(SOURCES
     index/index_manager.cpp
     constraint/constraint_manager.cpp
     ui/main_window.cpp
+    ui/splash_screen.cpp
     ui/connection_dialog.cpp
-    ui/query_editor.cpp
+    ui/about_dialog.cpp
+    ui/preferences_dialog.cpp
+    ui/update_dialog.cpp
+    ui/import_export_dialog.cpp
+    ui/query_history_dialog.cpp
+    ui/backup_restore_dialog.cpp
+    ui/find_replace_dialog.cpp
+    ui/column_editor_dialog.cpp
+    ui/data_editor_dialog.cpp
+    ui/progress_dialog.cpp
+    ui/error_details_dialog.cpp
+    ui/confirmation_dialog.cpp
+    ui/keyboard_shortcuts_dialog.cpp
+    ui/favorites_manager_dialog.cpp
+    ui/dynamic_connection_dialog.cpp
+    database/database_driver_manager.cpp
+    ui/app_icons.cpp
     ui/object_browser/tree_model.cpp
     ui/object_browser/object_browser.cpp
     ui/properties/property_viewer.cpp
@@ -26,6 +43,8 @@ set(SOURCES
     utils/logger.cpp
     utils/string_utils.cpp
     utils/file_utils.cpp
+    ../resource/resources.qrc
+    ../resource/icons.qrc
     components/sql_executor.cpp
     components/query_parser.cpp
     components/schema_loader.cpp
@@ -49,8 +68,25 @@ set(HEADERS
     index/index_manager.h
     constraint/constraint_manager.h
     ui/main_window.h
+    ui/splash_screen.h
     ui/connection_dialog.h
-    ui/query_editor.h
+    ui/about_dialog.h
+    ui/preferences_dialog.h
+    ui/update_dialog.h
+    ui/import_export_dialog.h
+    ui/query_history_dialog.h
+    ui/backup_restore_dialog.h
+    ui/find_replace_dialog.h
+    ui/column_editor_dialog.h
+    ui/data_editor_dialog.h
+    ui/progress_dialog.h
+    ui/error_details_dialog.h
+    ui/confirmation_dialog.h
+    ui/keyboard_shortcuts_dialog.h
+    ui/favorites_manager_dialog.h
+    ui/dynamic_connection_dialog.h
+    database/database_driver_manager.h
+    ui/app_icons.h
     ui/object_browser/tree_model.h
     ui/object_browser/object_browser.h
     ui/properties/property_viewer.h
@@ -83,6 +119,50 @@ target_link_libraries(scratchrobin_lib
         Qt5::Xml
 )
 
+# Find and link database drivers
+find_package(PostgreSQL)
+if(PostgreSQL_FOUND)
+    target_link_libraries(scratchrobin_lib PRIVATE ${PostgreSQL_LIBRARIES})
+    target_include_directories(scratchrobin_lib PRIVATE ${PostgreSQL_INCLUDE_DIRS})
+    add_definitions(-DHAS_POSTGRESQL)
+endif()
+
+find_package(MySQL)
+if(MySQL_FOUND)
+    target_link_libraries(scratchrobin_lib PRIVATE ${MySQL_LIBRARIES})
+    target_include_directories(scratchrobin_lib PRIVATE ${MySQL_INCLUDE_DIRS})
+    add_definitions(-DHAS_MYSQL)
+endif()
+
+# Check for MariaDB (often uses MySQL libraries)
+find_library(MARIADB_LIBRARY NAMES mariadb mariadbclient)
+if(MARIADB_LIBRARY)
+    target_link_libraries(scratchrobin_lib PRIVATE ${MARIADB_LIBRARY})
+    add_definitions(-DHAS_MARIADB)
+endif()
+
+# Find ODBC
+find_package(ODBC)
+if(ODBC_FOUND)
+    target_link_libraries(scratchrobin_lib PRIVATE ${ODBC_LIBRARIES})
+    target_include_directories(scratchrobin_lib PRIVATE ${ODBC_INCLUDE_DIRS})
+    add_definitions(-DHAS_ODBC)
+endif()
+
+# Find Firebird
+find_library(FIREBIRD_LIBRARY NAMES fbclient)
+if(FIREBIRD_LIBRARY)
+    target_link_libraries(scratchrobin_lib PRIVATE ${FIREBIRD_LIBRARY})
+    add_definitions(-DHAS_FIREBIRD)
+endif()
+
+# Find IBM DB2
+find_library(DB2_LIBRARY NAMES db2)
+if(DB2_LIBRARY)
+    target_link_libraries(scratchrobin_lib PRIVATE ${DB2_LIBRARY})
+    add_definitions(-DHAS_DB2)
+endif()
+
 # Include directories for the library
 target_include_directories(scratchrobin_lib
     PRIVATE
@@ -101,6 +181,12 @@ add_executable(scratchrobin main.cpp)
 target_link_libraries(scratchrobin
     PRIVATE
         scratchrobin_lib
+        Qt5::Core
+        Qt5::Widgets
+        Qt5::Gui
+        Qt5::Network
+        Qt5::Sql
+        Qt5::Xml
 )
 
 # Set C++ standard

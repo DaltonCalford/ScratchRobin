@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/">
+        <file>logos/Artwork/ScratchRobinLogoHeader.png</file>
+        <file>logos/Artwork/ScratchRobin.png</file>
+        <file>logos/Artwork/ScratchBirdLogo.png</file>
+        <file>logos/Artwork/ScratchBirdLogoHeader.png</file>
+        <file>logos/Artwork/TransparentScratchBirdLogoHeader.png</file>
+    </qresource>
+</RCC>

@@ -18,6 +18,7 @@
 #include <iomanip>
 #include <regex>
 #include <chrono>
+#include "utils/string_utils.h"
 
 namespace scratchrobin {
 
@@ -52,20 +53,7 @@ std::chrono::system_clock::time_point qDateTimeToChrono(const QDateTime& dt) {
     return std::chrono::system_clock::from_time_t(dt.toSecsSinceEpoch());
 }
 
-std::string queryTypeToString(QueryType type) {
-    switch (type) {
-        case QueryType::SELECT: return "SELECT";
-        case QueryType::INSERT: return "INSERT";
-        case QueryType::UPDATE: return "UPDATE";
-        case QueryType::DELETE: return "DELETE";
-        case QueryType::CREATE: return "CREATE";
-        case QueryType::ALTER: return "ALTER";
-        case QueryType::DROP: return "DROP";
-        case QueryType::COMMIT: return "COMMIT";
-        case QueryType::ROLLBACK: return "ROLLBACK";
-        default: return "UNKNOWN";
-    }
-}
+
 
 QueryType stringToQueryType(const std::string& str) {
     if (str == "SELECT") return QueryType::SELECT;
