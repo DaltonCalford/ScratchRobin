@@ -23,16 +23,32 @@
 #include <QSplitter>
 #include <QListWidget>
 #include <QTreeWidget>
+#include <QTableWidget>
+#include <QMenu>
+#include <QAction>
+#include <QHeaderView>
 
 #include "database/database_driver_manager.h"
 
 namespace scratchrobin {
 
+// Using the same parameter definition as stored procedure dialog for consistency
+struct FunctionParameterDefinition {
+    QString name;
+    QString dataType;
+    int length = 0;
+    int precision = 0;
+    int scale = 0;
+    QString direction; // "IN" only for functions
+    QString defaultValue;
+    QString comment;
+};
+
 struct FunctionDefinition {
     QString name;
     QString schema;
     QString returnType;
-    QList<ParameterDefinition> parameters;
+    QList<FunctionParameterDefinition> parameters;
     QString body;
     QString language; // "SQL", "PLSQL", "T-SQL", etc.
     QString comment;
@@ -40,17 +56,6 @@ struct FunctionDefinition {
     QString securityType; // "DEFINER", "INVOKER"
     QString sqlMode;
     QMap<QString, QVariant> options;
-};
-
-struct ParameterDefinition {
-    QString name;
-    QString dataType;
-    int length = 0;
-    int precision = 0;
-    int scale = 0;
-    QString direction; // "IN", "OUT", "INOUT"
-    QString defaultValue;
-    QString comment;
 };
 
 class FunctionEditorDialog : public QDialog {
@@ -164,7 +169,7 @@ private:
     QSpinBox* paramLengthSpin_;
     QSpinBox* paramPrecisionSpin_;
     QSpinBox* paramScaleSpin_;
-    QComboBox* paramDirectionCombo_;
+    // Note: Functions only support IN parameters, so no direction combo needed
     QLineEdit* paramDefaultEdit_;
     QTextEdit* paramCommentEdit_;
 

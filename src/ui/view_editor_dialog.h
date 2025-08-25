@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QObject>
 #include <QDialog>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -22,6 +23,10 @@
 #include <QPlainTextEdit>
 #include <QSplitter>
 #include <QListWidget>
+#include <QTableWidget>
+#include <QMenu>
+#include <QAction>
+#include <QSyntaxHighlighter>
 
 #include "database/database_driver_manager.h"
 

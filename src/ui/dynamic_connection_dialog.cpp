@@ -747,7 +747,7 @@ void DynamicConnectionDialog::setConnectionConfig(const DatabaseConnectionConfig
 
     // Update UI with the new configuration
     connectionNameEdit_->setText(config.connectionName);
-    databaseTypeCombo_->setCurrentText(driverManager_->databaseTypeToString(config.type));
+    databaseTypeCombo_->setCurrentText(driverManager_->databaseTypeToString(config.databaseType));
     hostEdit_->setText(config.host);
     portSpin_->setValue(config.port);
     databaseEdit_->setText(config.database);

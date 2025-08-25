@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QObject>
 #include <QDialog>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -28,20 +29,20 @@
 
 namespace scratchrobin {
 
-struct IndexColumn {
+struct IndexManagerColumn {
     QString column;
     QString expression;
     int length = 0;
     QString sortOrder; // "ASC", "DESC"
 };
 
-struct IndexDefinition {
+struct IndexManagerDefinition {
     QString name;
     QString tableName;
     QString schema;
     QString type; // "INDEX", "UNIQUE", "PRIMARY KEY", "FULLTEXT", "SPATIAL"
     QString method; // "BTREE", "HASH", "RTREE", etc.
-    QList<IndexColumn> columns;
+    QList<IndexManagerColumn> columns;
     QString parser; // For FULLTEXT indexes
     QString comment;
     bool isVisible = true;
@@ -56,15 +57,15 @@ public:
     ~IndexManagerDialog() override = default;
 
     // Public interface
-    void setIndexDefinition(const IndexDefinition& definition);
-    IndexDefinition getIndexDefinition() const;
+    void setIndexDefinition(const IndexManagerDefinition& definition);
+    IndexManagerDefinition getIndexDefinition() const;
     void setEditMode(bool isEdit);
     void setDatabaseType(DatabaseType type);
     void setTableInfo(const QString& schema, const QString& tableName);
     void loadExistingIndex(const QString& schema, const QString& tableName, const QString& indexName);
 
 signals:
-    void indexSaved(const IndexDefinition& definition);
+    void indexSaved(const IndexManagerDefinition& definition);
     void indexCreated(const QString& sql);
     void indexAltered(const QString& sql);
 
@@ -179,7 +180,7 @@ private:
     QDialogButtonBox* dialogButtons_;
 
     // Current state
-    IndexDefinition currentDefinition_;
+    IndexManagerDefinition currentDefinition_;
     DatabaseType currentDatabaseType_;
     bool isEditMode_;
     QString originalIndexName_;

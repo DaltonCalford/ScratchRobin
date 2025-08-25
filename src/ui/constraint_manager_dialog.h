@@ -28,7 +28,7 @@
 
 namespace scratchrobin {
 
-struct ConstraintDefinition {
+struct ConstraintManagerDefinition {
     QString name;
     QString tableName;
     QString schema;
@@ -52,15 +52,15 @@ public:
     ~ConstraintManagerDialog() override = default;
 
     // Public interface
-    void setConstraintDefinition(const ConstraintDefinition& definition);
-    ConstraintDefinition getConstraintDefinition() const;
+    void setConstraintDefinition(const ConstraintManagerDefinition& definition);
+    ConstraintManagerDefinition getConstraintDefinition() const;
     void setEditMode(bool isEdit);
     void setDatabaseType(DatabaseType type);
     void setTableInfo(const QString& schema, const QString& tableName);
     void loadExistingConstraint(const QString& schema, const QString& tableName, const QString& constraintName);
 
 signals:
-    void constraintSaved(const ConstraintDefinition& definition);
+    void constraintSaved(const ConstraintManagerDefinition& definition);
     void constraintCreated(const QString& sql);
     void constraintAltered(const QString& sql);
 
@@ -76,6 +76,7 @@ private slots:
 
     // Column management
     void onAddColumn();
+    void onAddColumn(const QString& columnName);
     void onRemoveColumn();
     void onColumnSelectionChanged(int row);
 
@@ -159,13 +160,13 @@ private:
     QVBoxLayout* sqlLayout_;
     QTextEdit* sqlPreviewEdit_;
     QPushButton* generateSqlButton_;
-    QPushButton* validateButton_;
+    QPushButton* validateSqlButton_;
 
     // Dialog buttons
     QDialogButtonBox* dialogButtons_;
 
     // Current state
-    ConstraintDefinition currentDefinition_;
+    ConstraintManagerDefinition currentDefinition_;
     DatabaseType currentDatabaseType_;
     bool isEditMode_;
     QString originalConstraintName_;

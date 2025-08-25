@@ -12,9 +12,14 @@ enum class DatabaseType {
     SCRATCHBIRD,
     POSTGRESQL,
     MYSQL,
+    MARIADB,
     SQLITE,
     ORACLE,
-    SQLSERVER
+    SQLSERVER,
+    MSSQL,
+    ODBC,
+    FIREBIRD,
+    DB2
 };
 
 struct DatabaseConnection {

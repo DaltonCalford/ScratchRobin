@@ -632,30 +632,149 @@ bool DatabaseDriverManager::checkDB2Availability() {
     return QSqlDatabase::isDriverAvailable("QDB2");
 }
 
-DatabaseDriver DatabaseDriverManager::getDriver(DatabaseType type) const {
-    auto it = drivers_.find(type);
-    if (it != drivers_.end()) {
-        return it.value();
-    }
-    return DatabaseDriver();
+void DatabaseDriverManager::setupODBCDriver() {
+    DatabaseDriver driver("QODBC", "ODBC", "QODBC");
+    driver.description = "Generic ODBC database driver";
+    driver.connectionParameters = {
+        ConnectionParameter("dsn", "Data Source Name", "string", "", true),
+        ConnectionParameter("driver", "ODBC Driver", "string", "", false, false, "", "", "ODBC driver to use"),
+        ConnectionParameter("server", "Server", "string", "", false),
+        ConnectionParameter("port", "Port", "port", ""),
+        ConnectionParameter("database", "Database", "string", "", false),
+        ConnectionParameter("username", "Username", "string", "", false),
+        ConnectionParameter("password", "Password", "password", "", false, true),
+        ConnectionParameter("trusted_connection", "Use Trusted Connection", "bool", "false"),
+        ConnectionParameter("encrypt", "Encrypt Connection", "bool", "false"),
+        ConnectionParameter("trust_server_certificate", "Trust Server Certificate", "bool", "false")
+    };
+    driver.requiresAdditionalSetup = true;
+    driver.setupInstructions = "Install appropriate ODBC driver for your database";
+    driver.status = checkODBCAAvailability() ? DriverStatus::Available : DriverStatus::NeedsInstallation;
+
+    drivers_[DatabaseType::ODBC] = driver;
+
+    // Add connection parameters for ODBC
+    connectionParameters_[DatabaseType::ODBC] = driver.connectionParameters;
 }
 
-DatabaseDriver DatabaseDriverManager::getDriver(const QString& name) const {
-    for (const DatabaseDriver& driver : drivers_) {
-        if (driver.name == name) {
-            return driver;
-        }
-    }
-    return DatabaseDriver();
+void DatabaseDriverManager::setupFirebirdSQLDriver() {
+    DatabaseDriver driver("QIBASE", "FirebirdSQL", "QIBASE");
+    driver.description = "FirebirdSQL database driver";
+    driver.connectionParameters = {
+        ConnectionParameter("database", "Database File", "file", "", true),
+        ConnectionParameter("host", "Host", "string", "localhost"),
+        ConnectionParameter("port", "Port", "port", "3050"),
+        ConnectionParameter("username", "Username", "string", "SYSDBA", true),
+        ConnectionParameter("password", "Password", "password", "masterkey", true, true),
+        ConnectionParameter("charset", "Character Set", "string", "UTF8")
+    };
+    driver.requiresAdditionalSetup = false;
+    driver.status = checkFirebirdSQLAvailability() ? DriverStatus::Available : DriverStatus::NotAvailable;
+
+    drivers_[DatabaseType::FIREBIRD] = driver;
+
+    // Add connection parameters for FirebirdSQL
+    connectionParameters_[DatabaseType::FIREBIRD] = driver.connectionParameters;
 }
 
-bool DatabaseDriverManager::isDriverAvailable(DatabaseType type) const {
-    auto it = drivers_.find(type);
-    return (it != drivers_.end()) && (it.value().status == DriverStatus::Available);
+void DatabaseDriverManager::setupSQLiteDriver() {
+    DatabaseDriver driver("QSQLITE", "SQLite", "QSQLITE");
+    driver.description = "SQLite database driver";
+    driver.connectionParameters = {
+        ConnectionParameter("database", "Database File", "file", "", true, false, "", "", "Path to SQLite database file")
+    };
+    driver.requiresAdditionalSetup = false;
+    driver.status = checkSQLiteAvailability() ? DriverStatus::Available : DriverStatus::NotAvailable;
+
+    drivers_[DatabaseType::SQLITE] = driver;
+
+    // Add connection parameters for SQLite
+    connectionParameters_[DatabaseType::SQLITE] = driver.connectionParameters;
 }
 
-bool DatabaseDriverManager::isDriverAvailable(const QString& driverName) const {
-    return QSqlDatabase::drivers().contains(driverName);
+void DatabaseDriverManager::setupOracleDriver() {
+    DatabaseDriver driver("QOCI", "Oracle", "QOCI");
+    driver.description = "Oracle database driver";
+    driver.connectionParameters = {
+        ConnectionParameter("host", "Host", "string", "localhost"),
+        ConnectionParameter("port", "Port", "port", "1521"),
+        ConnectionParameter("database", "Database/SID", "string", "", true),
+        ConnectionParameter("username", "Username", "string", "", true),
+        ConnectionParameter("password", "Password", "password", "", true, true),
+        ConnectionParameter("charset", "Character Set", "string", "AL32UTF8")
+    };
+    driver.requiresAdditionalSetup = true;
+    driver.setupInstructions = "Install Oracle Instant Client and set ORACLE_HOME environment variable";
+    driver.status = checkOracleAvailability() ? DriverStatus::Available : DriverStatus::NeedsInstallation;
+
+    drivers_[DatabaseType::ORACLE] = driver;
+
+    // Add connection parameters for Oracle
+    connectionParameters_[DatabaseType::ORACLE] = driver.connectionParameters;
 }
+
+void DatabaseDriverManager::setupSQLServerDriver() {
+    // SQL Server uses the same driver as MSSQL
+    setupMSSQLDriver();
+}
+
+void DatabaseDriverManager::setupODBCDriver() {
+    DatabaseDriver driver("QODBC", "ODBC", "QODBC");
+    driver.description = "Generic ODBC database driver";
+    driver.connectionParameters = {
+        ConnectionParameter("dsn", "Data Source Name", "string", "", true),
+        ConnectionParameter("driver", "ODBC Driver", "string", "", false, false, "", "", "ODBC driver to use"),
+        ConnectionParameter("server", "Server", "string", "", false),
+        ConnectionParameter("port", "Port", "port", ""),
+        ConnectionParameter("database", "Database", "string", "", false),
+        ConnectionParameter("username", "Username", "string", "", false),
+        ConnectionParameter("password", "Password", "password", "", false, true),
+        ConnectionParameter("trusted_connection", "Use Trusted Connection", "bool", "false"),
+        ConnectionParameter("encrypt", "Encrypt Connection", "bool", "false"),
+        ConnectionParameter("trust_server_certificate", "Trust Server Certificate", "bool", "false")
+    };
+    driver.requiresAdditionalSetup = true;
+    driver.setupInstructions = "Install appropriate ODBC driver for your database";
+    driver.status = checkODBCAAvailability() ? DriverStatus::Available : DriverStatus::NotAvailable;
+
+    drivers_[DatabaseType::ODBC] = driver;
+
+    // Add connection parameters for ODBC
+    connectionParameters_[DatabaseType::ODBC] = driver.connectionParameters;
+}
+
+bool DatabaseDriverManager::checkPostgreSQLAvailability() {
+    return QSqlDatabase::isDriverAvailable("QPSQL");
+}
+
+bool DatabaseDriverManager::checkMySQLAvailability() {
+    return QSqlDatabase::isDriverAvailable("QMYSQL");
+}
+
+bool DatabaseDriverManager::checkMariaDBAvailability() {
+    return QSqlDatabase::isDriverAvailable("QMYSQL");
+}
+
+bool DatabaseDriverManager::checkMSSQLAvailability() {
+    return QSqlDatabase::isDriverAvailable("QODBC");
+}
+
+bool DatabaseDriverManager::checkODBCAAvailability() {
+    return QSqlDatabase::isDriverAvailable("QODBC");
+}
+
+bool DatabaseDriverManager::checkFirebirdSQLAvailability() {
+    return QSqlDatabase::isDriverAvailable("QFIREBIRD");
+}
+
+bool DatabaseDriverManager::checkSQLiteAvailability() {
+    return QSqlDatabase::isDriverAvailable("QSQLITE");
+}
+
+bool DatabaseDriverManager::checkOracleAvailability() {
+    return QSqlDatabase::isDriverAvailable("QOCI");
+}
+
+// DatabaseDriverManager Implementation
 
 } // namespace scratchrobin

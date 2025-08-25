@@ -6,7 +6,7 @@
 #include <QStringList>
 #include <memory>
 #include <functional>
-#include "../types/database_types.h"
+#include "types/database_types.h"
 
 namespace scratchrobin {
 
@@ -18,6 +18,22 @@ enum class DriverStatus {
     NeedsInstallation,
     Loading,
     Error
+};
+
+struct DatabaseDriver {
+    QString name;
+    QString displayName;
+    QString description;
+    QString driverName;
+    QStringList connectionParameters;
+    bool requiresAdditionalSetup = false;
+    QString setupInstructions;
+    QStringList requiredLibraries;
+    DriverStatus status = DriverStatus::NotAvailable;
+
+    DatabaseDriver() = default;
+    DatabaseDriver(const QString& name, const QString& displayName, const QString& driverName)
+        : name(name), displayName(displayName), driverName(driverName) {}
 };
 
 struct ConnectionParameter {
@@ -34,63 +50,6 @@ struct ConnectionParameter {
     ConnectionParameter() = default;
     ConnectionParameter(const QString& name, const QString& displayName, const QString& dataType)
         : name(name), displayName(displayName), dataType(dataType) {}
-    ConnectionParameter(const QString& name, const QString& displayName, const QString& dataType,
-                       const QString& defaultVal, bool req = false, bool sens = false)
-        : name(name), displayName(displayName), dataType(dataType), defaultValue(defaultVal),
-          required(req), sensitive(sens) {}
-    ConnectionParameter(const QString& name, const QString& displayName, const QString& dataType,
-                       int defaultVal, bool req = false, bool sens = false)
-        : name(name), displayName(displayName), dataType(dataType), defaultValue(defaultVal),
-          required(req), sensitive(sens) {}
-
-    ConnectionParameter(const QString& name, const QString& displayName, const QString& dataType,
-                       bool defaultVal, bool req = false, bool sens = false)
-        : name(name), displayName(displayName), dataType(dataType), defaultValue(defaultVal),
-          required(req), sensitive(sens) {}
-
-    ConnectionParameter(const QString& name, const QString& displayName, const QString& dataType,
-                       const QString& defaultVal, const QStringList& enumValues, bool req = false, bool sens = false)
-        : name(name), displayName(displayName), dataType(dataType), defaultValue(defaultVal),
-          required(req), sensitive(sens) {
-        // Store enum values in placeholder for now
-        placeholder = enumValues.join("|");
-    }
-
-    // Constructor with description
-    ConnectionParameter(const QString& name, const QString& displayName, const QString& dataType,
-                       const QString& defaultVal, bool req, bool sens, const QString& desc)
-        : name(name), displayName(displayName), dataType(dataType), defaultValue(defaultVal),
-          required(req), sensitive(sens), description(desc) {}
-
-    // Constructor with description and placeholder
-    ConnectionParameter(const QString& name, const QString& displayName, const QString& dataType,
-                       const QString& defaultVal, bool req, bool sens, const QString& desc, const QString& place)
-        : name(name), displayName(displayName), dataType(dataType), defaultValue(defaultVal),
-          required(req), sensitive(sens), description(desc), placeholder(place) {}
-
-    // Constructor with description, placeholder, and enum values
-    ConnectionParameter(const QString& name, const QString& displayName, const QString& dataType,
-                       const QString& defaultVal, bool req, bool sens, const QString& desc, const QString& place, const QString& enumDesc)
-        : name(name), displayName(displayName), dataType(dataType), defaultValue(defaultVal),
-          required(req), sensitive(sens), description(desc), placeholder(place) {
-        // enumDesc is ignored for now
-    }
-};
-
-struct DatabaseDriver {
-    QString name;
-    QString displayName;
-    QString description;
-    QString driverName;
-    QList<ConnectionParameter> connectionParameters;
-    bool requiresAdditionalSetup = false;
-    QString setupInstructions;
-    QStringList requiredLibraries;
-    DriverStatus status = DriverStatus::NotAvailable;
-
-    DatabaseDriver() = default;
-    DatabaseDriver(const QString& name, const QString& displayName, const QString& driverName)
-        : name(name), displayName(displayName), driverName(driverName) {}
 };
 
 struct DatabaseConnectionConfig {
@@ -177,16 +136,16 @@ private:
     void setupSQLServerDriver();
     void setupDB2Driver();
 
-    bool checkPostgreSQLAvailability();
-    bool checkMySQLAvailability();
-    bool checkMariaDBAvailability();
-    bool checkMSSQLAvailability();
-    bool checkODBCAAvailability();
-    bool checkFirebirdSQLAvailability();
-    bool checkSQLiteAvailability();
-    bool checkOracleAvailability();
-    bool checkSQLServerAvailability();
-    bool checkDB2Availability();
+    void checkPostgreSQLAvailability();
+    void checkMySQLAvailability();
+    void checkMariaDBAvailability();
+    void checkMSSQLAvailability();
+    void checkODBCAAvailability();
+    void checkFirebirdSQLAvailability();
+    void checkSQLiteAvailability();
+    void checkOracleAvailability();
+    void checkSQLServerAvailability();
+    void checkDB2Availability();
 
     QMap<DatabaseType, DatabaseDriver> drivers_;
     QMap<DatabaseType, QList<ConnectionParameter>> connectionParameters_;

@@ -22,6 +22,9 @@
 #include <QProgressBar>
 #include <QSplitter>
 #include <QListWidget>
+#include <QApplication>
+#include <QStyle>
+#include <QDateTime>
 
 #include "database/database_driver_manager.h"
 
@@ -37,7 +40,7 @@ struct SchemaDefinition {
     QMap<QString, QVariant> options;
 };
 
-struct SchemaObject {
+struct SchemaManagerObject {
     QString name;
     QString type; // "TABLE", "VIEW", "PROCEDURE", "FUNCTION", "INDEX", "TRIGGER"
     QString schema;
@@ -64,9 +67,9 @@ signals:
     void schemaCreated(const QString& schemaName);
     void schemaAltered(const QString& schemaName);
     void schemaDropped(const QString& schemaName);
-    void objectCreated(const SchemaObject& object);
-    void objectAltered(const SchemaObject& object);
-    void objectDropped(const SchemaObject& object);
+    void objectCreated(const SchemaManagerObject& object);
+    void objectAltered(const SchemaManagerObject& object);
+    void objectDropped(const SchemaManagerObject& object);
 
 public slots:
     void accept() override;
@@ -89,7 +92,7 @@ private slots:
 
     // Tree navigation
     void onSchemaSelected(QTreeWidgetItem* item);
-    void onObjectSelected(QTreeWidgetItem* item);
+    void onObjectSelected();
     void onObjectDoubleClicked(QTreeWidgetItem* item);
 
     // Context menu
@@ -109,11 +112,11 @@ private:
 
     void populateSchemaTree();
     void populateSchemaObjects(const QString& schemaName);
-    void updatePropertyPanel(const SchemaObject& object);
+    void updatePropertyPanel(const SchemaManagerObject& object);
 
     void createSchemaDialog(const QString& schemaName = QString());
     void deleteSchemaDialog(const QString& schemaName);
-    void showObjectProperties(const SchemaObject& object);
+    void showObjectProperties(const SchemaManagerObject& object);
 
     void updateButtonStates();
 
@@ -156,7 +159,7 @@ private:
     QString currentSchema_;
     QString currentObject_;
     QList<SchemaDefinition> schemas_;
-    QList<SchemaObject> objects_;
+    QList<SchemaManagerObject> objects_;
 
     // Database driver manager
     DatabaseDriverManager* driverManager_;
