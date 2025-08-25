@@ -34,7 +34,31 @@ set(SOURCES
     ui/keyboard_shortcuts_dialog.cpp
     ui/favorites_manager_dialog.cpp
     ui/dynamic_connection_dialog.cpp
+    ui/table_designer_dialog.cpp
+    ui/stored_procedure_dialog.cpp
+    ui/view_editor_dialog.cpp
+    ui/index_manager_dialog.cpp
+    ui/constraint_manager_dialog.cpp
+    ui/trigger_manager_dialog.cpp
+    ui/function_editor_dialog.cpp
+    ui/schema_manager_dialog.cpp
+    ui/user_defined_types_dialog.cpp
     database/database_driver_manager.cpp
+    # database/mssql_features.cpp
+    # database/mssql_catalog.cpp
+    # database/mssql_connection.cpp
+    # database/mssql_syntax.cpp
+    # database/mariadb_features.cpp
+    # database/mariadb_catalog.cpp
+    # database/mariadb_connection.cpp
+    # database/mariadb_syntax.cpp
+    # database/mysql_features.cpp
+    # database/mysql_catalog.cpp
+    # database/mysql_connection.cpp
+    database/postgresql_features.cpp
+    database/postgresql_catalog.cpp
+    database/postgresql_connection.cpp
+    database/postgresql_syntax.cpp
     ui/app_icons.cpp
     ui/object_browser/tree_model.cpp
     ui/object_browser/object_browser.cpp
@@ -85,7 +109,31 @@ set(HEADERS
     ui/keyboard_shortcuts_dialog.h
     ui/favorites_manager_dialog.h
     ui/dynamic_connection_dialog.h
+    ui/table_designer_dialog.h
+    ui/stored_procedure_dialog.h
+    ui/view_editor_dialog.h
+    ui/index_manager_dialog.h
+    ui/constraint_manager_dialog.h
+    ui/trigger_manager_dialog.h
+    ui/function_editor_dialog.h
+    ui/schema_manager_dialog.h
+    ui/user_defined_types_dialog.h
     database/database_driver_manager.h
+    # database/mssql_features.h
+    # database/mssql_catalog.h
+    # database/mssql_connection.h
+    # database/mssql_syntax.h
+    # database/mariadb_features.h
+    # database/mariadb_catalog.h
+    # database/mariadb_connection.h
+    # database/mariadb_syntax.h
+    # database/mysql_features.h
+    # database/mysql_catalog.h
+    # database/mysql_connection.h
+    database/postgresql_features.h
+    database/postgresql_catalog.h
+    database/postgresql_connection.h
+    database/postgresql_syntax.h
     ui/app_icons.h
     ui/object_browser/tree_model.h
     ui/object_browser/object_browser.h
@@ -191,6 +239,13 @@ target_link_libraries(scratchrobin
 
 # Set C++ standard
 target_compile_features(scratchrobin PRIVATE cxx_std_17)
+
+# Add PostgreSQL driver explicitly if available
+find_package(PostgreSQL)
+if(PostgreSQL_FOUND)
+    target_link_libraries(scratchrobin PRIVATE ${PostgreSQL_LIBRARIES})
+    target_include_directories(scratchrobin PRIVATE ${PostgreSQL_INCLUDE_DIRS})
+endif()
 
 # Installation
 install(TARGETS scratchrobin scratchrobin_lib

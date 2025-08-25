@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QObject>
 #include <QDialog>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -22,13 +23,17 @@
 #include <QPlainTextEdit>
 #include <QSplitter>
 #include <QListWidget>
+#include <QTableWidget>
+#include <QMenu>
+#include <QAction>
 #include <QTreeWidget>
+#include <QHeaderView>
 
 #include "database/database_driver_manager.h"
 
 namespace scratchrobin {
 
-struct ParameterDefinition {
+struct ProcedureParameterDefinition {
     QString name;
     QString dataType;
     int length = 0;
@@ -45,7 +50,7 @@ struct StoredProcedureDefinition {
     QString type; // "PROCEDURE", "FUNCTION"
     QString returnType;
     QString language; // "SQL", "PLSQL", "T-SQL", etc.
-    QList<ParameterDefinition> parameters;
+    QList<ProcedureParameterDefinition> parameters;
     QString body;
     QString comment;
     bool isDeterministic = false;

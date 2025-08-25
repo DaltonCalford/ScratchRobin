@@ -21,6 +21,8 @@
 #include <QProgressBar>
 #include <QPlainTextEdit>
 #include <QSplitter>
+#include <QMenu>
+#include <QAction>
 
 #include "database/database_driver_manager.h"
 

@@ -1,5 +1,6 @@
 #include "main_window.h"
 #include "core/application.h"
+#include "core/connection_manager.h"
 #include "utils/logger.h"
 #include <QMainWindow>
 #include <QWidget>
@@ -17,6 +18,9 @@
 #include <QTableWidget>
 #include <QTreeWidget>
 #include <QSplitter>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QSqlError>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QGroupBox>
@@ -38,7 +42,10 @@
 #include "keyboard_shortcuts_dialog.h"
 #include "favorites_manager_dialog.h"
 #include "dynamic_connection_dialog.h"
+#include "user_defined_types_dialog.h"
 #include "app_icons.h"
+#include "database/postgresql_catalog.h"
+#include "database/database_driver_manager.h"
 #include <QMenu>
 #include <QSettings>
 #include <QStandardPaths>
@@ -147,73 +154,31 @@ public:
         QSplitter* objectSplitter = new QSplitter(Qt::Horizontal);
 
         // Object browser tree
-        QTreeWidget* objectTree = new QTreeWidget();
-        objectTree->setHeaderLabel("Database Objects");
-        objectTree->setAlternatingRowColors(true);
-        objectTree->setStyleSheet("QTreeWidget { border: 1px solid #ccc; } QHeaderView::section { background-color: #e0e0e0; padding: 4px; border: 1px solid #ccc; }");
+        objectTree_ = new QTreeWidget();
+        objectTree_->setHeaderLabel("Database Objects");
+        objectTree_->setAlternatingRowColors(true);
+        objectTree_->setStyleSheet("QTreeWidget { border: 1px solid #ccc; } QHeaderView::section { background-color: #e0e0e0; padding: 4px; border: 1px solid #ccc; }");
 
-        // Add sample database objects
-        QTreeWidgetItem* rootItem = new QTreeWidgetItem(objectTree);
-        rootItem->setText(0, "ScratchRobin Database");
+        // Initialize with sample data (will be replaced when connected)
+        populateSampleDatabaseObjects();
 
-        QTreeWidgetItem* schemasItem = new QTreeWidgetItem(rootItem);
-        schemasItem->setText(0, "Schemas");
+        // Connect tree selection signal to update property viewer
+        connect(objectTree_, &QTreeWidget::itemSelectionChanged, this, &MainWindow::Impl::onTreeItemSelected);
 
-        QTreeWidgetItem* publicSchema = new QTreeWidgetItem(schemasItem);
-        publicSchema->setText(0, "public");
-
-        QTreeWidgetItem* tablesItem = new QTreeWidgetItem(publicSchema);
-        tablesItem->setText(0, "Tables");
-
-        QTreeWidgetItem* usersTable = new QTreeWidgetItem(tablesItem);
-        usersTable->setText(0, "users");
-
-        QTreeWidgetItem* productsTable = new QTreeWidgetItem(tablesItem);
-        productsTable->setText(0, "products");
-
-        QTreeWidgetItem* viewsItem = new QTreeWidgetItem(publicSchema);
-        viewsItem->setText(0, "Views");
-
-        QTreeWidgetItem* userView = new QTreeWidgetItem(viewsItem);
-        userView->setText(0, "active_users");
-
-        objectTree->expandAll();
-        objectSplitter->addWidget(objectTree);
+        objectTree_->expandAll();
+        objectSplitter->addWidget(objectTree_);
 
         // Property viewer
-        QTableWidget* propertyTable = new QTableWidget();
-        propertyTable->setColumnCount(2);
-        propertyTable->setHorizontalHeaderLabels({"Property", "Value"});
-        propertyTable->setAlternatingRowColors(true);
-        propertyTable->setStyleSheet("QTableWidget { border: 1px solid #ccc; } QHeaderView::section { background-color: #e0e0e0; padding: 4px; border: 1px solid #ccc; }");
+        propertyTable_ = new QTableWidget();
+        propertyTable_->setColumnCount(2);
+        propertyTable_->setHorizontalHeaderLabels({"Property", "Value"});
+        propertyTable_->setAlternatingRowColors(true);
+        propertyTable_->setStyleSheet("QTableWidget { border: 1px solid #ccc; } QHeaderView::section { background-color: #e0e0e0; padding: 4px; border: 1px solid #ccc; }");
 
-        // Add sample properties
-        propertyTable->setRowCount(8);
-        propertyTable->setItem(0, 0, new QTableWidgetItem("Name"));
-        propertyTable->setItem(0, 1, new QTableWidgetItem("users"));
+        // Initialize sample properties (will be replaced when connected)
+        populateSampleObjectProperties();
 
-        propertyTable->setItem(1, 0, new QTableWidgetItem("Type"));
-        propertyTable->setItem(1, 1, new QTableWidgetItem("Table"));
-
-        propertyTable->setItem(2, 0, new QTableWidgetItem("Schema"));
-        propertyTable->setItem(2, 1, new QTableWidgetItem("public"));
-
-        propertyTable->setItem(3, 0, new QTableWidgetItem("Owner"));
-        propertyTable->setItem(3, 1, new QTableWidgetItem("postgres"));
-
-        propertyTable->setItem(4, 0, new QTableWidgetItem("Row Count"));
-        propertyTable->setItem(4, 1, new QTableWidgetItem("1,234"));
-
-        propertyTable->setItem(5, 0, new QTableWidgetItem("Size"));
-        propertyTable->setItem(5, 1, new QTableWidgetItem("64 KB"));
-
-        propertyTable->setItem(6, 0, new QTableWidgetItem("Created"));
-        propertyTable->setItem(6, 1, new QTableWidgetItem("2025-01-15"));
-
-        propertyTable->setItem(7, 0, new QTableWidgetItem("Modified"));
-        propertyTable->setItem(7, 1, new QTableWidgetItem("2025-08-23"));
-
-        objectSplitter->addWidget(propertyTable);
+        objectSplitter->addWidget(propertyTable_);
 
         objectLayout->addWidget(objectSplitter);
         tabWidget->addTab(objectTab, "Objects");
@@ -432,6 +397,14 @@ public:
         });
         toolsMenu->addAction(columnEditorAction);
 
+        QAction* userDefinedTypesAction = new QAction(AppIcons::instance().getTableIcon(), "&User-Defined Types...", this);
+        userDefinedTypesAction->setShortcut(QKeySequence("Ctrl+Shift+T"));
+        userDefinedTypesAction->setStatusTip("Create and manage user-defined data types and domains");
+        connect(userDefinedTypesAction, &QAction::triggered, [this]() {
+            showUserDefinedTypesDialog();
+        });
+        toolsMenu->addAction(userDefinedTypesAction);
+
         QAction* dataEditorAction = new QAction(AppIcons::instance().getTableIcon(), "&Data Editor...", this);
         dataEditorAction->setShortcut(QKeySequence("Ctrl+Shift+D"));
         dataEditorAction->setStatusTip("View and edit table data");
@@ -596,9 +569,15 @@ public:
                                      .arg(config.host)
                                      .arg(config.port)
                                      .arg(config.database)
-                                     .arg(this->databaseDriverManager->databaseTypeToString(config.databaseType));
+                                     .arg(databaseDriverManager->databaseTypeToString(config.databaseType));
 
             updateConnectionStatus(true, connectionString);
+
+            // Store the current database name for later use
+            currentDatabase_ = config.database;
+
+            // Populate database objects tree with real data
+            populateDatabaseObjectsFromConnection();
 
             // Add to recent connections
             QString recentString = QString("%1@%2:%3/%4")
@@ -934,6 +913,41 @@ public:
             QMessageBox::information(this, "Data Editor Closed",
                                    "Data editor session completed.\n\n"
                                    "In a real implementation, any changes would be saved to the database.");
+        }
+    }
+
+    void showUserDefinedTypesDialog() {
+        using scratchrobin::UserDefinedType;
+        UserDefinedTypesDialog dialog(this);
+
+        // Set database type based on current connection
+        auto connectionManager = application_->getConnectionManager();
+        if (connectionManager && connectionManager->isConnected("default")) {
+            // TODO: Get actual database type from connection
+            dialog.setDatabaseType(DatabaseType::POSTGRESQL);
+        } else {
+            dialog.setDatabaseType(DatabaseType::POSTGRESQL); // Default
+        }
+
+        // Connect signals
+        connect(&dialog, &UserDefinedTypesDialog::typeSaved, this, [this](const UserDefinedType& type) {
+            Logger::info(QString("User-defined type '%1' saved").arg(type.name).toStdString());
+            QMessageBox::information(this, "Type Saved",
+                QString("User-defined type '%1' has been saved.\n\n"
+                        "SQL:\n%2").arg(type.name, generateUserDefinedTypeSQL(type)));
+        });
+
+        connect(&dialog, &UserDefinedTypesDialog::typeCreated, this, [this](const QString& sql) {
+            Logger::info("User-defined type SQL generated");
+            // TODO: Execute SQL when database connectivity is available
+        });
+
+        int result = dialog.exec();
+
+        if (result == QDialog::Accepted) {
+            QMessageBox::information(this, "User-Defined Types",
+                "User-defined types dialog completed.\n\n"
+                "In a real implementation, types would be created in the database.");
         }
     }
 
@@ -1620,7 +1634,7 @@ public:
                                      .arg(finalConfig.host)
                                      .arg(finalConfig.port)
                                      .arg(finalConfig.database)
-                                     .arg(this->databaseDriverManager->databaseTypeToString(finalConfig.databaseType));
+                                     .arg(databaseDriverManager->databaseTypeToString(finalConfig.databaseType));
 
             updateConnectionStatus(true, connectionString);
 
@@ -1663,7 +1677,435 @@ public:
     // Import/Export state
     QString currentDatabase_;
 
+    // Database object browser components
+    QTreeWidget* objectTree_;
+    QTableWidget* propertyTable_;
+
     Application* application_;
+
+    // Database object browser methods
+    void populateSampleDatabaseObjects() {
+        objectTree_->clear();
+
+        // Add sample database objects
+        QTreeWidgetItem* rootItem = new QTreeWidgetItem(objectTree_);
+        rootItem->setText(0, "ScratchRobin Database");
+
+        QTreeWidgetItem* schemasItem = new QTreeWidgetItem(rootItem);
+        schemasItem->setText(0, "Schemas");
+
+        QTreeWidgetItem* publicSchema = new QTreeWidgetItem(schemasItem);
+        publicSchema->setText(0, "public");
+
+        QTreeWidgetItem* tablesItem = new QTreeWidgetItem(publicSchema);
+        tablesItem->setText(0, "Tables");
+
+        QTreeWidgetItem* usersTable = new QTreeWidgetItem(tablesItem);
+        usersTable->setText(0, "users");
+
+        QTreeWidgetItem* productsTable = new QTreeWidgetItem(tablesItem);
+        productsTable->setText(0, "products");
+
+        QTreeWidgetItem* viewsItem = new QTreeWidgetItem(publicSchema);
+        viewsItem->setText(0, "Views");
+
+        QTreeWidgetItem* userView = new QTreeWidgetItem(viewsItem);
+        userView->setText(0, "active_users");
+
+        objectTree_->expandAll();
+    }
+
+    void populateSampleObjectProperties() {
+        propertyTable_->setRowCount(8);
+        propertyTable_->setItem(0, 0, new QTableWidgetItem("Name"));
+        propertyTable_->setItem(0, 1, new QTableWidgetItem("users"));
+
+        propertyTable_->setItem(1, 0, new QTableWidgetItem("Type"));
+        propertyTable_->setItem(1, 1, new QTableWidgetItem("Table"));
+
+        propertyTable_->setItem(2, 0, new QTableWidgetItem("Schema"));
+        propertyTable_->setItem(2, 1, new QTableWidgetItem("public"));
+
+        propertyTable_->setItem(3, 0, new QTableWidgetItem("Owner"));
+        propertyTable_->setItem(3, 1, new QTableWidgetItem("postgres"));
+
+        propertyTable_->setItem(4, 0, new QTableWidgetItem("Row Count"));
+        propertyTable_->setItem(4, 1, new QTableWidgetItem("1,234"));
+
+        propertyTable_->setItem(5, 0, new QTableWidgetItem("Size"));
+        propertyTable_->setItem(5, 1, new QTableWidgetItem("64 KB"));
+
+        propertyTable_->setItem(6, 0, new QTableWidgetItem("Created"));
+        propertyTable_->setItem(6, 1, new QTableWidgetItem("2025-01-15"));
+
+        propertyTable_->setItem(7, 0, new QTableWidgetItem("Modified"));
+        propertyTable_->setItem(7, 1, new QTableWidgetItem("2025-08-23"));
+    }
+
+    void populateDatabaseObjectsFromConnection() {
+        qDebug() << "Populating database objects from connection...";
+
+        try {
+            // Use Qt's database connection directly for now
+            // TODO: Integrate with application's connection manager later
+            QSqlDatabase db = QSqlDatabase::database("qt_sql_default_connection", false);
+            if (!db.isValid() || !db.isOpen()) {
+                // Try to create a new connection with the stored credentials
+                if (!currentDatabase_.isEmpty()) {
+                    db = QSqlDatabase::addDatabase("QPSQL", "scratchrobin_browser");
+                    db.setHostName("localhost");
+                    db.setPort(5432);
+                    db.setDatabaseName(currentDatabase_);
+                    db.setUserName("scratchuser");
+                    db.setPassword("scratchpass");
+
+                    if (!db.open()) {
+                        qWarning() << "Could not open database connection for browsing:" << db.lastError().text();
+                        populateSampleDatabaseObjects();
+                        return;
+                    }
+                } else {
+                    qWarning() << "No active database connection found";
+                    populateSampleDatabaseObjects();
+                    return;
+                }
+            }
+
+            // Clear existing data
+            objectTree_->clear();
+
+            // Create root item with database name
+            QTreeWidgetItem* rootItem = new QTreeWidgetItem(objectTree_);
+            rootItem->setText(0, QString("Database: %1").arg(currentDatabase_));
+            rootItem->setIcon(0, QApplication::style()->standardIcon(QStyle::SP_DriveHDIcon));
+
+            // Populate schemas
+            populateSchemas(rootItem, db);
+
+            objectTree_->expandToDepth(1); // Expand to show schemas
+
+            // Clear and update property table with database info
+            populateDatabaseProperties();
+
+        } catch (const std::exception& e) {
+            qWarning() << "Error populating database objects:" << e.what();
+            populateSampleDatabaseObjects();
+        } catch (...) {
+            qWarning() << "Unknown error populating database objects";
+            populateSampleDatabaseObjects();
+        }
+    }
+
+    void populateSchemas(QTreeWidgetItem* parent, QSqlDatabase& db) {
+        try {
+            // Use PostgreSQL catalog to get schemas
+            QString queryStr = scratchrobin::PostgreSQLCatalog::getSchemasQuery();
+            QSqlQuery query(db);
+            if (!query.exec(queryStr)) {
+                qWarning() << "Failed to execute schema query:" << query.lastError().text();
+                return;
+            }
+
+            if (query.next()) {
+                QTreeWidgetItem* schemasItem = new QTreeWidgetItem(parent);
+                schemasItem->setText(0, "Schemas");
+                schemasItem->setIcon(0, QApplication::style()->standardIcon(QStyle::SP_DirIcon));
+
+                do {
+                    QString schemaName = query.value("schema_name").toString();
+
+                    // Skip system schemas
+                    if (schemaName == "information_schema" || schemaName.startsWith("pg_")) {
+                        continue;
+                    }
+
+                    QTreeWidgetItem* schemaItem = new QTreeWidgetItem(schemasItem);
+                    schemaItem->setText(0, schemaName);
+                    schemaItem->setIcon(0, QApplication::style()->standardIcon(QStyle::SP_DirOpenIcon));
+
+                    // Populate objects for this schema
+                    populateSchemaObjects(schemaItem, db, schemaName);
+
+                } while (query.next());
+
+                schemasItem->setExpanded(true);
+            }
+        } catch (const std::exception& e) {
+            qWarning() << "Error loading schemas:" << e.what();
+        }
+    }
+
+    void populateSchemaObjects(QTreeWidgetItem* parent, QSqlDatabase& db, const QString& schemaName) {
+        // Populate tables
+        populateTables(parent, db, schemaName);
+
+        // Populate views
+        populateViews(parent, db, schemaName);
+
+        // Populate functions
+        populateFunctions(parent, db, schemaName);
+
+        // Populate sequences
+        populateSequences(parent, db, schemaName);
+    }
+
+    void populateTables(QTreeWidgetItem* parent, QSqlDatabase& db, const QString& schemaName) {
+        try {
+            QString queryStr = scratchrobin::PostgreSQLCatalog::getTablesQuery(schemaName);
+            QSqlQuery query(db);
+            if (!query.exec(queryStr)) {
+                qWarning() << "Failed to execute tables query:" << query.lastError().text();
+                return;
+            }
+
+            if (query.next()) {
+                QTreeWidgetItem* tablesItem = new QTreeWidgetItem(parent);
+                tablesItem->setText(0, "Tables");
+                tablesItem->setIcon(0, QApplication::style()->standardIcon(QStyle::SP_DirIcon));
+
+                do {
+                    QString tableName = query.value("table_name").toString();
+                    QString tableType = query.value("table_type").toString();
+
+                    QTreeWidgetItem* tableItem = new QTreeWidgetItem(tablesItem);
+                    tableItem->setText(0, QString("%1 (%2)").arg(tableName, tableType));
+                    tableItem->setIcon(0, QApplication::style()->standardIcon(QStyle::SP_FileIcon));
+
+                    // Store metadata for property viewer
+                    tableItem->setData(0, Qt::UserRole, QString("TABLE:%1.%2").arg(schemaName, tableName));
+
+                } while (query.next());
+
+                tablesItem->setExpanded(true);
+            }
+        } catch (const std::exception& e) {
+            qWarning() << "Error loading tables for schema" << schemaName << ":" << e.what();
+        }
+    }
+
+    void populateViews(QTreeWidgetItem* parent, QSqlDatabase& db, const QString& schemaName) {
+        try {
+            QString queryStr = scratchrobin::PostgreSQLCatalog::getViewsQuery(schemaName);
+            QSqlQuery query(db);
+            if (!query.exec(queryStr)) {
+                qWarning() << "Failed to execute views query:" << query.lastError().text();
+                return;
+            }
+
+            if (query.next()) {
+                QTreeWidgetItem* viewsItem = new QTreeWidgetItem(parent);
+                viewsItem->setText(0, "Views");
+                viewsItem->setIcon(0, QApplication::style()->standardIcon(QStyle::SP_DirIcon));
+
+                do {
+                    QString viewName = query.value("view_name").toString();
+                    QString definition = query.value("view_definition").toString();
+
+                    QTreeWidgetItem* viewItem = new QTreeWidgetItem(viewsItem);
+                    viewItem->setText(0, viewName);
+                    viewItem->setIcon(0, QApplication::style()->standardIcon(QStyle::SP_FileIcon));
+
+                    // Store metadata for property viewer
+                    viewItem->setData(0, Qt::UserRole, QString("VIEW:%1.%2").arg(schemaName, viewName));
+
+                } while (query.next());
+
+                viewsItem->setExpanded(true);
+            }
+        } catch (const std::exception& e) {
+            qWarning() << "Error loading views for schema" << schemaName << ":" << e.what();
+        }
+    }
+
+    void populateFunctions(QTreeWidgetItem* parent, QSqlDatabase& db, const QString& schemaName) {
+        try {
+            QString queryStr = scratchrobin::PostgreSQLCatalog::getFunctionsQuery(schemaName);
+            QSqlQuery query(db);
+            if (!query.exec(queryStr)) {
+                qWarning() << "Failed to execute functions query:" << query.lastError().text();
+                return;
+            }
+
+            if (query.next()) {
+                QTreeWidgetItem* functionsItem = new QTreeWidgetItem(parent);
+                functionsItem->setText(0, "Functions");
+                functionsItem->setIcon(0, QApplication::style()->standardIcon(QStyle::SP_DirIcon));
+
+                do {
+                    QString functionName = query.value("function_name").toString();
+                    QString returnType = query.value("return_type").toString();
+
+                    QTreeWidgetItem* functionItem = new QTreeWidgetItem(functionsItem);
+                    functionItem->setText(0, QString("%1() -> %2").arg(functionName, returnType));
+                    functionItem->setIcon(0, QApplication::style()->standardIcon(QStyle::SP_FileIcon));
+
+                    // Store metadata for property viewer
+                    functionItem->setData(0, Qt::UserRole, QString("FUNCTION:%1.%2").arg(schemaName, functionName));
+
+                } while (query.next());
+
+                functionsItem->setExpanded(true);
+            }
+        } catch (const std::exception& e) {
+            qWarning() << "Error loading functions for schema" << schemaName << ":" << e.what();
+        }
+    }
+
+    void populateSequences(QTreeWidgetItem* parent, QSqlDatabase& db, const QString& schemaName) {
+        try {
+            QString queryStr = scratchrobin::PostgreSQLCatalog::getSequencesQuery(schemaName);
+            QSqlQuery query(db);
+            if (!query.exec(queryStr)) {
+                qWarning() << "Failed to execute sequences query:" << query.lastError().text();
+                return;
+            }
+
+            if (query.next()) {
+                QTreeWidgetItem* sequencesItem = new QTreeWidgetItem(parent);
+                sequencesItem->setText(0, "Sequences");
+                sequencesItem->setIcon(0, QApplication::style()->standardIcon(QStyle::SP_DirIcon));
+
+                do {
+                    QString sequenceName = query.value("sequence_name").toString();
+                    QString dataType = query.value("data_type").toString();
+
+                    QTreeWidgetItem* sequenceItem = new QTreeWidgetItem(sequencesItem);
+                    sequenceItem->setText(0, QString("%1 (%2)").arg(sequenceName, dataType));
+                    sequenceItem->setIcon(0, QApplication::style()->standardIcon(QStyle::SP_FileIcon));
+
+                    // Store metadata for property viewer
+                    sequenceItem->setData(0, Qt::UserRole, QString("SEQUENCE:%1.%2").arg(schemaName, sequenceName));
+
+                } while (query.next());
+
+                sequencesItem->setExpanded(true);
+            }
+        } catch (const std::exception& e) {
+            qWarning() << "Error loading sequences for schema" << schemaName << ":" << e.what();
+        }
+    }
+
+    void populateDatabaseProperties() {
+        propertyTable_->setRowCount(5);
+        propertyTable_->setItem(0, 0, new QTableWidgetItem("Database"));
+        propertyTable_->setItem(0, 1, new QTableWidgetItem(currentDatabase_));
+
+        propertyTable_->setItem(1, 0, new QTableWidgetItem("Type"));
+        propertyTable_->setItem(1, 1, new QTableWidgetItem("PostgreSQL"));
+
+        propertyTable_->setItem(2, 0, new QTableWidgetItem("Server"));
+        propertyTable_->setItem(2, 1, new QTableWidgetItem("localhost:5432"));
+
+        propertyTable_->setItem(3, 0, new QTableWidgetItem("Connection"));
+        propertyTable_->setItem(3, 1, new QTableWidgetItem("Connected"));
+
+        propertyTable_->setItem(4, 0, new QTableWidgetItem("Objects"));
+        propertyTable_->setItem(4, 1, new QTableWidgetItem(QString::number(objectTree_->topLevelItemCount())));
+    }
+
+    void onTreeItemSelected() {
+        QList<QTreeWidgetItem*> selectedItems = objectTree_->selectedItems();
+        if (selectedItems.isEmpty()) {
+            populateDatabaseProperties();
+            return;
+        }
+
+        QTreeWidgetItem* item = selectedItems.first();
+        QString itemText = item->text(0);
+        QVariant userData = item->data(0, Qt::UserRole);
+
+        if (userData.isValid()) {
+            // This is a database object with metadata
+            QString metadata = userData.toString();
+            QStringList parts = metadata.split(':');
+            if (parts.size() == 2) {
+                QString objectType = parts[0];
+                QString qualifiedName = parts[1];
+                QStringList nameParts = qualifiedName.split('.');
+                if (nameParts.size() == 2) {
+                    QString schemaName = nameParts[0];
+                    QString objectName = nameParts[1];
+
+                    populateObjectProperties(objectType, schemaName, objectName);
+                    return;
+                }
+            }
+        }
+
+        // Default properties for non-object items
+        propertyTable_->setRowCount(3);
+        propertyTable_->setItem(0, 0, new QTableWidgetItem("Name"));
+        propertyTable_->setItem(0, 1, new QTableWidgetItem(itemText));
+
+        propertyTable_->setItem(1, 0, new QTableWidgetItem("Type"));
+        propertyTable_->setItem(1, 1, new QTableWidgetItem("Container"));
+
+        propertyTable_->setItem(2, 0, new QTableWidgetItem("Children"));
+        propertyTable_->setItem(2, 1, new QTableWidgetItem(QString::number(item->childCount())));
+    }
+
+    void populateObjectProperties(const QString& objectType, const QString& schemaName, const QString& objectName) {
+        propertyTable_->setRowCount(6);
+
+        propertyTable_->setItem(0, 0, new QTableWidgetItem("Name"));
+        propertyTable_->setItem(0, 1, new QTableWidgetItem(objectName));
+
+        propertyTable_->setItem(1, 0, new QTableWidgetItem("Type"));
+        propertyTable_->setItem(1, 1, new QTableWidgetItem(objectType));
+
+        propertyTable_->setItem(2, 0, new QTableWidgetItem("Schema"));
+        propertyTable_->setItem(2, 1, new QTableWidgetItem(schemaName));
+
+        propertyTable_->setItem(3, 0, new QTableWidgetItem("Database"));
+        propertyTable_->setItem(3, 1, new QTableWidgetItem(currentDatabase_));
+
+        propertyTable_->setItem(4, 0, new QTableWidgetItem("Qualified Name"));
+        propertyTable_->setItem(4, 1, new QTableWidgetItem(QString("%1.%2").arg(schemaName, objectName)));
+
+        propertyTable_->setItem(5, 0, new QTableWidgetItem("Owner"));
+        propertyTable_->setItem(5, 1, new QTableWidgetItem("scratchuser"));
+    }
+
+    // Helper methods
+    QString generateUserDefinedTypeSQL(const UserDefinedType& type) {
+        QStringList sqlParts;
+
+        if (type.typeCategory == "COMPOSITE") {
+            sqlParts.append(QString("CREATE TYPE %1 AS (").arg(type.name));
+            for (const auto& field : type.fields) {
+                sqlParts.append(QString("    %1 %2,").arg(field.name, field.dataType));
+            }
+            if (!type.fields.isEmpty()) {
+                // Remove last comma
+                QString lastLine = sqlParts.last();
+                sqlParts.removeLast();
+                sqlParts.append(lastLine.left(lastLine.length() - 1));
+            }
+            sqlParts.append(");");
+        } else if (type.typeCategory == "ENUM") {
+            sqlParts.append(QString("CREATE TYPE %1 AS ENUM (").arg(type.name));
+            for (const auto& enumVal : type.enumValues) {
+                sqlParts.append(QString("    '%1',").arg(enumVal.value));
+            }
+            if (!type.enumValues.isEmpty()) {
+                // Remove last comma
+                QString lastLine = sqlParts.last();
+                sqlParts.removeLast();
+                sqlParts.append(lastLine.left(lastLine.length() - 1));
+            }
+            sqlParts.append(");");
+        } else if (type.typeCategory == "DOMAIN") {
+            sqlParts.append(QString("CREATE DOMAIN %1 AS %2").arg(type.name, type.underlyingType));
+            if (!type.checkConstraint.isEmpty()) {
+                sqlParts.append(QString("    CHECK (%1)").arg(type.checkConstraint));
+            }
+            sqlParts.append(";");
+        } else if (type.typeCategory == "ARRAY") {
+            sqlParts.append(QString("CREATE TYPE %1 AS %2[];").arg(type.name, type.elementType));
+        }
+
+        return sqlParts.join("\n");
+    }
 };
 
 MainWindow::MainWindow(Application* application)

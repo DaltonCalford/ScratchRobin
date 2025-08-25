@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QObject>
 #include <QDialog>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -29,7 +30,7 @@
 
 namespace scratchrobin {
 
-struct ColumnDefinition {
+struct TableColumnDefinition {
     QString name;
     QString dataType;
     int length = 0;
@@ -44,7 +45,7 @@ struct ColumnDefinition {
     QMap<QString, QVariant> additionalProperties;
 };
 
-struct IndexDefinition {
+struct TableIndexDefinition {
     QString name;
     QString type; // "PRIMARY", "UNIQUE", "INDEX", "FULLTEXT", etc.
     QList<QString> columns;
@@ -61,24 +62,24 @@ struct ForeignKeyDefinition {
     QString onUpdate;
 };
 
-struct ConstraintDefinition {
+struct TableConstraintDefinition {
     QString name;
     QString type; // "PRIMARY KEY", "FOREIGN KEY", "UNIQUE", "CHECK"
     QString expression;
     QList<QString> columns;
 };
 
-struct TableDefinition {
+struct TableDesignerDefinition {
     QString name;
     QString schema;
     QString engine; // MySQL specific
     QString charset;
     QString collation;
     QString comment;
-    QList<ColumnDefinition> columns;
-    QList<IndexDefinition> indexes;
+    QList<TableColumnDefinition> columns;
+    QList<TableIndexDefinition> indexes;
     QList<ForeignKeyDefinition> foreignKeys;
-    QList<ConstraintDefinition> constraints;
+    QList<TableConstraintDefinition> constraints;
     QMap<QString, QVariant> tableOptions;
 };
 
@@ -90,14 +91,14 @@ public:
     ~TableDesignerDialog() override = default;
 
     // Public interface
-    void setTableDefinition(const TableDefinition& definition);
-    TableDefinition getTableDefinition() const;
+    void setTableDefinition(const TableDesignerDefinition& definition);
+    TableDesignerDefinition getTableDefinition() const;
     void setEditMode(bool isEdit);
     void setDatabaseType(DatabaseType type);
     void loadExistingTable(const QString& schema, const QString& tableName);
 
 signals:
-    void tableSaved(const TableDefinition& definition);
+    void tableSaved(const TableDesignerDefinition& definition);
     void tableCreated(const QString& sql);
     void tableAltered(const QString& sql);
 
@@ -261,7 +262,7 @@ private:
     QDialogButtonBox* dialogButtons_;
 
     // Current state
-    TableDefinition currentDefinition_;
+    TableDesignerDefinition currentDefinition_;
     DatabaseType currentDatabaseType_;
     bool isEditMode_;
     QString originalTableName_;
