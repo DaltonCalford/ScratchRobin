@@ -1,0 +1,16 @@
+[app]
+name = "ScratchRobin"
+telemetry = false
+
+[ui]
+theme = "system"
+font_family = "default"
+font_size = 11
+
+[editor]
+autocomplete = true
+history_max_items = 2000
+
+[network]
+connect_timeout_ms = 5000
+query_timeout_ms = 0

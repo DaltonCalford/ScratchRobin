@@ -1,0 +1,8 @@
+[[connection]]
+name = "Local ScratchBird"
+host = "127.0.0.1"
+port = 3050
+database = "/data/scratchbird/demo.sdb"
+username = "sysdba"
+credential_id = "scratchrobin:local-sysdba"
+ssl_mode = "prefer"
