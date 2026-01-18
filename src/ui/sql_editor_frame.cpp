@@ -1,12 +1,14 @@
 #include "sql_editor_frame.h"
 #include "core/result_exporter.h"
 #include "core/statement_splitter.h"
+#include "core/value_formatter.h"
 #include "result_grid_table.h"
 #include "window_manager.h"
 
 #include <algorithm>
 #include <cctype>
 #include <memory>
+#include <sstream>
 
 #include <wx/button.h>
 #include <wx/checkbox.h>
@@ -14,6 +16,7 @@
 #include <wx/filedlg.h>
 #include <wx/grid.h>
 #include <wx/msgdlg.h>
+#include <wx/notebook.h>
 #include <wx/panel.h>
 #include <wx/sizer.h>
 #include <wx/spinctrl.h>
@@ -37,12 +40,18 @@ std::string Trim(std::string value) {
 
 SqlEditorFrame::SqlEditorFrame(WindowManager* windowManager,
                                ConnectionManager* connectionManager,
-                               const std::vector<ConnectionProfile>* connections)
+                               const std::vector<ConnectionProfile>* connections,
+                               const AppConfig* appConfig)
     : wxFrame(nullptr, wxID_ANY, "SQL Editor", wxDefaultPosition, wxSize(900, 700)),
       window_manager_(windowManager),
       connection_manager_(connectionManager),
-      connections_(connections) {
+      connections_(connections),
+      app_config_(appConfig) {
     auto* rootSizer = new wxBoxSizer(wxVERTICAL);
+
+    if (app_config_ && app_config_->historyMaxItems > 0) {
+        history_max_items_ = static_cast<size_t>(app_config_->historyMaxItems);
+    }
 
     auto* sessionPanel = new wxPanel(this, wxID_ANY);
     auto* sessionSizer = new wxBoxSizer(wxHORIZONTAL);
@@ -67,36 +76,59 @@ SqlEditorFrame::SqlEditorFrame(WindowManager* windowManager,
     rootSizer->Add(sessionPanel, 0, wxEXPAND | wxTOP | wxBOTTOM, 4);
 
     auto* execPanel = new wxPanel(this, wxID_ANY);
-    auto* execSizer = new wxBoxSizer(wxHORIZONTAL);
+    auto* execSizer = new wxBoxSizer(wxVERTICAL);
+
+    auto* execRow1 = new wxBoxSizer(wxHORIZONTAL);
     run_button_ = new wxButton(execPanel, wxID_ANY, "Run");
-    execSizer->Add(run_button_, 0, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, 6);
+    execRow1->Add(run_button_, 0, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, 6);
     cancel_button_ = new wxButton(execPanel, wxID_ANY, "Cancel");
-    execSizer->Add(cancel_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    execRow1->Add(cancel_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
     paging_check_ = new wxCheckBox(execPanel, wxID_ANY, "Paging");
     paging_check_->SetValue(true);
-    execSizer->Add(paging_check_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    execRow1->Add(paging_check_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
     stream_check_ = new wxCheckBox(execPanel, wxID_ANY, "Stream");
     stream_check_->SetValue(false);
-    execSizer->Add(stream_check_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
-    execSizer->Add(new wxStaticText(execPanel, wxID_ANY, "Page size:"), 0,
-                   wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    execRow1->Add(stream_check_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    execRow1->Add(new wxStaticText(execPanel, wxID_ANY, "Page size:"), 0,
+                  wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     page_size_ctrl_ = new wxSpinCtrl(execPanel, wxID_ANY);
     page_size_ctrl_->SetRange(1, 10000);
     page_size_ctrl_->SetValue(page_size_);
-    execSizer->Add(page_size_ctrl_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    execRow1->Add(page_size_ctrl_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     prev_page_button_ = new wxButton(execPanel, wxID_ANY, "Prev");
     next_page_button_ = new wxButton(execPanel, wxID_ANY, "Next");
     page_label_ = new wxStaticText(execPanel, wxID_ANY, "Page 1");
-    execSizer->Add(prev_page_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
-    execSizer->Add(next_page_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
-    execSizer->Add(page_label_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    execRow1->Add(prev_page_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    execRow1->Add(next_page_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    execRow1->Add(page_label_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     export_csv_button_ = new wxButton(execPanel, wxID_ANY, "Export CSV");
     export_json_button_ = new wxButton(execPanel, wxID_ANY, "Export JSON");
-    execSizer->Add(export_csv_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
-    execSizer->Add(export_json_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    execSizer->AddStretchSpacer(1);
+    execRow1->Add(export_csv_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    execRow1->Add(export_json_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    execRow1->AddStretchSpacer(1);
     status_label_ = new wxStaticText(execPanel, wxID_ANY, "Ready");
-    execSizer->Add(status_label_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    execRow1->Add(status_label_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+
+    auto* execRow2 = new wxBoxSizer(wxHORIZONTAL);
+    execRow2->Add(new wxStaticText(execPanel, wxID_ANY, "Result:"), 0,
+                  wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, 6);
+    result_choice_ = new wxChoice(execPanel, wxID_ANY);
+    execRow2->Add(result_choice_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    execRow2->Add(new wxStaticText(execPanel, wxID_ANY, "History:"), 0,
+                  wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    history_choice_ = new wxChoice(execPanel, wxID_ANY);
+    execRow2->Add(history_choice_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    history_load_button_ = new wxButton(execPanel, wxID_ANY, "Load");
+    execRow2->Add(history_load_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    explain_button_ = new wxButton(execPanel, wxID_ANY, "Explain");
+    sblr_button_ = new wxButton(execPanel, wxID_ANY, "SBLR");
+    execRow2->Add(explain_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    execRow2->Add(sblr_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    execRow2->AddStretchSpacer(1);
+
+    execSizer->Add(execRow1, 0, wxEXPAND | wxTOP | wxBOTTOM, 2);
+    execSizer->Add(execRow2, 0, wxEXPAND | wxBOTTOM, 2);
+
     execPanel->SetSizer(execSizer);
     rootSizer->Add(execPanel, 0, wxEXPAND | wxBOTTOM, 4);
 
@@ -112,16 +144,50 @@ SqlEditorFrame::SqlEditorFrame(WindowManager* windowManager,
 
     auto* gridPanel = new wxPanel(splitter, wxID_ANY);
     auto* gridSizer = new wxBoxSizer(wxVERTICAL);
-    result_grid_ = new wxGrid(gridPanel, wxID_ANY);
+
+    result_notebook_ = new wxNotebook(gridPanel, wxID_ANY);
+
+    auto* resultsPage = new wxPanel(result_notebook_, wxID_ANY);
+    auto* resultsSizer = new wxBoxSizer(wxVERTICAL);
+    result_grid_ = new wxGrid(resultsPage, wxID_ANY);
     result_table_ = new ResultGridTable();
     result_grid_->SetTable(result_table_, true);
     result_grid_->EnableEditing(false);
     result_grid_->SetRowLabelSize(64);
-    gridSizer->Add(result_grid_, 1, wxEXPAND | wxALL, 8);
-    message_log_ = new wxTextCtrl(gridPanel, wxID_ANY, "", wxDefaultPosition, wxDefaultSize,
+    resultsSizer->Add(result_grid_, 1, wxEXPAND | wxALL, 8);
+    resultsPage->SetSizer(resultsSizer);
+
+    auto* planPage = new wxPanel(result_notebook_, wxID_ANY);
+    auto* planSizer = new wxBoxSizer(wxVERTICAL);
+    plan_view_ = new wxTextCtrl(planPage, wxID_ANY, "", wxDefaultPosition, wxDefaultSize,
+                                wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH2);
+    planSizer->Add(plan_view_, 1, wxEXPAND | wxALL, 8);
+    planPage->SetSizer(planSizer);
+
+    auto* sblrPage = new wxPanel(result_notebook_, wxID_ANY);
+    auto* sblrSizer = new wxBoxSizer(wxVERTICAL);
+    sblr_view_ = new wxTextCtrl(sblrPage, wxID_ANY, "", wxDefaultPosition, wxDefaultSize,
+                                wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH2);
+    sblrSizer->Add(sblr_view_, 1, wxEXPAND | wxALL, 8);
+    sblrPage->SetSizer(sblrSizer);
+
+    auto* messagesPage = new wxPanel(result_notebook_, wxID_ANY);
+    auto* messagesSizer = new wxBoxSizer(wxVERTICAL);
+    message_log_ = new wxTextCtrl(messagesPage, wxID_ANY, "", wxDefaultPosition, wxDefaultSize,
                                   wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH2);
-    message_log_->SetMinSize(wxSize(-1, 120));
-    gridSizer->Add(message_log_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    messagesSizer->Add(message_log_, 1, wxEXPAND | wxALL, 8);
+    messagesPage->SetSizer(messagesSizer);
+
+    result_notebook_->AddPage(resultsPage, "Results");
+    result_notebook_->AddPage(planPage, "Plan");
+    result_notebook_->AddPage(sblrPage, "SBLR");
+    result_notebook_->AddPage(messagesPage, "Messages");
+    results_page_index_ = 0;
+    plan_page_index_ = 1;
+    sblr_page_index_ = 2;
+    messages_page_index_ = 3;
+
+    gridSizer->Add(result_notebook_, 1, wxEXPAND | wxALL, 4);
     gridPanel->SetSizer(gridSizer);
 
     splitter->SplitHorizontally(editorPanel, gridPanel, 350);
@@ -150,10 +216,16 @@ SqlEditorFrame::SqlEditorFrame(WindowManager* windowManager,
     stream_check_->Bind(wxEVT_CHECKBOX, &SqlEditorFrame::OnToggleStream, this);
     export_csv_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnExportCsv, this);
     export_json_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnExportJson, this);
+    result_choice_->Bind(wxEVT_CHOICE, &SqlEditorFrame::OnResultSelection, this);
+    history_load_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnHistoryLoad, this);
+    explain_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnExplain, this);
+    sblr_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnSblr, this);
 
     PopulateConnections();
     UpdateSessionControls();
     UpdatePagingControls();
+    UpdateResultControls();
+    UpdateHistoryControls();
     UpdateExportControls();
 }
 
@@ -358,6 +430,49 @@ void SqlEditorFrame::OnExportJson(wxCommandEvent&) {
     UpdateStatus("Exported JSON");
 }
 
+void SqlEditorFrame::OnResultSelection(wxCommandEvent&) {
+    if (!result_choice_) {
+        return;
+    }
+    int selection = result_choice_->GetSelection();
+    ShowResultAtIndex(selection);
+}
+
+void SqlEditorFrame::OnHistoryLoad(wxCommandEvent&) {
+    if (!history_choice_ || !editor_) {
+        return;
+    }
+    int selection = history_choice_->GetSelection();
+    if (selection == wxNOT_FOUND) {
+        return;
+    }
+    if (selection < 0 || static_cast<size_t>(selection) >= statement_history_.size()) {
+        return;
+    }
+    editor_->SetValue(statement_history_[static_cast<size_t>(selection)]);
+    UpdateStatus("Loaded history entry");
+}
+
+void SqlEditorFrame::OnExplain(wxCommandEvent&) {
+    std::string statement = GetExplainTargetSql();
+    if (statement.empty()) {
+        wxMessageBox("Select or enter a statement to explain.", "Explain",
+                     wxOK | wxICON_INFORMATION, this);
+        return;
+    }
+    StartSpecialQuery("EXPLAIN " + statement, "EXPLAIN");
+}
+
+void SqlEditorFrame::OnSblr(wxCommandEvent&) {
+    std::string statement = GetExplainTargetSql();
+    if (statement.empty()) {
+        wxMessageBox("Select or enter a statement to inspect.", "SBLR",
+                     wxOK | wxICON_INFORMATION, this);
+        return;
+    }
+    StartSpecialQuery("SHOW SBLR " + statement, "SBLR");
+}
+
 void SqlEditorFrame::OnClose(wxCloseEvent&) {
     if (window_manager_) {
         window_manager_->UnregisterWindow(this);
@@ -450,6 +565,7 @@ bool SqlEditorFrame::ExecuteStatements(const std::string& sql) {
         return false;
     }
 
+    AddToHistory(trimmed);
     return ExecuteStatementBatch(split.statements);
 }
 
@@ -463,6 +579,18 @@ bool SqlEditorFrame::ExecuteStatementBatch(const std::vector<std::string>& state
     ClearMessages();
     last_result_ = QueryResult{};
     has_result_ = false;
+    result_sets_.clear();
+    active_result_index_ = -1;
+    paged_result_index_ = -1;
+    if (result_choice_) {
+        result_choice_->Clear();
+    }
+    if (plan_view_) {
+        plan_view_->Clear();
+    }
+    if (sblr_view_) {
+        sblr_view_->Clear();
+    }
     paging_active_ = false;
     current_statement_.clear();
     pending_rows_affected_ = 0;
@@ -490,13 +618,22 @@ bool SqlEditorFrame::ExecutePagedStatement(const std::string& statement, int pag
         page_index = 0;
     }
 
+    if (page_index == 0) {
+        ResultEntry entry;
+        entry.statement = statement;
+        entry.isPaged = true;
+        result_sets_.push_back(std::move(entry));
+        paged_result_index_ = static_cast<int>(result_sets_.size() - 1);
+        UpdateResultChoiceSelection(paged_result_index_);
+    }
+
     int64_t offset = static_cast<int64_t>(page_index) * page_size_;
     std::string paged_sql = BuildPagedQuery(statement, offset, page_size_);
     query_running_ = true;
     statement_start_time_ = std::chrono::steady_clock::now();
     UpdateStatus("Running...");
     UpdateSessionControls();
-    StartAsyncQuery(paged_sql, true, true, stream_append);
+    StartAsyncQuery(paged_sql, true, true, stream_append, paged_result_index_, statement);
     page_label_->SetLabel("Page " + std::to_string(page_index + 1));
     return true;
 }
@@ -521,10 +658,18 @@ void SqlEditorFrame::ExecuteNextStatement() {
         return;
     }
 
-    StartAsyncQuery(statement, is_last, false, false);
+    ResultEntry entry;
+    entry.statement = statement;
+    entry.isPaged = false;
+    result_sets_.push_back(std::move(entry));
+    int result_index = static_cast<int>(result_sets_.size() - 1);
+    UpdateResultChoiceSelection(result_index);
+    StartAsyncQuery(statement, is_last, false, false, result_index, statement);
 }
 
-void SqlEditorFrame::StartAsyncQuery(const std::string& sql, bool is_last, bool is_paged, bool stream_append) {
+void SqlEditorFrame::StartAsyncQuery(const std::string& sql, bool is_last, bool is_paged,
+                                     bool stream_append, int result_index,
+                                     const std::string& statement) {
     if (!connection_manager_) {
         return;
     }
@@ -532,41 +677,82 @@ void SqlEditorFrame::StartAsyncQuery(const std::string& sql, bool is_last, bool 
     statement_start_time_ = std::chrono::steady_clock::now();
     active_query_job_ = connection_manager_->ExecuteQueryAsync(
         sql,
-        [this, is_last, is_paged, stream_append](bool ok, QueryResult result, const std::string& error) {
+        [this, is_last, is_paged, stream_append, result_index, statement](bool ok,
+                                                                          QueryResult result,
+                                                                          const std::string& error) {
             auto result_ptr = std::make_shared<QueryResult>(std::move(result));
             auto error_ptr = std::make_shared<std::string>(error);
-            CallAfter([this, ok, result_ptr, error_ptr, is_last, is_paged, stream_append]() {
-                HandleQueryResult(ok, *result_ptr, *error_ptr, is_last, is_paged, stream_append);
+            CallAfter([this, ok, result_ptr, error_ptr, is_last, is_paged, stream_append,
+                       result_index, statement]() {
+                HandleQueryResult(ok, *result_ptr, *error_ptr, is_last, is_paged,
+                                  stream_append, result_index, statement);
             });
         });
 }
 
 void SqlEditorFrame::HandleQueryResult(bool ok, const QueryResult& result,
                                        const std::string& error, bool is_last, bool is_paged,
-                                       bool stream_append) {
+                                       bool stream_append, int result_index,
+                                       const std::string& statement) {
     double elapsed_ms = 0.0;
     if (statement_start_time_.time_since_epoch().count() != 0) {
         elapsed_ms = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - statement_start_time_).count();
     }
     last_statement_ms_ = elapsed_ms;
+    ResultEntry* entry = nullptr;
+    if (result_index >= 0 && static_cast<size_t>(result_index) < result_sets_.size()) {
+        entry = &result_sets_[static_cast<size_t>(result_index)];
+        entry->elapsedMs = elapsed_ms;
+        entry->ok = ok;
+        entry->error = error;
+    }
+
     if (!ok) {
+        if (entry) {
+            entry->result = result;
+        }
         query_running_ = false;
         wxMessageBox(error, "Execution Error", wxOK | wxICON_ERROR, this);
+        ClearMessages();
         AppendMessages(result, error);
+        if (result_notebook_) {
+            result_notebook_->SetSelection(messages_page_index_);
+        }
         UpdateStatus("Execution failed");
+        UpdateResultControls();
         UpdateSessionControls();
         UpdatePagingControls();
         UpdateExportControls();
         return;
     }
 
-    if (is_paged) {
-        PopulateGrid(result, stream_append && current_page_ > 0);
-        size_t row_count = result.rows.size();
-        if (stream_append && has_result_) {
-            row_count = last_result_.rows.size();
+    if (entry) {
+        if (is_paged && stream_append && current_page_ > 0) {
+            entry->result.rows.insert(entry->result.rows.end(),
+                                      result.rows.begin(), result.rows.end());
+            entry->result.rowsAffected += result.rowsAffected;
+            entry->result.commandTag = result.commandTag;
+            entry->result.messages.insert(entry->result.messages.end(),
+                                          result.messages.begin(), result.messages.end());
+            if (!result.errorStack.empty()) {
+                entry->result.errorStack = result.errorStack;
+            }
+            entry->result.columns = result.columns;
+        } else {
+            entry->result = result;
         }
+        entry->result.stats.elapsedMs = elapsed_ms;
+        entry->result.stats.rowsReturned = static_cast<int64_t>(entry->result.rows.size());
+    }
+
+    UpdateResultControls();
+
+    if (is_paged) {
+        if (active_result_index_ == -1 || active_result_index_ == result_index) {
+            ShowResultAtIndex(result_index);
+        }
+        size_t row_count = entry ? entry->result.rows.size() : result.rows.size();
         std::string status = "Rows: " + std::to_string(row_count);
         if (result.rowsAffected > 0) {
             status += " | Affected: " + std::to_string(result.rowsAffected);
@@ -581,7 +767,6 @@ void SqlEditorFrame::HandleQueryResult(bool ok, const QueryResult& result,
             status += " | Time: " + std::to_string(static_cast<int64_t>(elapsed_ms)) + " ms";
         }
         UpdateStatus(status);
-        AppendMessages(result, std::string());
         query_running_ = false;
         UpdateSessionControls();
         UpdatePagingControls();
@@ -595,8 +780,10 @@ void SqlEditorFrame::HandleQueryResult(bool ok, const QueryResult& result,
         pending_last_result_ = result;
         pending_last_result_.stats.elapsedMs = elapsed_ms;
         pending_last_result_.stats.rowsReturned = static_cast<int64_t>(result.rows.size());
-    } else {
-        AppendMessages(result, std::string());
+    }
+
+    if (active_result_index_ == -1 || active_result_index_ == result_index) {
+        ShowResultAtIndex(result_index);
     }
 
     if (!is_last) {
@@ -607,7 +794,6 @@ void SqlEditorFrame::HandleQueryResult(bool ok, const QueryResult& result,
 
     paging_active_ = false;
     current_statement_.clear();
-    PopulateGrid(pending_last_result_, false);
 
     std::string status = "Statements: " + std::to_string(pending_statements_.size());
     if (!pending_last_result_.rows.empty()) {
@@ -625,7 +811,6 @@ void SqlEditorFrame::HandleQueryResult(bool ok, const QueryResult& result,
         status += " | Time: " + std::to_string(static_cast<int64_t>(total_ms)) + " ms";
     }
     UpdateStatus(status);
-    AppendMessages(pending_last_result_, std::string());
     query_running_ = false;
     UpdateSessionControls();
     UpdatePagingControls();
@@ -699,6 +884,46 @@ void SqlEditorFrame::UpdateExportControls() {
     }
 }
 
+void SqlEditorFrame::UpdateResultControls() {
+    if (!result_choice_) {
+        return;
+    }
+    int previous_selection = result_choice_->GetSelection();
+    result_choice_->Clear();
+    for (size_t i = 0; i < result_sets_.size(); ++i) {
+        const auto& entry = result_sets_[i];
+        std::string summary = Trim(entry.statement);
+        size_t newline = summary.find('\n');
+        if (newline != std::string::npos) {
+            summary = summary.substr(0, newline);
+        }
+        if (summary.size() > 60) {
+            summary = summary.substr(0, 57) + "...";
+        }
+        std::string label = std::to_string(i + 1) + ": " + summary;
+        if (!entry.ok) {
+            label += " [ERROR]";
+        } else if (!entry.result.commandTag.empty()) {
+            label += " [" + entry.result.commandTag + "]";
+        } else if (entry.result.rowsAffected > 0) {
+            label += " [Affected " + std::to_string(entry.result.rowsAffected) + "]";
+        } else if (!entry.result.rows.empty()) {
+            label += " [" + std::to_string(entry.result.rows.size()) + " rows]";
+        }
+        result_choice_->Append(label);
+    }
+    if (active_result_index_ >= 0 &&
+        static_cast<size_t>(active_result_index_) < result_sets_.size()) {
+        result_choice_->SetSelection(active_result_index_);
+    } else if (previous_selection != wxNOT_FOUND &&
+               previous_selection >= 0 &&
+               static_cast<size_t>(previous_selection) < result_sets_.size()) {
+        result_choice_->SetSelection(previous_selection);
+        active_result_index_ = previous_selection;
+    }
+    result_choice_->Enable(!result_sets_.empty() && !query_running_);
+}
+
 void SqlEditorFrame::ClearMessages() {
     if (message_log_) {
         message_log_->Clear();
@@ -736,6 +961,231 @@ void SqlEditorFrame::AppendMessageLine(const std::string& line) {
     message_log_->AppendText(line + "\n");
 }
 
+void SqlEditorFrame::AddToHistory(const std::string& sql) {
+    std::string trimmed = Trim(sql);
+    if (trimmed.empty()) {
+        return;
+    }
+    if (!statement_history_.empty() && statement_history_.back() == trimmed) {
+        return;
+    }
+    statement_history_.push_back(trimmed);
+    if (statement_history_.size() > history_max_items_) {
+        statement_history_.erase(statement_history_.begin(),
+                                 statement_history_.begin() +
+                                 static_cast<long>(statement_history_.size() - history_max_items_));
+    }
+    UpdateHistoryControls();
+}
+
+void SqlEditorFrame::UpdateHistoryControls() {
+    if (!history_choice_ || !history_load_button_) {
+        return;
+    }
+    history_choice_->Clear();
+    for (const auto& entry : statement_history_) {
+        std::string summary = entry;
+        size_t newline = summary.find('\n');
+        if (newline != std::string::npos) {
+            summary = summary.substr(0, newline);
+        }
+        if (summary.size() > 60) {
+            summary = summary.substr(0, 57) + "...";
+        }
+        history_choice_->Append(summary);
+    }
+    if (!statement_history_.empty()) {
+        history_choice_->SetSelection(static_cast<int>(statement_history_.size() - 1));
+    }
+    bool enable = !statement_history_.empty() && !query_running_;
+    history_choice_->Enable(enable);
+    history_load_button_->Enable(enable);
+}
+
+std::string SqlEditorFrame::GetExplainTargetSql() const {
+    if (!editor_) {
+        return std::string();
+    }
+    std::string selection = editor_->GetStringSelection().ToStdString();
+    std::string source = selection.empty() ? editor_->GetValue().ToStdString() : selection;
+    source = Trim(source);
+    if (source.empty()) {
+        return std::string();
+    }
+    StatementSplitter splitter;
+    auto split = splitter.Split(source);
+    if (!split.statements.empty()) {
+        return split.statements.front();
+    }
+    return source;
+}
+
+void SqlEditorFrame::StartSpecialQuery(const std::string& sql, const std::string& mode) {
+    if (!connection_manager_) {
+        return;
+    }
+    if (query_running_) {
+        wxMessageBox("A query is already running.", "Execution Error", wxOK | wxICON_WARNING, this);
+        return;
+    }
+    const ConnectionProfile* profile = GetSelectedProfile();
+    if (!profile) {
+        wxMessageBox("Select a connection profile first.", "Execution Error", wxOK | wxICON_WARNING, this);
+        return;
+    }
+    if (!EnsureConnected(*profile)) {
+        wxMessageBox(connection_manager_->LastError(), "Connection Error", wxOK | wxICON_ERROR, this);
+        return;
+    }
+
+    query_running_ = true;
+    statement_start_time_ = std::chrono::steady_clock::now();
+    ClearMessages();
+    UpdateStatus(mode + " running...");
+    UpdateSessionControls();
+    UpdatePagingControls();
+    UpdateExportControls();
+
+    active_query_job_ = connection_manager_->ExecuteQueryAsync(
+        sql,
+        [this, mode](bool ok, QueryResult result, const std::string& error) {
+            auto result_ptr = std::make_shared<QueryResult>(std::move(result));
+            auto error_ptr = std::make_shared<std::string>(error);
+            CallAfter([this, ok, result_ptr, error_ptr, mode]() {
+                HandleSpecialResult(ok, *result_ptr, *error_ptr, mode);
+            });
+        });
+}
+
+void SqlEditorFrame::HandleSpecialResult(bool ok, const QueryResult& result,
+                                         const std::string& error, const std::string& mode) {
+    double elapsed_ms = 0.0;
+    if (statement_start_time_.time_since_epoch().count() != 0) {
+        elapsed_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - statement_start_time_).count();
+    }
+
+    if (!ok) {
+        wxMessageBox(error, mode + " Error", wxOK | wxICON_ERROR, this);
+        AppendMessages(result, error);
+        if (result_notebook_) {
+            result_notebook_->SetSelection(messages_page_index_);
+        }
+        UpdateStatus(mode + " failed");
+        query_running_ = false;
+        UpdateSessionControls();
+        UpdatePagingControls();
+        UpdateExportControls();
+        return;
+    }
+
+    std::string text = ResultToText(result);
+    if (mode == "EXPLAIN") {
+        if (plan_view_) {
+            plan_view_->SetValue(text);
+        }
+        if (result_notebook_) {
+            result_notebook_->SetSelection(plan_page_index_);
+        }
+    } else if (mode == "SBLR") {
+        if (sblr_view_) {
+            sblr_view_->SetValue(text);
+        }
+        if (result_notebook_) {
+            result_notebook_->SetSelection(sblr_page_index_);
+        }
+    }
+
+    AppendMessages(result, std::string());
+    std::string status = mode + " ready";
+    if (!result.rows.empty()) {
+        status += " | Rows: " + std::to_string(result.rows.size());
+    }
+    if (elapsed_ms > 0.0) {
+        status += " | Time: " + std::to_string(static_cast<int64_t>(elapsed_ms)) + " ms";
+    }
+    UpdateStatus(status);
+    query_running_ = false;
+    UpdateSessionControls();
+    UpdatePagingControls();
+    UpdateExportControls();
+}
+
+std::string SqlEditorFrame::ResultToText(const QueryResult& result) const {
+    if (result.rows.empty()) {
+        return "No rows returned.";
+    }
+
+    std::ostringstream out;
+    if (!result.columns.empty()) {
+        for (size_t i = 0; i < result.columns.size(); ++i) {
+            if (i > 0) {
+                out << " | ";
+            }
+            out << result.columns[i].name;
+        }
+        out << "\n";
+    }
+
+    FormatOptions format_options;
+    for (const auto& row : result.rows) {
+        for (size_t i = 0; i < row.size(); ++i) {
+            if (i > 0) {
+                out << " | ";
+            }
+            std::string type = (i < result.columns.size()) ? result.columns[i].type : std::string();
+            out << FormatValueForDisplay(row[i], type, format_options);
+        }
+        out << "\n";
+    }
+    return out.str();
+}
+
+void SqlEditorFrame::UpdateResultChoiceSelection(int index) {
+    if (index < 0 || static_cast<size_t>(index) >= result_sets_.size()) {
+        return;
+    }
+    active_result_index_ = index;
+    UpdateResultControls();
+    if (!query_running_) {
+        ShowResultAtIndex(index);
+    }
+}
+
+void SqlEditorFrame::ShowResultAtIndex(int index) {
+    if (index < 0 || static_cast<size_t>(index) >= result_sets_.size()) {
+        return;
+    }
+    active_result_index_ = index;
+    if (result_choice_) {
+        result_choice_->SetSelection(index);
+    }
+    const auto& entry = result_sets_[static_cast<size_t>(index)];
+    PopulateGrid(entry.result, false);
+    ClearMessages();
+    AppendMessages(entry.result, entry.ok ? std::string() : entry.error);
+    if (!entry.ok && result_notebook_) {
+        result_notebook_->SetSelection(messages_page_index_);
+    } else if (result_notebook_) {
+        result_notebook_->SetSelection(results_page_index_);
+    }
+
+    std::string status = "Result " + std::to_string(index + 1);
+    if (!entry.result.commandTag.empty()) {
+        status += " | " + entry.result.commandTag;
+    }
+    if (!entry.result.rows.empty()) {
+        status += " | Rows: " + std::to_string(entry.result.rows.size());
+    }
+    if (entry.result.rowsAffected > 0) {
+        status += " | Affected: " + std::to_string(entry.result.rowsAffected);
+    }
+    if (entry.elapsedMs > 0.0) {
+        status += " | Time: " + std::to_string(static_cast<int64_t>(entry.elapsedMs)) + " ms";
+    }
+    UpdateStatus(status);
+}
+
 void SqlEditorFrame::UpdateSessionControls() {
     bool has_connections = connections_ && !connections_->empty();
     bool connected = connection_manager_ && connection_manager_->IsConnected();
@@ -771,8 +1221,16 @@ void SqlEditorFrame::UpdateSessionControls() {
     if (cancel_button_) {
         cancel_button_->Enable(connected && query_running_ && caps.supportsCancel);
     }
+    if (explain_button_) {
+        explain_button_->Enable(connected && caps.supportsExplain && !query_running_);
+    }
+    if (sblr_button_) {
+        sblr_button_->Enable(connected && caps.supportsSblr && !query_running_);
+    }
 
     UpdateExportControls();
+    UpdateResultControls();
+    UpdateHistoryControls();
 }
 
 void SqlEditorFrame::UpdatePagingControls() {

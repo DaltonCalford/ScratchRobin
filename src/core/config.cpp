@@ -122,6 +122,10 @@ bool ConfigStore::LoadAppConfig(const std::string& path, AppConfig* outConfig) {
             } else if (key == "font_size") {
                 ParseInt(value, &outConfig->fontSize);
             }
+        } else if (section == "editor") {
+            if (key == "history_max_items") {
+                ParseInt(value, &outConfig->historyMaxItems);
+            }
         } else if (section == "network") {
             if (key == "connect_timeout_ms") {
                 ParseInt(value, &outConfig->network.connectTimeoutMs);

@@ -10,6 +10,9 @@ namespace scratchrobin {
 
 struct MetadataNode {
     std::string label;
+    std::string kind;
+    std::string ddl;
+    std::vector<std::string> dependencies;
     std::vector<MetadataNode> children;
 };
 

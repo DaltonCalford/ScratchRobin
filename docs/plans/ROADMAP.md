@@ -30,11 +30,11 @@ ScratchBird network listeners are not ready yet, so early phases rely on a mock 
 - Metadata cache + observer refresh on DDL.
 - Tree search/filter and object context menus.
 
-## Phase 4: Editor + Inspectors (In progress)
-- Multi-result execution and statement history.
+## Phase 4: Editor + Inspectors (Completed)
+- Multi-result execution and statement history. (Done)
 - Async execution with cancel/status in UI. (Done)
-- DDL extract and dependency views in object inspector.
-- Plan/Explain and SBLR views when exposed by server.
+- DDL extract and dependency views in object inspector. (Done)
+- Plan/Explain and SBLR views when exposed by server. (Done)
 
 ## Phase 5: Admin Tools (Pending)
 - Users/roles/groups management UI.
