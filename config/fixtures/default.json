@@ -95,6 +95,35 @@
         "rows_affected": 1,
         "command_tag": "DELETE 1"
       }
+    },
+    {
+      "match": "^explain",
+      "match_type": "regex",
+      "result": {
+        "columns": [
+          { "name": "plan", "wire_type": "VARCHAR" }
+        ],
+        "rows": [
+          ["Seq Scan on demo"],
+          ["  Filter: (id > 10)"]
+        ],
+        "command_tag": "EXPLAIN"
+      }
+    },
+    {
+      "match": "^show\\s+sblr",
+      "match_type": "regex",
+      "result": {
+        "columns": [
+          { "name": "sblr", "wire_type": "VARCHAR" }
+        ],
+        "rows": [
+          ["OP_OPEN_TABLE demo"],
+          ["OP_FILTER id > 10"],
+          ["OP_RETURN"]
+        ],
+        "command_tag": "SBLR"
+      }
     }
   ]
 }

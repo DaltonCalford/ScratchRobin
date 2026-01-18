@@ -12,6 +12,10 @@ struct BackendCapabilities {
     bool supportsCancel = false;
     bool supportsTransactions = true;
     bool supportsPaging = true;
+    bool supportsExplain = false;
+    bool supportsSblr = false;
+    bool supportsDdlExtract = false;
+    bool supportsDependencies = false;
 };
 
 struct BackendConfig {

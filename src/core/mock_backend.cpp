@@ -919,6 +919,10 @@ public:
         caps.supportsCancel = true;
         caps.supportsTransactions = true;
         caps.supportsPaging = true;
+        caps.supportsExplain = true;
+        caps.supportsSblr = true;
+        caps.supportsDdlExtract = true;
+        caps.supportsDependencies = true;
         return caps;
     }
 

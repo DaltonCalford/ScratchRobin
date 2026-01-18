@@ -28,7 +28,7 @@ bool ScratchRobinApp::OnInit() {
     }
 
     auto* frame = new MainFrame(window_manager_.get(), metadata_model_.get(),
-                                &connection_manager_, &connections_);
+                                &connection_manager_, &connections_, &app_config_);
     frame->Show(true);
     return true;
 }
