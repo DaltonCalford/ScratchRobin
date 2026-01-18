@@ -11,7 +11,8 @@ ScratchRobin uses modern, human-readable TOML for configuration. The defaults fo
 - `connections.toml`: connection profiles (no plaintext passwords)
 
 Passwords and tokens are stored in the OS credential store (Keychain/DPAPI/Secret Service). The
-`connections.toml` file only references credential IDs.
+`connections.toml` file only references credential IDs. For development, `credential_id` can also
+reference an environment variable with the `env:` prefix.
 
 ## scratchrobin.toml (example)
 ```toml
@@ -38,10 +39,20 @@ query_timeout_ms = 0
 [[connection]]
 name = "Local ScratchBird"
 host = "127.0.0.1"
-port = 3050
+port = 3092
 database = "/data/scratchbird/demo.sdb"
 username = "sysdba"
 credential_id = "scratchrobin:local-sysdba"
 ssl_mode = "prefer"
+# backend = "mock"
+# fixture_path = "config/fixtures/default.json"
 ```
 
+### Mock backend
+Use `backend = "mock"` and `fixture_path` to load canned responses from JSON fixtures.
+Fixture schema is documented in `docs/fixtures/README.md`.
+
+### Environment-backed credentials
+```toml
+credential_id = "env:SCRATCHROBIN_PASSWORD"
+```
