@@ -33,9 +33,9 @@ Run:
 - `docs/ARCHITECTURE.md`
 - `docs/CONFIGURATION.md`
 - `docs/ROADMAP.md`
+- `docs/plans/ROADMAP.md`
 
 ## Configuration
 Modernized config lives in TOML. Example files:
 - `config/scratchrobin.toml.example`
 - `config/connections.toml.example`
-

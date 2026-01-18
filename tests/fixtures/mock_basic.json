@@ -1,0 +1,31 @@
+{
+  "queries": [
+    {
+      "match": "select 1",
+      "result": {
+        "columns": [
+          { "name": "one", "wire_type": "INT32" }
+        ],
+        "rows": [
+          [1]
+        ],
+        "command_tag": "SELECT 1"
+      }
+    },
+    {
+      "match": "^select\\s+id,\\s+name\\s+from\\s+demo",
+      "match_type": "regex",
+      "result": {
+        "columns": [
+          { "name": "id", "wire_type": "INT64" },
+          { "name": "name", "wire_type": "VARCHAR" }
+        ],
+        "rows": [
+          [1, "alpha"],
+          [2, "beta"]
+        ],
+        "command_tag": "SELECT 2"
+      }
+    }
+  ]
+}

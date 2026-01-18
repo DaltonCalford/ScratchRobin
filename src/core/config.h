@@ -12,6 +12,7 @@ struct AppConfig {
     std::string theme = "system";
     std::string fontFamily = "default";
     int fontSize = 11;
+    NetworkOptions network;
 };
 
 class ConfigStore {

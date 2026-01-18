@@ -1,0 +1,100 @@
+{
+  "queries": [
+    {
+      "match": "^select\\s+1",
+      "match_type": "regex",
+      "result": {
+        "columns": [
+          { "name": "one", "wire_type": "INT32" }
+        ],
+        "rows": [
+          [1]
+        ],
+        "command_tag": "SELECT 1"
+      }
+    },
+    {
+      "match": "^select\\s+now\\(\\)",
+      "match_type": "regex",
+      "result": {
+        "columns": [
+          { "name": "now", "wire_type": "TIMESTAMPTZ" }
+        ],
+        "rows": [
+          ["2026-01-01 00:00:00+00"]
+        ],
+        "messages": [
+          { "severity": "notice", "message": "Mock timestamp response" }
+        ],
+        "command_tag": "SELECT 1"
+      }
+    },
+    {
+      "match": "^select\\s+typed_demo",
+      "match_type": "regex",
+      "result": {
+        "columns": [
+          { "name": "payload", "wire_type": "JSON" },
+          { "name": "payloadb", "wire_type": "JSONB" },
+          { "name": "uuid_val", "wire_type": "UUID" },
+          { "name": "vec", "wire_type": "VECTOR" },
+          { "name": "geom", "wire_type": "GEOMETRY" },
+          { "name": "bin", "wire_type": "BYTEA" }
+        ],
+        "rows": [
+          [
+            "{\"k\": 1}",
+            { "text": "{\"k\": 2}", "data_hex": "7b226b223a327d" },
+            { "data_hex": "00112233445566778899aabbccddeeff" },
+            { "data_hex": "0000803f00000040000060c0" },
+            "POINT(1 2)",
+            { "data_hex": "0x01020304" }
+          ]
+        ],
+        "messages": [
+          { "severity": "notice", "message": "Mock typed demo row" }
+        ],
+        "command_tag": "SELECT 1"
+      }
+    },
+    {
+      "match": "select id, name from demo",
+      "result": {
+        "columns": [
+          { "name": "id", "wire_type": "INT64" },
+          { "name": "name", "wire_type": "VARCHAR" }
+        ],
+        "rows": [
+          [1, "alpha"],
+          [2, "beta"],
+          [3, "gamma"]
+        ],
+        "command_tag": "SELECT 3"
+      }
+    },
+    {
+      "match": "^insert",
+      "match_type": "regex",
+      "result": {
+        "rows_affected": 1,
+        "command_tag": "INSERT 1"
+      }
+    },
+    {
+      "match": "^update",
+      "match_type": "regex",
+      "result": {
+        "rows_affected": 2,
+        "command_tag": "UPDATE 2"
+      }
+    },
+    {
+      "match": "^delete",
+      "match_type": "regex",
+      "result": {
+        "rows_affected": 1,
+        "command_tag": "DELETE 1"
+      }
+    }
+  ]
+}

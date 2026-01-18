@@ -1,5 +1,8 @@
 # Roadmap (Rewrite)
 
+## Tracked Plan
+For the tracked implementation plan and phase status, see `docs/plans/ROADMAP.md`.
+
 ## Phase 0: Skeleton (current)
 - App bootstraps with SDI main window and SQL editor window.
 - Build system and docs in place.
@@ -27,4 +30,3 @@
 - Backup/restore UI.
 - User/role management.
 - Monitoring (sessions, locks, perf counters).
-

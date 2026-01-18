@@ -1,8 +1,10 @@
 [[connection]]
 name = "Local ScratchBird"
 host = "127.0.0.1"
-port = 3050
+port = 3092
 database = "/data/scratchbird/demo.sdb"
 username = "sysdba"
 credential_id = "scratchrobin:local-sysdba"
 ssl_mode = "prefer"
+# backend = "mock"
+# fixture_path = "config/fixtures/default.json"
