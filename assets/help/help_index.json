@@ -1,0 +1,208 @@
+{
+  "version": "1.0",
+  "topics": [
+    {
+      "id": "language.scratchbird.overview",
+      "path": "topics/language/scratchbird_sql.md",
+      "title": "ScratchBird SQL Overview",
+      "backends": [
+        "scratchbird"
+      ],
+      "category": "language"
+    },
+    {
+      "id": "reference.backup_restore",
+      "path": "topics/reference/backup_restore.md",
+      "title": "Backup & Restore",
+      "window": "BackupRestore",
+      "backends": [
+        "scratchbird",
+        "firebird",
+        "postgresql",
+        "mysql",
+        "mock"
+      ],
+      "category": "reference"
+    },
+    {
+      "id": "reference.configuration.files",
+      "path": "topics/reference/configuration_files.md",
+      "title": "Configuration Files",
+      "window": "Preferences",
+      "backends": [
+        "scratchbird",
+        "postgresql",
+        "mysql",
+        "firebird",
+        "mock"
+      ],
+      "category": "reference"
+    },
+    {
+      "id": "reference.connections.menu",
+      "path": "topics/reference/connections_menu.md",
+      "title": "Connections Menu",
+      "window": "CatalogBrowser",
+      "commands": [
+        "command.connection.server.create",
+        "command.connection.database.connect"
+      ],
+      "backends": [
+        "scratchbird",
+        "postgresql",
+        "mysql",
+        "firebird",
+        "mock"
+      ],
+      "category": "reference"
+    },
+    {
+      "id": "reference.job_scheduling",
+      "path": "topics/reference/job_scheduling.md",
+      "title": "Job Scheduling",
+      "window": "ActivityLog",
+      "backends": [
+        "scratchbird"
+      ],
+      "category": "reference"
+    },
+    {
+      "id": "troubleshooting.connection.failures",
+      "path": "topics/troubleshooting/connection_failures.md",
+      "title": "Connection Failures",
+      "backends": [
+        "scratchbird",
+        "postgresql",
+        "mysql",
+        "firebird",
+        "mock"
+      ],
+      "category": "troubleshooting"
+    },
+    {
+      "id": "ui.catalog_browser.overview",
+      "path": "topics/ui/catalog_browser_overview.md",
+      "title": "Catalog Browser Overview",
+      "window": "CatalogBrowser",
+      "commands": [
+        "command.window.monitoring",
+        "command.window.users_roles"
+      ],
+      "backends": [
+        "scratchbird",
+        "postgresql",
+        "mysql",
+        "firebird",
+        "mock"
+      ],
+      "category": "ui"
+    },
+    {
+      "id": "ui.diagram.overview",
+      "path": "topics/ui/diagram_overview.md",
+      "title": "Diagram Window Overview",
+      "window": "Diagram",
+      "commands": [
+        "command.diagram.create.erd"
+      ],
+      "backends": [
+        "scratchbird",
+        "postgresql",
+        "mysql",
+        "firebird",
+        "mock"
+      ],
+      "category": "ui"
+    },
+    {
+      "id": "ui.diagram.workflow",
+      "path": "topics/ui/diagram_workflow.md",
+      "title": "Diagram Workflow",
+      "window": "Diagram",
+      "commands": [
+        "command.diagram.create.erd"
+      ],
+      "backends": [
+        "scratchbird",
+        "postgresql",
+        "mysql",
+        "firebird",
+        "mock"
+      ],
+      "category": "ui"
+    },
+    {
+      "id": "ui.monitoring.overview",
+      "path": "topics/ui/monitoring_overview.md",
+      "title": "Monitoring Overview",
+      "window": "Monitoring",
+      "commands": [
+        "command.window.monitoring",
+        "command.monitor.refresh"
+      ],
+      "backends": [
+        "scratchbird",
+        "postgresql",
+        "mysql",
+        "firebird",
+        "mock"
+      ],
+      "category": "ui"
+    },
+    {
+      "id": "ui.sql_editor.overview",
+      "path": "topics/ui/sql_editor_overview.md",
+      "title": "SQL Editor Overview",
+      "window": "SqlEditor",
+      "commands": [
+        "command.sql.run",
+        "command.sql.cancel",
+        "command.sql.export_csv",
+        "command.sql.export_json"
+      ],
+      "backends": [
+        "scratchbird",
+        "postgresql",
+        "mysql",
+        "firebird",
+        "mock"
+      ],
+      "category": "ui"
+    },
+    {
+      "id": "ui.sql_editor.shortcuts",
+      "path": "topics/ui/sql_editor_shortcuts.md",
+      "title": "SQL Editor Shortcuts",
+      "window": "SqlEditor",
+      "commands": [
+        "command.sql.run",
+        "command.sql.cancel"
+      ],
+      "backends": [
+        "scratchbird",
+        "postgresql",
+        "mysql",
+        "firebird",
+        "mock"
+      ],
+      "category": "ui"
+    },
+    {
+      "id": "ui.users_roles.overview",
+      "path": "topics/ui/users_roles_overview.md",
+      "title": "Users & Roles Overview",
+      "window": "UsersRoles",
+      "commands": [
+        "command.window.users_roles"
+      ],
+      "backends": [
+        "scratchbird",
+        "postgresql",
+        "mysql",
+        "firebird",
+        "mock"
+      ],
+      "category": "ui"
+    }
+  ]
+}

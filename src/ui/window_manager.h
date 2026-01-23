@@ -14,9 +14,13 @@ public:
     void UnregisterWindow(wxFrame* frame);
     size_t WindowCount() const;
     void CloseAll();
+    void RegisterDiagramHost(wxFrame* frame);
+    void UnregisterDiagramHost(wxFrame* frame);
+    wxFrame* GetDiagramHost() const;
 
 private:
     std::unordered_set<wxFrame*> windows_;
+    wxFrame* diagram_host_ = nullptr;
 };
 
 } // namespace scratchrobin

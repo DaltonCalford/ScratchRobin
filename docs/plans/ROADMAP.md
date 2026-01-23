@@ -24,11 +24,17 @@ ScratchBird network listeners are not ready yet, so early phases rely on a mock 
 - Export formats (CSV, JSON) and query runtime stats. (Done)
 - Surface server notices, warnings, and error stacks in UI. (Done)
 
-## Phase 3: Metadata System (Pending)
-- Live catalog fetch (information_schema + ScratchBird catalogs).
-- Recursive schema paths and emulated catalog support.
-- Metadata cache + observer refresh on DDL.
-- Tree search/filter and object context menus.
+## Phase 3: Metadata System (In progress)
+- Live catalog fetch (information_schema + ScratchBird catalogs). (Pending on listeners)
+- Recursive schema paths and emulated catalog support. (Done, fixture-backed)
+- Metadata cache + observer refresh on DDL. (Done, fixture-backed)
+- Tree search/filter and object context menus. (Done)
+- Fixture-driven metadata tests (complex/invalid coverage). (Done)
+- Direct catalog browsing + full query execution via external backends (PostgreSQL/MySQL/Firebird). (In progress)
+  - Scope: `docs/plans/BACKEND_ADAPTERS_SCOPE.md`
+  - Adapters implemented behind optional CMake toggles.
+  - Integration tests added (env-gated) for PostgreSQL/MySQL/Firebird.
+  - External backend metadata queries implemented; ScratchBird catalogs still pending on listeners.
 
 ## Phase 4: Editor + Inspectors (Completed)
 - Multi-result execution and statement history. (Done)
@@ -37,9 +43,9 @@ ScratchBird network listeners are not ready yet, so early phases rely on a mock 
 - Plan/Explain and SBLR views when exposed by server. (Done)
 
 ## Phase 5: Admin Tools (Pending)
-- Users/roles/groups management UI.
+- Users/roles/groups management UI. (In progress: users/roles browser + membership tab + templates)
 - Backup/restore UI tied to ScratchBird tooling.
-- Monitoring panels (sessions, locks, perf counters).
+- Monitoring panels (sessions, locks, perf counters). (In progress: external backends wired + statements/long-running views)
 
 ## Phase 6: Beta Placeholders (Pending)
 - Replication and cluster/HA panels as disabled stubs.

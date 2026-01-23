@@ -8,11 +8,35 @@
 
 namespace scratchrobin {
 
+struct WindowChromeConfig {
+    bool showMenu = true;
+    bool showIconBar = true;
+    bool replicateMenu = true;
+    bool replicateIconBar = false;
+};
+
+struct UiChromeConfig {
+    WindowChromeConfig mainWindow;
+    WindowChromeConfig sqlEditor;
+    WindowChromeConfig monitoring;
+    WindowChromeConfig usersRoles;
+    WindowChromeConfig diagram;
+};
+
+struct StartupConfig {
+    bool enabled = true;
+    bool showProgress = true;
+};
+
 struct AppConfig {
     std::string theme = "system";
     std::string fontFamily = "default";
     int fontSize = 11;
     int historyMaxItems = 2000;
+    int rowLimit = 200;
+    bool enableSuggestions = true;
+    UiChromeConfig chrome;
+    StartupConfig startup;
     NetworkOptions network;
 };
 

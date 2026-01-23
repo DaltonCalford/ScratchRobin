@@ -23,17 +23,24 @@ namespace scratchrobin {
 
 class WindowManager;
 class ResultGridTable;
+class MetadataModel;
 
 class SqlEditorFrame : public wxFrame {
 public:
     SqlEditorFrame(WindowManager* windowManager,
                    ConnectionManager* connectionManager,
                    const std::vector<ConnectionProfile>* connections,
-                   const AppConfig* appConfig);
+                   const AppConfig* appConfig,
+                   MetadataModel* metadataModel);
+    void LoadStatement(const std::string& sql);
 
 private:
     void OnExecuteQuery(wxCommandEvent& event);
     void OnCancelQuery(wxCommandEvent& event);
+    void OnNewSqlEditor(wxCommandEvent& event);
+    void OnNewDiagram(wxCommandEvent& event);
+    void OnOpenMonitoring(wxCommandEvent& event);
+    void OnOpenUsersRoles(wxCommandEvent& event);
     void OnConnect(wxCommandEvent& event);
     void OnDisconnect(wxCommandEvent& event);
     void OnConnectionChanged(wxCommandEvent& event);
@@ -46,6 +53,7 @@ private:
     void OnNextPage(wxCommandEvent& event);
     void OnPageSizeChanged(wxCommandEvent& event);
     void OnToggleStream(wxCommandEvent& event);
+    void OnRowLimitChanged(wxCommandEvent& event);
     void OnExportCsv(wxCommandEvent& event);
     void OnExportJson(wxCommandEvent& event);
     void OnResultSelection(wxCommandEvent& event);
@@ -66,7 +74,9 @@ private:
                            const std::string& error, bool is_last, bool is_paged, bool stream_append,
                            int result_index, const std::string& statement);
     bool IsPagedStatement(const std::string& statement) const;
+    bool IsDdlStatement(const std::string& statement) const;
     std::string BuildPagedQuery(const std::string& statement, int64_t offset, int64_t limit) const;
+    void ApplyRowLimit(QueryResult* result, bool* limit_hit);
     void PopulateGrid(const QueryResult& result, bool append);
     void ResetGrid();
     void UpdateStatus(const std::string& message);
@@ -91,6 +101,7 @@ private:
     ConnectionManager* connection_manager_ = nullptr;
     const std::vector<ConnectionProfile>* connections_ = nullptr;
     const AppConfig* app_config_ = nullptr;
+    MetadataModel* metadata_model_ = nullptr;
     int active_profile_index_ = -1;
 
     wxChoice* connection_choice_ = nullptr;
@@ -114,6 +125,7 @@ private:
     wxChoice* history_choice_ = nullptr;
     wxButton* history_load_button_ = nullptr;
     wxSpinCtrl* page_size_ctrl_ = nullptr;
+    wxSpinCtrl* row_limit_ctrl_ = nullptr;
     wxStaticText* page_label_ = nullptr;
     wxTextCtrl* editor_ = nullptr;
     wxGrid* result_grid_ = nullptr;
@@ -131,6 +143,8 @@ private:
     std::string current_statement_;
     int current_page_ = 0;
     int page_size_ = 200;
+    int row_limit_ = 200;
+    bool row_limit_hit_ = false;
     bool paging_active_ = false;
     bool query_running_ = false;
     bool stream_append_ = false;
@@ -144,7 +158,9 @@ private:
     QueryResult pending_last_result_;
     QueryResult last_result_;
     std::string pending_last_tag_;
+    size_t pending_query_length_ = 0;
     JobHandle active_query_job_;
+    bool pending_metadata_refresh_ = false;
 
     struct ResultEntry {
         std::string statement;

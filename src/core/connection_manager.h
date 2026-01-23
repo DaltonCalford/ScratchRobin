@@ -75,7 +75,7 @@ private:
     std::string last_error_;
     NetworkOptions network_options_;
     std::unique_ptr<CredentialStore> credential_store_;
-    std::unique_ptr<ConnectionBackend> backend_;
+    std::shared_ptr<ConnectionBackend> backend_;
     JobQueue job_queue_;
     mutable std::recursive_mutex state_mutex_;
     bool auto_commit_ = true;

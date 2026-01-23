@@ -1,0 +1,63 @@
+{
+  "metadata": {
+    "nodes": [
+      {
+        "kind": "schema",
+        "catalog": "native",
+        "path": "native.public"
+      },
+      {
+        "label": "customers",
+        "kind": "table",
+        "catalog": "native",
+        "path": "native.public.customers",
+        "ddl": "CREATE TABLE public.customers (id BIGINT PRIMARY KEY, name VARCHAR(64));",
+        "dependencies": [
+          "index: customers_pkey"
+        ]
+      },
+      {
+        "kind": "schema",
+        "catalog": "firebird",
+        "path": "firebird.public"
+      },
+      {
+        "label": "rdb$database",
+        "kind": "table",
+        "catalog": "firebird",
+        "path": "firebird.public.rdb$database",
+        "ddl": "SELECT * FROM rdb$database;"
+      },
+      {
+        "kind": "schema",
+        "catalog": "postgresql",
+        "path": "postgresql.public"
+      },
+      {
+        "label": "pg_catalog",
+        "kind": "schema",
+        "catalog": "postgresql",
+        "path": "postgresql.pg_catalog"
+      },
+      {
+        "label": "pg_class",
+        "kind": "table",
+        "catalog": "postgresql",
+        "path": "postgresql.pg_catalog.pg_class",
+        "ddl": "SELECT * FROM pg_catalog.pg_class;"
+      },
+      {
+        "kind": "schema",
+        "catalog": "mysql",
+        "path": "mysql.system"
+      },
+      {
+        "label": "user",
+        "kind": "table",
+        "catalog": "mysql",
+        "path": "mysql.system.user",
+        "ddl": "SELECT * FROM mysql.user;"
+      }
+    ]
+  }
+}

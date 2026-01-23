@@ -16,6 +16,9 @@ struct BackendCapabilities {
     bool supportsSblr = false;
     bool supportsDdlExtract = false;
     bool supportsDependencies = false;
+    bool supportsUserAdmin = false;
+    bool supportsRoleAdmin = false;
+    bool supportsGroupAdmin = false;
 };
 
 struct BackendConfig {

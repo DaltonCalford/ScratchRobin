@@ -27,5 +27,25 @@
         "command_tag": "SELECT 2"
       }
     }
-  ]
+  ],
+  "metadata": {
+    "nodes": [
+      {
+        "label": "public",
+        "kind": "schema",
+        "catalog": "native",
+        "path": "native.public"
+      },
+      {
+        "label": "demo",
+        "kind": "table",
+        "catalog": "native",
+        "path": "native.public.demo",
+        "ddl": "CREATE TABLE public.demo (id INT, name VARCHAR(32));",
+        "dependencies": [
+          "index: demo_pkey"
+        ]
+      }
+    ]
+  }
 }

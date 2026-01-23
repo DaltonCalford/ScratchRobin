@@ -2,6 +2,7 @@
 
 #include "core/metadata_model.h"
 #include "ui/main_frame.h"
+#include "ui/startup_frame.h"
 #include "ui/window_manager.h"
 
 #include <wx/filename.h>
@@ -20,9 +21,17 @@ bool ScratchRobinApp::OnInit() {
     metadata_model_ = std::make_unique<MetadataModel>();
 
     LoadConfiguration();
+    if (app_config_.startup.enabled) {
+        startup_frame_ = new StartupFrame(app_config_.startup);
+        startup_frame_->Show(true);
+    }
     connection_manager_.SetNetworkOptions(app_config_.network);
     if (!connections_.empty()) {
         metadata_model_->UpdateConnections(connections_);
+        if (!connections_.front().fixturePath.empty()) {
+            metadata_model_->SetFixturePath(connections_.front().fixturePath);
+        }
+        metadata_model_->Refresh();
     } else {
         metadata_model_->LoadStub();
     }
@@ -30,12 +39,22 @@ bool ScratchRobinApp::OnInit() {
     auto* frame = new MainFrame(window_manager_.get(), metadata_model_.get(),
                                 &connection_manager_, &connections_, &app_config_);
     frame->Show(true);
+
+    if (startup_frame_) {
+        startup_frame_->Hide();
+        startup_frame_->Destroy();
+        startup_frame_ = nullptr;
+    }
     return true;
 }
 
 int ScratchRobinApp::OnExit() {
     if (window_manager_) {
         window_manager_->CloseAll();
+    }
+    if (startup_frame_) {
+        startup_frame_->Destroy();
+        startup_frame_ = nullptr;
     }
     return wxApp::OnExit();
 }

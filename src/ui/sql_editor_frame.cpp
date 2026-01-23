@@ -1,8 +1,15 @@
 #include "sql_editor_frame.h"
+#include "core/metadata_model.h"
 #include "core/result_exporter.h"
 #include "core/statement_splitter.h"
 #include "core/value_formatter.h"
+#include "diagram_frame.h"
+#include "icon_bar.h"
+#include "menu_builder.h"
+#include "menu_ids.h"
+#include "monitoring_frame.h"
 #include "result_grid_table.h"
+#include "users_roles_frame.h"
 #include "window_manager.h"
 
 #include <algorithm>
@@ -36,21 +43,89 @@ std::string Trim(std::string value) {
     return value;
 }
 
+std::string ToLowerCopy(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return value;
+}
+
+std::string StripLeadingComments(const std::string& input) {
+    size_t pos = 0;
+    while (pos < input.size()) {
+        while (pos < input.size() && std::isspace(static_cast<unsigned char>(input[pos]))) {
+            ++pos;
+        }
+        if (pos + 1 < input.size() && input[pos] == '-' && input[pos + 1] == '-') {
+            pos += 2;
+            while (pos < input.size() && input[pos] != '\n') {
+                ++pos;
+            }
+            continue;
+        }
+        if (pos + 1 < input.size() && input[pos] == '/' && input[pos + 1] == '*') {
+            pos += 2;
+            while (pos + 1 < input.size() && !(input[pos] == '*' && input[pos + 1] == '/')) {
+                ++pos;
+            }
+            if (pos + 1 < input.size()) {
+                pos += 2;
+            }
+            continue;
+        }
+        break;
+    }
+    return input.substr(pos);
+}
+
+std::string FirstToken(const std::string& input) {
+    std::string token;
+    for (char c : input) {
+        if (std::isspace(static_cast<unsigned char>(c))) {
+            if (!token.empty()) {
+                break;
+            }
+            continue;
+        }
+        token.push_back(c);
+    }
+    return token;
+}
+
 } // namespace
 
 SqlEditorFrame::SqlEditorFrame(WindowManager* windowManager,
                                ConnectionManager* connectionManager,
                                const std::vector<ConnectionProfile>* connections,
-                               const AppConfig* appConfig)
+                               const AppConfig* appConfig,
+                               MetadataModel* metadataModel)
     : wxFrame(nullptr, wxID_ANY, "SQL Editor", wxDefaultPosition, wxSize(900, 700)),
       window_manager_(windowManager),
       connection_manager_(connectionManager),
       connections_(connections),
-      app_config_(appConfig) {
+      app_config_(appConfig),
+      metadata_model_(metadataModel) {
     auto* rootSizer = new wxBoxSizer(wxVERTICAL);
 
     if (app_config_ && app_config_->historyMaxItems > 0) {
         history_max_items_ = static_cast<size_t>(app_config_->historyMaxItems);
+    }
+    if (app_config_ && app_config_->rowLimit > 0) {
+        row_limit_ = app_config_->rowLimit;
+    }
+
+    WindowChromeConfig chrome;
+    if (app_config_) {
+        chrome = app_config_->chrome.sqlEditor;
+    }
+    if (chrome.showMenu) {
+        MenuBuildOptions options;
+        options.includeConnections = chrome.replicateMenu;
+        auto* menu_bar = BuildMenuBar(options);
+        SetMenuBar(menu_bar);
+    }
+    if (chrome.showIconBar) {
+        IconBarType type = chrome.replicateIconBar ? IconBarType::Main : IconBarType::SqlEditor;
+        BuildIconBar(this, type, 24);
     }
 
     auto* sessionPanel = new wxPanel(this, wxID_ANY);
@@ -95,6 +170,12 @@ SqlEditorFrame::SqlEditorFrame(WindowManager* windowManager,
     page_size_ctrl_->SetRange(1, 10000);
     page_size_ctrl_->SetValue(page_size_);
     execRow1->Add(page_size_ctrl_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    execRow1->Add(new wxStaticText(execPanel, wxID_ANY, "Row limit:"), 0,
+                  wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    row_limit_ctrl_ = new wxSpinCtrl(execPanel, wxID_ANY);
+    row_limit_ctrl_->SetRange(0, 1000000);
+    row_limit_ctrl_->SetValue(row_limit_);
+    execRow1->Add(row_limit_ctrl_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     prev_page_button_ = new wxButton(execPanel, wxID_ANY, "Prev");
     next_page_button_ = new wxButton(execPanel, wxID_ANY, "Next");
     page_label_ = new wxStaticText(execPanel, wxID_ANY, "Page 1");
@@ -200,6 +281,14 @@ SqlEditorFrame::SqlEditorFrame(WindowManager* windowManager,
     }
 
     Bind(wxEVT_CLOSE_WINDOW, &SqlEditorFrame::OnClose, this);
+    Bind(wxEVT_MENU, &SqlEditorFrame::OnExecuteQuery, this, ID_SQL_RUN);
+    Bind(wxEVT_MENU, &SqlEditorFrame::OnCancelQuery, this, ID_SQL_CANCEL);
+    Bind(wxEVT_MENU, &SqlEditorFrame::OnExportCsv, this, ID_SQL_EXPORT_CSV);
+    Bind(wxEVT_MENU, &SqlEditorFrame::OnExportJson, this, ID_SQL_EXPORT_JSON);
+    Bind(wxEVT_MENU, &SqlEditorFrame::OnNewSqlEditor, this, ID_MENU_NEW_SQL_EDITOR);
+    Bind(wxEVT_MENU, &SqlEditorFrame::OnNewDiagram, this, ID_MENU_NEW_DIAGRAM);
+    Bind(wxEVT_MENU, &SqlEditorFrame::OnOpenMonitoring, this, ID_MENU_MONITORING);
+    Bind(wxEVT_MENU, &SqlEditorFrame::OnOpenUsersRoles, this, ID_MENU_USERS_ROLES);
     run_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnExecuteQuery, this);
     cancel_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnCancelQuery, this);
     connect_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnConnect, this);
@@ -212,6 +301,7 @@ SqlEditorFrame::SqlEditorFrame(WindowManager* windowManager,
     prev_page_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnPrevPage, this);
     next_page_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnNextPage, this);
     page_size_ctrl_->Bind(wxEVT_SPINCTRL, &SqlEditorFrame::OnPageSizeChanged, this);
+    row_limit_ctrl_->Bind(wxEVT_SPINCTRL, &SqlEditorFrame::OnRowLimitChanged, this);
     paging_check_->Bind(wxEVT_CHECKBOX, &SqlEditorFrame::OnTogglePaging, this);
     stream_check_->Bind(wxEVT_CHECKBOX, &SqlEditorFrame::OnToggleStream, this);
     export_csv_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnExportCsv, this);
@@ -227,6 +317,15 @@ SqlEditorFrame::SqlEditorFrame(WindowManager* windowManager,
     UpdateResultControls();
     UpdateHistoryControls();
     UpdateExportControls();
+}
+
+void SqlEditorFrame::LoadStatement(const std::string& sql) {
+    if (!editor_) {
+        return;
+    }
+    editor_->SetValue(sql);
+    editor_->SetInsertionPointEnd();
+    editor_->SetFocus();
 }
 
 void SqlEditorFrame::OnExecuteQuery(wxCommandEvent&) {
@@ -251,6 +350,44 @@ void SqlEditorFrame::OnCancelQuery(wxCommandEvent&) {
     active_query_job_.Cancel();
     UpdateStatus("Cancel requested");
     UpdateSessionControls();
+}
+
+void SqlEditorFrame::OnNewSqlEditor(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* editor = new SqlEditorFrame(window_manager_, connection_manager_, connections_,
+                                      app_config_, metadata_model_);
+    editor->Show(true);
+}
+
+void SqlEditorFrame::OnNewDiagram(wxCommandEvent&) {
+    if (window_manager_) {
+        if (auto* host = dynamic_cast<DiagramFrame*>(window_manager_->GetDiagramHost())) {
+            host->AddDiagramTab();
+            host->Raise();
+            host->Show(true);
+            return;
+        }
+    }
+    auto* diagram = new DiagramFrame(window_manager_, app_config_);
+    diagram->Show(true);
+}
+
+void SqlEditorFrame::OnOpenMonitoring(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* monitor = new MonitoringFrame(window_manager_, connection_manager_, connections_, app_config_);
+    monitor->Show(true);
+}
+
+void SqlEditorFrame::OnOpenUsersRoles(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* users = new UsersRolesFrame(window_manager_, connection_manager_, connections_, app_config_);
+    users->Show(true);
 }
 
 void SqlEditorFrame::OnConnect(wxCommandEvent&) {
@@ -343,6 +480,12 @@ void SqlEditorFrame::OnTogglePaging(wxCommandEvent&) {
 
 void SqlEditorFrame::OnToggleStream(wxCommandEvent&) {
     UpdatePagingControls();
+}
+
+void SqlEditorFrame::OnRowLimitChanged(wxCommandEvent&) {
+    if (row_limit_ctrl_) {
+        row_limit_ = row_limit_ctrl_->GetValue();
+    }
 }
 
 void SqlEditorFrame::OnPrevPage(wxCommandEvent&) {
@@ -536,6 +679,10 @@ bool SqlEditorFrame::EnsureConnected(const ConnectionProfile& profile) {
 
     if (!was_connected || profile_changed) {
         UpdateSessionControls();
+        if (metadata_model_) {
+            metadata_model_->SetFixturePath(profile.fixturePath);
+            metadata_model_->Refresh();
+        }
     }
     return true;
 }
@@ -566,6 +713,7 @@ bool SqlEditorFrame::ExecuteStatements(const std::string& sql) {
     }
 
     AddToHistory(trimmed);
+    pending_query_length_ = trimmed.size();
     return ExecuteStatementBatch(split.statements);
 }
 
@@ -598,6 +746,13 @@ bool SqlEditorFrame::ExecuteStatementBatch(const std::vector<std::string>& state
     pending_last_result_ = QueryResult{};
     pending_statements_ = statements;
     pending_statement_index_ = 0;
+    pending_metadata_refresh_ = false;
+    for (const auto& statement : statements) {
+        if (IsDdlStatement(statement)) {
+            pending_metadata_refresh_ = true;
+            break;
+        }
+    }
     query_running_ = true;
     stream_append_ = stream_check_ && stream_check_->GetValue();
     batch_start_time_ = std::chrono::steady_clock::now();
@@ -709,6 +864,7 @@ void SqlEditorFrame::HandleQueryResult(bool ok, const QueryResult& result,
     }
 
     if (!ok) {
+        pending_metadata_refresh_ = false;
         if (entry) {
             entry->result = result;
         }
@@ -742,6 +898,10 @@ void SqlEditorFrame::HandleQueryResult(bool ok, const QueryResult& result,
         } else {
             entry->result = result;
         }
+        row_limit_hit_ = false;
+        if (!is_paged && row_limit_ > 0) {
+            ApplyRowLimit(&entry->result, &row_limit_hit_);
+        }
         entry->result.stats.elapsedMs = elapsed_ms;
         entry->result.stats.rowsReturned = static_cast<int64_t>(entry->result.rows.size());
     }
@@ -763,8 +923,15 @@ void SqlEditorFrame::HandleQueryResult(bool ok, const QueryResult& result,
         if (stream_append) {
             status += " | Page: " + std::to_string(current_page_ + 1);
         }
+        status += " | Len: " + std::to_string(statement.size());
         if (elapsed_ms > 0.0) {
             status += " | Time: " + std::to_string(static_cast<int64_t>(elapsed_ms)) + " ms";
+        }
+        if (row_limit_ > 0) {
+            status += " | Limit: " + std::to_string(row_limit_);
+            if (row_limit_hit_) {
+                status += " (hit)";
+            }
         }
         UpdateStatus(status);
         query_running_ = false;
@@ -778,8 +945,14 @@ void SqlEditorFrame::HandleQueryResult(bool ok, const QueryResult& result,
     pending_last_tag_ = result.commandTag;
     if (is_last) {
         pending_last_result_ = result;
+        if (row_limit_ > 0) {
+            bool limit_hit = false;
+            ApplyRowLimit(&pending_last_result_, &limit_hit);
+            row_limit_hit_ = limit_hit;
+        }
         pending_last_result_.stats.elapsedMs = elapsed_ms;
-        pending_last_result_.stats.rowsReturned = static_cast<int64_t>(result.rows.size());
+        pending_last_result_.stats.rowsReturned =
+            static_cast<int64_t>(pending_last_result_.rows.size());
     }
 
     if (active_result_index_ == -1 || active_result_index_ == result_index) {
@@ -810,7 +983,20 @@ void SqlEditorFrame::HandleQueryResult(bool ok, const QueryResult& result,
             std::chrono::steady_clock::now() - batch_start_time_).count();
         status += " | Time: " + std::to_string(static_cast<int64_t>(total_ms)) + " ms";
     }
+    if (pending_query_length_ > 0) {
+        status += " | Len: " + std::to_string(pending_query_length_);
+    }
+    if (row_limit_ > 0) {
+        status += " | Limit: " + std::to_string(row_limit_);
+        if (row_limit_hit_) {
+            status += " (hit)";
+        }
+    }
     UpdateStatus(status);
+    if (pending_metadata_refresh_ && metadata_model_) {
+        metadata_model_->Refresh();
+    }
+    pending_metadata_refresh_ = false;
     query_running_ = false;
     UpdateSessionControls();
     UpdatePagingControls();
@@ -825,12 +1011,46 @@ bool SqlEditorFrame::IsPagedStatement(const std::string& statement) const {
     return lower.rfind("select", 0) == 0 || lower.rfind("with", 0) == 0;
 }
 
+bool SqlEditorFrame::IsDdlStatement(const std::string& statement) const {
+    std::string trimmed = Trim(statement);
+    if (trimmed.empty()) {
+        return false;
+    }
+    trimmed = StripLeadingComments(trimmed);
+    std::string lower = ToLowerCopy(trimmed);
+    std::string token = FirstToken(lower);
+    if (token.empty()) {
+        return false;
+    }
+    static const char* kDdlTokens[] = {
+        "create", "alter", "drop", "truncate", "comment", "grant", "revoke", "recreate", "rename"
+    };
+    for (const char* ddl : kDdlTokens) {
+        if (token == ddl) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::string SqlEditorFrame::BuildPagedQuery(const std::string& statement,
                                             int64_t offset,
                                             int64_t limit) const {
     std::string trimmed = Trim(statement);
     return "SELECT * FROM (" + trimmed + ") AS scratchrobin_q LIMIT " +
            std::to_string(limit) + " OFFSET " + std::to_string(offset);
+}
+
+void SqlEditorFrame::ApplyRowLimit(QueryResult* result, bool* limit_hit) {
+    if (!result || row_limit_ <= 0) {
+        return;
+    }
+    if (result->rows.size() > static_cast<size_t>(row_limit_)) {
+        result->rows.resize(static_cast<size_t>(row_limit_));
+        if (limit_hit) {
+            *limit_hit = true;
+        }
+    }
 }
 
 void SqlEditorFrame::PopulateGrid(const QueryResult& result, bool append) {
@@ -1249,6 +1469,9 @@ void SqlEditorFrame::UpdatePagingControls() {
     }
     if (page_size_ctrl_) {
         page_size_ctrl_->Enable(paging_enabled && !query_running_);
+    }
+    if (row_limit_ctrl_) {
+        row_limit_ctrl_->Enable(!paging_enabled && !query_running_);
     }
     if (paging_check_) {
         paging_check_->Enable(paging_supported && !query_running_);

@@ -338,6 +338,9 @@ public:
         caps.supportsCancel = false;
         caps.supportsTransactions = true;
         caps.supportsPaging = true;
+        caps.supportsUserAdmin = false;
+        caps.supportsRoleAdmin = false;
+        caps.supportsGroupAdmin = false;
         return caps;
     }
 

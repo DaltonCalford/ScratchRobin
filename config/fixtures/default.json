@@ -125,5 +125,89 @@
         "command_tag": "SBLR"
       }
     }
-  ]
+  ],
+  "metadata": {
+    "nodes": [
+      {
+        "label": "public",
+        "kind": "schema",
+        "catalog": "native",
+        "path": "native.public"
+      },
+      {
+        "label": "demo",
+        "kind": "table",
+        "catalog": "native",
+        "path": "native.public.demo",
+        "ddl": "CREATE TABLE public.demo (\n  id BIGINT PRIMARY KEY,\n  name VARCHAR(64) NOT NULL,\n  created_at TIMESTAMPTZ DEFAULT now()\n);",
+        "dependencies": [
+          "index: demo_pkey",
+          "sequence: demo_id_seq"
+        ]
+      },
+      {
+        "label": "demo_id_seq",
+        "kind": "sequence",
+        "catalog": "native",
+        "path": "native.public.demo_id_seq",
+        "ddl": "CREATE SEQUENCE public.demo_id_seq;"
+      },
+      {
+        "label": "audit_log",
+        "kind": "table",
+        "catalog": "native",
+        "path": "native.public.audit_log",
+        "ddl": "CREATE TABLE public.audit_log (\n  id BIGINT PRIMARY KEY,\n  action VARCHAR(32),\n  created_at TIMESTAMPTZ DEFAULT now()\n);"
+      },
+      {
+        "label": "active_demo",
+        "kind": "view",
+        "catalog": "native",
+        "path": "native.public.active_demo",
+        "ddl": "CREATE VIEW public.active_demo AS SELECT * FROM public.demo WHERE id > 0;"
+      },
+      {
+        "kind": "schema",
+        "catalog": "firebird",
+        "path": "firebird.public"
+      },
+      {
+        "label": "rdb$database",
+        "kind": "table",
+        "catalog": "firebird",
+        "path": "firebird.public.rdb$database",
+        "ddl": "SELECT * FROM rdb$database;"
+      },
+      {
+        "kind": "schema",
+        "catalog": "postgresql",
+        "path": "postgresql.public"
+      },
+      {
+        "label": "pg_catalog",
+        "kind": "schema",
+        "catalog": "postgresql",
+        "path": "postgresql.pg_catalog"
+      },
+      {
+        "label": "pg_class",
+        "kind": "table",
+        "catalog": "postgresql",
+        "path": "postgresql.pg_catalog.pg_class",
+        "ddl": "SELECT * FROM pg_catalog.pg_class;"
+      },
+      {
+        "kind": "schema",
+        "catalog": "mysql",
+        "path": "mysql.system"
+      },
+      {
+        "label": "user",
+        "kind": "table",
+        "catalog": "mysql",
+        "path": "mysql.system.user",
+        "ddl": "SELECT * FROM mysql.user;"
+      }
+    ]
+  }
 }

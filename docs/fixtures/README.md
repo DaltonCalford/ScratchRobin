@@ -4,13 +4,18 @@ ScratchRobin's mock backend reads JSON fixtures and returns protocol-shaped resu
 The mock backend is intended for UI development before the ScratchBird listeners are ready.
 
 ## File Layout
-Top-level object with a `queries` array.
+Top-level object with a `queries` array and optional `metadata` section.
 
 ```json
 {
   "queries": [
     { "match": "select 1", "result": { "columns": [], "rows": [] } }
-  ]
+  ],
+  "metadata": {
+    "nodes": [
+      { "label": "demo", "kind": "table", "path": "native.public.demo" }
+    ]
+  }
 }
 ```
 
@@ -66,3 +71,47 @@ If `data_hex` is provided, it is decoded into raw bytes and `text` is used for d
 ## Matching Rules
 - `exact`: normalized, case-insensitive match (whitespace collapsed, trailing semicolons ignored).
 - `regex`: case-insensitive regex against the raw SQL input.
+
+## Metadata Section
+The optional `metadata` block drives the catalog tree in the UI.
+
+```json
+{
+  "metadata": {
+    "nodes": [
+      {
+        "label": "public",
+        "kind": "schema",
+        "catalog": "native",
+        "path": "native.public"
+      },
+      {
+        "label": "demo",
+        "kind": "table",
+        "catalog": "native",
+        "path": "native.public.demo",
+        "ddl": "CREATE TABLE public.demo (...);",
+        "dependencies": ["index: demo_pkey"],
+        "children": [
+          { "label": "demo_id_seq", "kind": "sequence", "path": "native.public.demo_id_seq" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Supported metadata fields:
+- `label` (string, required): display name for the node.
+- `kind` (string, optional): object type (schema, table, view, sequence, etc).
+- `catalog` (string, optional): catalog/engine tag for grouping.
+- `path` (string, optional): dotted or slash path used to build a hierarchical tree.
+- `ddl` (string, optional): DDL extract to show in the inspector.
+- `dependencies` (array, optional): list of dependency strings.
+- `children` (array, optional): nested metadata nodes.
+
+### Fixtures for Tests
+- `tests/fixtures/metadata_complex.json`: exercises path expansion, child nodes, and label fallback.
+- `tests/fixtures/metadata_invalid.json`: verifies error handling for invalid metadata arrays.
+- `tests/fixtures/metadata_multicatalog.json`: exercises multiple catalog paths (native + emulated
+  Firebird/PostgreSQL/MySQL).

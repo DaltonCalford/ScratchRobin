@@ -10,6 +10,42 @@ font_size = 11
 [editor]
 autocomplete = true
 history_max_items = 2000
+row_limit = 200
+enable_suggestions = true
+
+[startup]
+enabled = true
+show_progress = true
+
+[ui.window.main]
+show_menu = true
+show_iconbar = true
+replicate_menu = true
+replicate_iconbar = true
+
+[ui.window.sql_editor]
+show_menu = true
+show_iconbar = true
+replicate_menu = true
+replicate_iconbar = false
+
+[ui.window.monitoring]
+show_menu = false
+show_iconbar = true
+replicate_menu = true
+replicate_iconbar = false
+
+[ui.window.users_roles]
+show_menu = false
+show_iconbar = true
+replicate_menu = true
+replicate_iconbar = false
+
+[ui.window.diagram]
+show_menu = true
+show_iconbar = true
+replicate_menu = true
+replicate_iconbar = true
 
 [network]
 connect_timeout_ms = 5000

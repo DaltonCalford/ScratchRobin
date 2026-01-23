@@ -1,0 +1,44 @@
+{
+  "metadata": {
+    "nodes": [
+      {
+        "kind": "schema",
+        "catalog": "native",
+        "path": "native.public"
+      },
+      {
+        "label": "orders",
+        "kind": "table",
+        "catalog": "native",
+        "path": "native.public.orders",
+        "ddl": "CREATE TABLE public.orders (\n  order_id BIGINT PRIMARY KEY,\n  amount NUMERIC(12,2)\n);",
+        "dependencies": [
+          "sequence: orders_id_seq"
+        ],
+        "children": [
+          {
+            "label": "order_id",
+            "kind": "column",
+            "catalog": "native",
+            "path": "native.public.orders.order_id"
+          },
+          {
+            "label": "amount",
+            "kind": "column",
+            "catalog": "native",
+            "path": "native.public.orders.amount"
+          }
+        ]
+      },
+      {
+        "kind": "folder",
+        "catalog": "native",
+        "path": "native.public.functions"
+      },
+      {
+        "label": "loose",
+        "kind": "note"
+      }
+    ]
+  }
+}
