@@ -31,4 +31,18 @@ void WindowManager::CloseAll() {
     }
 }
 
+void WindowManager::RegisterDiagramHost(wxFrame* frame) {
+    diagram_host_ = frame;
+}
+
+void WindowManager::UnregisterDiagramHost(wxFrame* frame) {
+    if (diagram_host_ == frame) {
+        diagram_host_ = nullptr;
+    }
+}
+
+wxFrame* WindowManager::GetDiagramHost() const {
+    return diagram_host_;
+}
+
 } // namespace scratchrobin

@@ -2,10 +2,14 @@
 
 #include "connection_backend.h"
 #include "credentials.h"
+#include "firebird_backend.h"
+#include "mysql_backend.h"
 #include "mock_backend.h"
 #include "network_backend.h"
+#include "postgres_backend.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 
 namespace scratchrobin {
@@ -70,6 +74,39 @@ std::unique_ptr<ConnectionBackend> ConnectionManager::CreateBackendForProfile(
         if (!backend) {
             if (error) {
                 *error = "ScratchBird network backend is not available in this build";
+            }
+            return nullptr;
+        }
+        return backend;
+    }
+
+    if (backend_name == "postgresql" || backend_name == "postgres" || backend_name == "pg") {
+        auto backend = CreatePostgresBackend();
+        if (!backend) {
+            if (error) {
+                *error = "PostgreSQL backend is not available in this build";
+            }
+            return nullptr;
+        }
+        return backend;
+    }
+
+    if (backend_name == "mysql" || backend_name == "mariadb") {
+        auto backend = CreateMySqlBackend();
+        if (!backend) {
+            if (error) {
+                *error = "MySQL backend is not available in this build";
+            }
+            return nullptr;
+        }
+        return backend;
+    }
+
+    if (backend_name == "firebird" || backend_name == "fb") {
+        auto backend = CreateFirebirdBackend();
+        if (!backend) {
+            if (error) {
+                *error = "Firebird backend is not available in this build";
             }
             return nullptr;
         }
@@ -260,12 +297,19 @@ void ConnectionManager::SetAutoCommit(bool enabled) {
 }
 
 bool ConnectionManager::CancelActive() {
-    std::lock_guard<std::recursive_mutex> lock(state_mutex_);
-    if (!backend_) {
+    auto backend = std::atomic_load_explicit(&backend_, std::memory_order_acquire);
+    if (!backend) {
+        std::lock_guard<std::recursive_mutex> lock(state_mutex_);
         last_error_ = "Not connected";
         return false;
     }
-    return backend_->Cancel(&last_error_);
+    std::string error;
+    bool ok = backend->Cancel(&error);
+    if (!ok || !error.empty()) {
+        std::lock_guard<std::recursive_mutex> lock(state_mutex_);
+        last_error_ = error.empty() ? "Cancel failed" : error;
+    }
+    return ok;
 }
 
 BackendCapabilities ConnectionManager::Capabilities() const {

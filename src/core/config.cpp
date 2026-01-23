@@ -46,6 +46,21 @@ bool ParseInt(const std::string& value, int* out) {
     }
 }
 
+bool ParseBool(const std::string& value, bool* out) {
+    std::string normalized = Trim(value);
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (normalized == "true" || normalized == "yes" || normalized == "1") {
+        *out = true;
+        return true;
+    }
+    if (normalized == "false" || normalized == "no" || normalized == "0") {
+        *out = false;
+        return true;
+    }
+    return false;
+}
+
 std::string UnescapeTomlString(const std::string& value) {
     std::string out;
     out.reserve(value.size());
@@ -122,9 +137,69 @@ bool ConfigStore::LoadAppConfig(const std::string& path, AppConfig* outConfig) {
             } else if (key == "font_size") {
                 ParseInt(value, &outConfig->fontSize);
             }
+        } else if (section == "ui.window.main") {
+            if (key == "show_menu") {
+                ParseBool(value, &outConfig->chrome.mainWindow.showMenu);
+            } else if (key == "show_iconbar") {
+                ParseBool(value, &outConfig->chrome.mainWindow.showIconBar);
+            } else if (key == "replicate_menu") {
+                ParseBool(value, &outConfig->chrome.mainWindow.replicateMenu);
+            } else if (key == "replicate_iconbar") {
+                ParseBool(value, &outConfig->chrome.mainWindow.replicateIconBar);
+            }
+        } else if (section == "ui.window.sql_editor") {
+            if (key == "show_menu") {
+                ParseBool(value, &outConfig->chrome.sqlEditor.showMenu);
+            } else if (key == "show_iconbar") {
+                ParseBool(value, &outConfig->chrome.sqlEditor.showIconBar);
+            } else if (key == "replicate_menu") {
+                ParseBool(value, &outConfig->chrome.sqlEditor.replicateMenu);
+            } else if (key == "replicate_iconbar") {
+                ParseBool(value, &outConfig->chrome.sqlEditor.replicateIconBar);
+            }
+        } else if (section == "ui.window.monitoring") {
+            if (key == "show_menu") {
+                ParseBool(value, &outConfig->chrome.monitoring.showMenu);
+            } else if (key == "show_iconbar") {
+                ParseBool(value, &outConfig->chrome.monitoring.showIconBar);
+            } else if (key == "replicate_menu") {
+                ParseBool(value, &outConfig->chrome.monitoring.replicateMenu);
+            } else if (key == "replicate_iconbar") {
+                ParseBool(value, &outConfig->chrome.monitoring.replicateIconBar);
+            }
+        } else if (section == "ui.window.users_roles") {
+            if (key == "show_menu") {
+                ParseBool(value, &outConfig->chrome.usersRoles.showMenu);
+            } else if (key == "show_iconbar") {
+                ParseBool(value, &outConfig->chrome.usersRoles.showIconBar);
+            } else if (key == "replicate_menu") {
+                ParseBool(value, &outConfig->chrome.usersRoles.replicateMenu);
+            } else if (key == "replicate_iconbar") {
+                ParseBool(value, &outConfig->chrome.usersRoles.replicateIconBar);
+            }
+        } else if (section == "ui.window.diagram") {
+            if (key == "show_menu") {
+                ParseBool(value, &outConfig->chrome.diagram.showMenu);
+            } else if (key == "show_iconbar") {
+                ParseBool(value, &outConfig->chrome.diagram.showIconBar);
+            } else if (key == "replicate_menu") {
+                ParseBool(value, &outConfig->chrome.diagram.replicateMenu);
+            } else if (key == "replicate_iconbar") {
+                ParseBool(value, &outConfig->chrome.diagram.replicateIconBar);
+            }
         } else if (section == "editor") {
             if (key == "history_max_items") {
                 ParseInt(value, &outConfig->historyMaxItems);
+            } else if (key == "row_limit") {
+                ParseInt(value, &outConfig->rowLimit);
+            } else if (key == "enable_suggestions") {
+                ParseBool(value, &outConfig->enableSuggestions);
+            }
+        } else if (section == "startup") {
+            if (key == "enabled") {
+                ParseBool(value, &outConfig->startup.enabled);
+            } else if (key == "show_progress") {
+                ParseBool(value, &outConfig->startup.showProgress);
             }
         } else if (section == "network") {
             if (key == "connect_timeout_ms") {

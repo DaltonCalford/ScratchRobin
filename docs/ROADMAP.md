@@ -1,32 +1,20 @@
-# Roadmap (Rewrite)
+# Roadmap (High-Level)
 
-## Tracked Plan
 For the tracked implementation plan and phase status, see `docs/plans/ROADMAP.md`.
 
-## Phase 0: Skeleton (current)
-- App bootstraps with SDI main window and SQL editor window.
-- Build system and docs in place.
+## Current Focus (Phase 3)
+- Live catalog fetch is pending on ScratchBird network listeners.
+- External backends (PostgreSQL/MySQL/Firebird) are implemented with live catalog queries, gated by client libraries.
 
-## Phase 1: ScratchBird Connectivity
-- Implement `ConnectionManager` using ScratchBird client API.
-- Connection profiles and credential storage.
-- Basic query execution with cancel.
+## Completed Milestones
+- Connection backend abstraction, job queue, capability flags.
+- SQL editor async execution, paging grid, exports, status reporting.
+- Fixture-backed metadata tree, inspector tabs, and context menus.
 
-## Phase 2: Metadata + Tree
-- Lazy metadata loading (schemas, tables, views, procedures).
-- Observer notifications to keep tree + inspector in sync.
-- Basic context menus (connect, disconnect, properties).
+## Early Phase 5 Progress
+- Monitoring window for sessions/locks/perf plus statements/long-running views (external backends).
+- Users/Roles browser with memberships tab and backend-gated admin templates.
 
-## Phase 3: SQL Editor
-- Statement splitting (ScratchBird dialect, custom terminators).
-- Result grid with paging.
-- History and favorites.
-
-## Phase 4: Object Inspector
-- HTML templates + hyperlink navigation.
-- DDL extraction and dependency lists.
-
-## Phase 5: Admin Tools
-- Backup/restore UI.
-- User/role management.
-- Monitoring (sessions, locks, perf counters).
+## Pending
+- Admin tools (users/roles, backup/restore, monitoring panels).
+- Beta placeholders for cluster/replication/ETL panels.

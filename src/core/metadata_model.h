@@ -11,6 +11,8 @@ namespace scratchrobin {
 struct MetadataNode {
     std::string label;
     std::string kind;
+    std::string catalog;
+    std::string path;
     std::string ddl;
     std::vector<std::string> dependencies;
     std::vector<MetadataNode> children;
@@ -33,13 +35,22 @@ public:
 
     void LoadStub();
     void UpdateConnections(const std::vector<ConnectionProfile>& profiles);
-    MetadataSnapshot GetSnapshot() const;
+    const MetadataSnapshot& GetSnapshot() const;
+    void SetFixturePath(const std::string& path);
+    bool LoadFromFixture(const std::string& path, std::string* error);
+    void Refresh();
+    const std::string& LastError() const { return last_error_; }
 
 private:
     void NotifyObservers();
+    void LoadFallback(const std::string& message);
+    bool LoadFromConnections(std::string* error);
 
     MetadataSnapshot snapshot_;
     std::vector<MetadataObserver*> observers_;
+    std::vector<ConnectionProfile> profiles_;
+    std::string fixture_path_;
+    std::string last_error_;
 };
 
 } // namespace scratchrobin

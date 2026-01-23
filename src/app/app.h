@@ -12,6 +12,8 @@
 
 namespace scratchrobin {
 
+class StartupFrame;
+
 class ScratchRobinApp : public wxApp {
 public:
     ~ScratchRobinApp() override;
@@ -29,6 +31,7 @@ private:
     ConnectionManager connection_manager_;
     std::unique_ptr<WindowManager> window_manager_;
     std::unique_ptr<MetadataModel> metadata_model_;
+    StartupFrame* startup_frame_ = nullptr;
 };
 
 } // namespace scratchrobin

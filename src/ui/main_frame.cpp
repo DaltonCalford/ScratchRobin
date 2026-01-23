@@ -1,8 +1,19 @@
 #include "main_frame.h"
+#include "diagram_frame.h"
+#include "monitoring_frame.h"
 #include "sql_editor_frame.h"
+#include "users_roles_frame.h"
+#include "icon_bar.h"
+#include "menu_builder.h"
+#include "menu_ids.h"
 #include "window_manager.h"
 
+#include <algorithm>
+#include <cctype>
 #include <functional>
+#include <wx/button.h>
+#include <wx/clipbrd.h>
+#include <wx/dataobj.h>
 #include <wx/menu.h>
 #include <wx/notebook.h>
 #include <wx/panel.h>
@@ -14,7 +25,26 @@
 namespace scratchrobin {
 
 namespace {
-constexpr int kMenuNewSqlEditor = wxID_HIGHEST + 1;
+constexpr int kFilterTextCtrl = wxID_HIGHEST + 2;
+constexpr int kFilterClearButton = wxID_HIGHEST + 3;
+constexpr int kMenuTreeOpenEditor = wxID_HIGHEST + 4;
+constexpr int kMenuTreeCopyName = wxID_HIGHEST + 5;
+constexpr int kMenuTreeCopyDdl = wxID_HIGHEST + 6;
+constexpr int kMenuTreeShowDeps = wxID_HIGHEST + 7;
+constexpr int kMenuTreeRefresh = wxID_HIGHEST + 8;
+
+std::string Trim(std::string value) {
+    auto not_space = [](unsigned char ch) { return !std::isspace(ch); };
+    value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
+    value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(), value.end());
+    return value;
+}
+
+std::string ToLowerCopy(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return value;
+}
 
 class MetadataNodeData : public wxTreeItemData {
 public:
@@ -28,10 +58,21 @@ private:
 } // namespace
 
 wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
-    EVT_MENU(kMenuNewSqlEditor, MainFrame::OnNewSqlEditor)
+    EVT_MENU(ID_MENU_NEW_SQL_EDITOR, MainFrame::OnNewSqlEditor)
+    EVT_MENU(ID_MENU_NEW_DIAGRAM, MainFrame::OnNewDiagram)
+    EVT_MENU(ID_MENU_MONITORING, MainFrame::OnOpenMonitoring)
+    EVT_MENU(ID_MENU_USERS_ROLES, MainFrame::OnOpenUsersRoles)
     EVT_MENU(wxID_EXIT, MainFrame::OnQuit)
     EVT_CLOSE(MainFrame::OnClose)
     EVT_TREE_SEL_CHANGED(wxID_ANY, MainFrame::OnTreeSelection)
+    EVT_TREE_ITEM_MENU(wxID_ANY, MainFrame::OnTreeItemMenu)
+    EVT_TEXT(kFilterTextCtrl, MainFrame::OnFilterChanged)
+    EVT_BUTTON(kFilterClearButton, MainFrame::OnFilterClear)
+    EVT_MENU(kMenuTreeOpenEditor, MainFrame::OnTreeOpenEditor)
+    EVT_MENU(kMenuTreeCopyName, MainFrame::OnTreeCopyName)
+    EVT_MENU(kMenuTreeCopyDdl, MainFrame::OnTreeCopyDdl)
+    EVT_MENU(kMenuTreeShowDeps, MainFrame::OnTreeShowDependencies)
+    EVT_MENU(kMenuTreeRefresh, MainFrame::OnTreeRefresh)
 wxEND_EVENT_TABLE()
 
 MainFrame::MainFrame(WindowManager* windowManager,
@@ -46,6 +87,9 @@ MainFrame::MainFrame(WindowManager* windowManager,
       connections_(connections),
       app_config_(appConfig) {
     BuildMenu();
+    if (app_config_ && app_config_->chrome.mainWindow.showIconBar) {
+        BuildIconBar(this, IconBarType::Main, 24);
+    }
     BuildLayout();
     CreateStatusBar();
     SetStatusText("Ready");
@@ -60,15 +104,23 @@ MainFrame::MainFrame(WindowManager* windowManager,
 }
 
 void MainFrame::BuildMenu() {
-    auto* fileMenu = new wxMenu();
-    fileMenu->Append(kMenuNewSqlEditor, "New SQL Editor\tCtrl+N");
-    fileMenu->AppendSeparator();
-    fileMenu->Append(wxID_EXIT, "Quit\tCtrl+Q");
+    WindowChromeConfig chrome;
+    if (app_config_) {
+        chrome = app_config_->chrome.mainWindow;
+    }
 
-    auto* menuBar = new wxMenuBar();
-    menuBar->Append(fileMenu, "File");
+    if (!chrome.showMenu) {
+        return;
+    }
 
-    SetMenuBar(menuBar);
+    MenuBuildOptions options;
+    options.includeConnections = true;
+    options.includeEdit = true;
+    options.includeView = true;
+    options.includeWindow = true;
+    options.includeHelp = true;
+    auto* menu_bar = BuildMenuBar(options);
+    SetMenuBar(menu_bar);
 }
 
 void MainFrame::BuildLayout() {
@@ -76,6 +128,15 @@ void MainFrame::BuildLayout() {
 
     auto* treePanel = new wxPanel(splitter, wxID_ANY);
     auto* treeSizer = new wxBoxSizer(wxVERTICAL);
+    auto* filterSizer = new wxBoxSizer(wxHORIZONTAL);
+    filterSizer->Add(new wxStaticText(treePanel, wxID_ANY, "Filter:"), 0,
+                     wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    filter_ctrl_ = new wxTextCtrl(treePanel, kFilterTextCtrl);
+    filter_ctrl_->SetHint("Filter catalog objects");
+    filterSizer->Add(filter_ctrl_, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    filter_clear_button_ = new wxButton(treePanel, kFilterClearButton, "Clear");
+    filterSizer->Add(filter_clear_button_, 0, wxALIGN_CENTER_VERTICAL);
+    treeSizer->Add(filterSizer, 0, wxEXPAND | wxALL, 8);
     tree_ = new wxTreeCtrl(treePanel, wxID_ANY, wxDefaultPosition, wxDefaultSize,
                            wxTR_HAS_BUTTONS | wxTR_LINES_AT_ROOT | wxTR_DEFAULT_STYLE);
     treeSizer->Add(tree_, 1, wxEXPAND | wxALL, 8);
@@ -106,8 +167,11 @@ void MainFrame::BuildLayout() {
     depsSizer->Add(deps_text_, 1, wxEXPAND | wxALL, 8);
     depsPanel->SetSizer(depsSizer);
 
+    overview_page_index_ = inspector_notebook_->GetPageCount();
     inspector_notebook_->AddPage(overviewPanel, "Overview");
+    ddl_page_index_ = inspector_notebook_->GetPageCount();
     inspector_notebook_->AddPage(ddlPanel, "DDL");
+    deps_page_index_ = inspector_notebook_->GetPageCount();
     inspector_notebook_->AddPage(depsPanel, "Dependencies");
 
     detailsSizer->Add(inspector_notebook_, 1, wxEXPAND | wxALL, 4);
@@ -121,8 +185,22 @@ void MainFrame::BuildLayout() {
 }
 
 void MainFrame::OnNewSqlEditor(wxCommandEvent&) {
-    auto* editor = new SqlEditorFrame(window_manager_, connection_manager_, connections_, app_config_);
+    auto* editor = new SqlEditorFrame(window_manager_, connection_manager_, connections_,
+                                      app_config_, metadata_model_);
     editor->Show(true);
+}
+
+void MainFrame::OnNewDiagram(wxCommandEvent&) {
+    if (window_manager_) {
+        if (auto* host = dynamic_cast<DiagramFrame*>(window_manager_->GetDiagramHost())) {
+            host->AddDiagramTab();
+            host->Raise();
+            host->Show(true);
+            return;
+        }
+    }
+    auto* diagram = new DiagramFrame(window_manager_, app_config_);
+    diagram->Show(true);
 }
 
 void MainFrame::OnQuit(wxCommandEvent&) {
@@ -154,16 +232,21 @@ void MainFrame::OnTreeSelection(wxTreeEvent& event) {
 
     auto* data = dynamic_cast<MetadataNodeData*>(tree_->GetItemData(item));
     if (!data) {
+        context_node_ = nullptr;
         UpdateInspector(nullptr);
         return;
     }
-    UpdateInspector(data->GetNode());
+    context_node_ = data->GetNode();
+    UpdateInspector(context_node_);
 }
 
 void MainFrame::PopulateTree(const MetadataSnapshot& snapshot) {
     if (!tree_) {
         return;
     }
+
+    std::string filter = ToLowerCopy(Trim(filter_text_));
+    bool has_filter = !filter.empty();
 
     tree_->Freeze();
     tree_->DeleteAllItems();
@@ -181,15 +264,33 @@ void MainFrame::PopulateTree(const MetadataSnapshot& snapshot) {
         wxTreeItemId id = tree_->AppendItem(parent, node.label, -1, -1,
                                             new MetadataNodeData(&node));
         for (const auto& child : node.children) {
-            addNode(id, child);
+            if (HasMatch(child, filter)) {
+                addNode(id, child);
+            }
         }
     };
 
+    bool added_any = false;
     for (const auto& node : snapshot.roots) {
-        addNode(root, node);
+        if (HasMatch(node, filter)) {
+            addNode(root, node);
+            added_any = true;
+        }
     }
 
-    tree_->Expand(root);
+    if (!added_any) {
+        tree_->AppendItem(root, has_filter ? "No matches for filter" : "No metadata available");
+        tree_->Expand(root);
+        tree_->Thaw();
+        UpdateInspector(nullptr);
+        return;
+    }
+
+    if (has_filter) {
+        tree_->ExpandAll();
+    } else {
+        tree_->Expand(root);
+    }
     tree_->Thaw();
 
     UpdateInspector(nullptr);
@@ -201,8 +302,14 @@ void MainFrame::UpdateInspector(const MetadataNode* node) {
             overview_text_->SetValue("Select a catalog object to view details.");
         } else {
             std::string text = "Name: " + node->label + "\n";
+            if (!node->catalog.empty()) {
+                text += "Catalog: " + node->catalog + "\n";
+            }
             if (!node->kind.empty()) {
                 text += "Type: " + node->kind + "\n";
+            }
+            if (!node->path.empty()) {
+                text += "Path: " + node->path + "\n";
             }
             if (!node->children.empty()) {
                 text += "Children: " + std::to_string(node->children.size()) + "\n";
@@ -229,6 +336,195 @@ void MainFrame::UpdateInspector(const MetadataNode* node) {
             }
             deps_text_->SetValue(text);
         }
+    }
+}
+
+const MetadataNode* MainFrame::GetSelectedNode() const {
+    if (!tree_) {
+        return nullptr;
+    }
+    auto item = tree_->GetSelection();
+    if (!item.IsOk()) {
+        return nullptr;
+    }
+    auto* data = dynamic_cast<MetadataNodeData*>(tree_->GetItemData(item));
+    return data ? data->GetNode() : nullptr;
+}
+
+bool MainFrame::HasMatch(const MetadataNode& node, const std::string& filter) const {
+    if (filter.empty()) {
+        return true;
+    }
+
+    auto matches = [&](const std::string& value) {
+        if (value.empty()) {
+            return false;
+        }
+        return ToLowerCopy(value).find(filter) != std::string::npos;
+    };
+
+    if (matches(node.label) || matches(node.kind) || matches(node.catalog) || matches(node.path)) {
+        return true;
+    }
+
+    for (const auto& child : node.children) {
+        if (HasMatch(child, filter)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+std::string MainFrame::BuildSeedSql(const MetadataNode* node) const {
+    if (!node) {
+        return {};
+    }
+    if (!node->ddl.empty()) {
+        return node->ddl;
+    }
+    std::string label = node->path.empty() ? node->label : node->path;
+    if (label.empty()) {
+        return {};
+    }
+    return "-- " + label + "\n";
+}
+
+bool MainFrame::CopyToClipboard(const std::string& text) const {
+    if (text.empty()) {
+        return false;
+    }
+    if (wxTheClipboard && wxTheClipboard->Open()) {
+        wxTheClipboard->SetData(new wxTextDataObject(wxString::FromUTF8(text)));
+        wxTheClipboard->Close();
+        return true;
+    }
+    return false;
+}
+
+void MainFrame::OnTreeItemMenu(wxTreeEvent& event) {
+    if (!tree_) {
+        return;
+    }
+    auto item = event.GetItem();
+    if (!item.IsOk()) {
+        return;
+    }
+    tree_->SelectItem(item);
+    auto* data = dynamic_cast<MetadataNodeData*>(tree_->GetItemData(item));
+    context_node_ = data ? data->GetNode() : nullptr;
+    UpdateInspector(context_node_);
+
+    wxMenu menu;
+    menu.Append(kMenuTreeOpenEditor, "Open in SQL Editor");
+    menu.AppendSeparator();
+    menu.Append(kMenuTreeCopyName, "Copy Name");
+    menu.Append(kMenuTreeCopyDdl, "Copy DDL");
+    menu.Append(kMenuTreeShowDeps, "Show Dependencies");
+    menu.AppendSeparator();
+    menu.Append(kMenuTreeRefresh, "Refresh Metadata");
+
+    if (!context_node_ || context_node_->ddl.empty()) {
+        menu.Enable(kMenuTreeCopyDdl, false);
+    }
+    if (!context_node_ || context_node_->dependencies.empty()) {
+        menu.Enable(kMenuTreeShowDeps, false);
+    }
+    if (!metadata_model_) {
+        menu.Enable(kMenuTreeRefresh, false);
+    }
+
+    PopupMenu(&menu);
+}
+
+void MainFrame::OnFilterChanged(wxCommandEvent&) {
+    if (!filter_ctrl_) {
+        return;
+    }
+    filter_text_ = filter_ctrl_->GetValue().ToStdString();
+    if (metadata_model_) {
+        PopulateTree(metadata_model_->GetSnapshot());
+    }
+}
+
+void MainFrame::OnFilterClear(wxCommandEvent&) {
+    if (filter_ctrl_) {
+        filter_ctrl_->Clear();
+    }
+    filter_text_.clear();
+    if (metadata_model_) {
+        PopulateTree(metadata_model_->GetSnapshot());
+    }
+}
+
+void MainFrame::OnTreeOpenEditor(wxCommandEvent&) {
+    const MetadataNode* node = context_node_ ? context_node_ : GetSelectedNode();
+    auto* editor = new SqlEditorFrame(window_manager_, connection_manager_, connections_,
+                                      app_config_, metadata_model_);
+    std::string seed = BuildSeedSql(node);
+    if (!seed.empty()) {
+        editor->LoadStatement(seed);
+    }
+    editor->Show(true);
+}
+
+void MainFrame::OnOpenMonitoring(wxCommandEvent&) {
+    auto* frame = new MonitoringFrame(window_manager_, connection_manager_, connections_, app_config_);
+    frame->Show(true);
+}
+
+void MainFrame::OnOpenUsersRoles(wxCommandEvent&) {
+    auto* frame = new UsersRolesFrame(window_manager_, connection_manager_, connections_, app_config_);
+    frame->Show(true);
+}
+
+void MainFrame::OnTreeCopyName(wxCommandEvent&) {
+    const MetadataNode* node = context_node_ ? context_node_ : GetSelectedNode();
+    if (!node) {
+        return;
+    }
+    std::string text = node->path.empty() ? node->label : node->path;
+    if (CopyToClipboard(text)) {
+        SetStatusText("Copied name to clipboard");
+    } else {
+        SetStatusText("Unable to access clipboard");
+    }
+}
+
+void MainFrame::OnTreeCopyDdl(wxCommandEvent&) {
+    const MetadataNode* node = context_node_ ? context_node_ : GetSelectedNode();
+    if (!node || node->ddl.empty()) {
+        SetStatusText("DDL not available for selection");
+        return;
+    }
+    if (CopyToClipboard(node->ddl)) {
+        SetStatusText("Copied DDL to clipboard");
+    } else {
+        SetStatusText("Unable to access clipboard");
+    }
+}
+
+void MainFrame::OnTreeShowDependencies(wxCommandEvent&) {
+    const MetadataNode* node = context_node_ ? context_node_ : GetSelectedNode();
+    if (!node || node->dependencies.empty()) {
+        SetStatusText("No dependencies to display");
+        return;
+    }
+    UpdateInspector(node);
+    if (inspector_notebook_) {
+        inspector_notebook_->SetSelection(deps_page_index_);
+    }
+}
+
+void MainFrame::OnTreeRefresh(wxCommandEvent&) {
+    if (!metadata_model_) {
+        return;
+    }
+    metadata_model_->Refresh();
+    if (!metadata_model_->LastError().empty()) {
+        SetStatusText(metadata_model_->LastError());
+    } else {
+        SetStatusText("Metadata refreshed");
     }
 }
 
