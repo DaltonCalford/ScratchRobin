@@ -90,6 +90,10 @@ if(SCRATCHROBIN_BUILD_UI)
         src/app/app.cpp
         src/ui/main_frame.cpp
         src/ui/diagram_frame.cpp
+        src/ui/diagram_model.cpp
+        src/ui/diagram_canvas.cpp
+        src/ui/diagram_page.cpp
+        src/ui/diagram_template_dialog.cpp
         src/ui/monitoring_frame.cpp
         src/ui/sql_editor_frame.cpp
         src/ui/users_roles_frame.cpp
