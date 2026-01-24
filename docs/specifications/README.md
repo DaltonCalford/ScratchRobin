@@ -16,4 +16,5 @@ ScratchRobin UI and tooling.
 ## Diagramming
 
 - [ERD Modeling and Engineering](ERD_MODELING_AND_ENGINEERING.md)
+- [Silverston Diagram Specification](SILVERSTON_DIAGRAM_SPECIFICATION.md)
 - [ERD Tooling Research](ERD_TOOLING_RESEARCH.md)
