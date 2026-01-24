@@ -111,6 +111,7 @@ Example:
 - `Monitoring`
 - `UsersRoles`
 - `Diagram`
+- `JobScheduler`
 - `ProjectWorkspace`
 - `ServerManager`
 - `ClusterManager`
@@ -193,4 +194,3 @@ Troubleshooting:
 - Connection failures
 - TLS/SSL setup
 - Backend capability limits
-
