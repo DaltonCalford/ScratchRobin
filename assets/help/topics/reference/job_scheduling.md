@@ -8,10 +8,10 @@ backends: ["scratchbird"]
 
 # Job Scheduling
 
-ScratchRobin will surface a scheduler for ScratchBird background tasks.
-Planned capabilities include:
-- recurring maintenance jobs
-- backup/restore scheduling
-- monitoring jobs and notifications
+ScratchRobin includes a Job Scheduler window for ScratchBird connections.
+It supports creating, editing, and running scheduled jobs along with viewing
+run history and dependencies.
 
-This topic will expand once the scheduler UI is available.
+Use the Window menu to open Job Scheduler and refresh the job list. Jobs can
+be created with CRON, AT, or EVERY schedules and executed immediately via
+EXECUTE JOB.

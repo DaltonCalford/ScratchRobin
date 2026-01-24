@@ -101,7 +101,7 @@ Purpose:
 
 Menus (merge items):
 - View: Toggle inspector tabs, Refresh metadata
-- Window: New SQL Editor, New Diagram
+- Window: New SQL Editor, New Diagram, Monitoring, Users & Roles, Job Scheduler
 
 UI Objects:
 - Catalog tree (server -> database -> schema -> objects)
@@ -183,7 +183,21 @@ UI Objects:
 - Template actions: Create/Drop/Grant/Revoke
 - Result grid
 
-### 5) Diagram Window (ERD/Data Flow/UML)
+### 5) Job Scheduler
+
+Purpose:
+- Create/alter/drop jobs and review run history (ScratchBird only).
+
+Menus (merge items):
+- Window: Job Scheduler
+- Edit: Copy row/Copy grid
+
+UI Objects:
+- Jobs grid (name/state/next run)
+- Details panel (schedule, retries, timeout)
+- Tabs: Runs / Dependencies / Config / Privileges
+
+### 6) Diagram Window (ERD/Data Flow/UML)
 
 Purpose:
 - Visual modeling. May be stored under a Project schema.
@@ -201,7 +215,7 @@ UI Objects:
 Rules:
 - Diagram windows may tab together, but cannot tab with non-diagram windows.
 
-### 6) Project Workspace
+### 7) Project Workspace
 
 Purpose:
 - Application-level workspace stored as a schema with its own SQL objects.
@@ -217,7 +231,7 @@ UI Objects:
 Notes:
 - Projects may be local or shared (database/cluster).
 
-### 7) Server Manager
+### 8) Server Manager
 
 Purpose:
 - Create/manage local ScratchBird servers and emulated engines.
@@ -233,7 +247,7 @@ UI Objects:
 Notes:
 - Wizard-driven creation with local host analysis.
 
-### 8) Cluster Manager (Beta)
+### 9) Cluster Manager (Beta)
 
 Purpose:
 - Cluster topology, health, failover policy.
@@ -243,7 +257,7 @@ UI Objects:
 - Health panel
 - Policy controls
 
-### 9) Database Manager
+### 10) Database Manager
 
 Purpose:
 - Create/drop databases and emulated catalogs.
@@ -253,7 +267,7 @@ UI Objects:
 - Create/Drop controls
 - Filespace/tablespace selectors (future)
 
-### 10) Git Integration
+### 11) Git Integration
 
 Purpose:
 - Configure local Git identity and connect to database/cluster Git services.
@@ -263,7 +277,7 @@ UI Objects:
 - Repo targets (local + DB/cluster)
 - Status/Pull/Push panel
 
-### 11) Backup & Restore (Phase 5)
+### 12) Backup & Restore (Phase 5)
 
 Purpose:
 - UI for sb_backup / restore workflows.
@@ -273,7 +287,7 @@ UI Objects:
 - Schedule options
 - Progress log
 
-### 12) Preferences
+### 13) Preferences
 
 Purpose:
 - App-wide settings.
@@ -284,7 +298,7 @@ UI Objects:
 - Network timeouts
 - Credential store status
 
-### 13) Activity Log
+### 14) Activity Log
 
 Purpose:
 - Long-running jobs and notifications.
@@ -293,7 +307,7 @@ UI Objects:
 - Log timeline
 - Filters
 
-### 14) Startup/Branding Window
+### 15) Startup/Branding Window
 
 Purpose:
 - Optional startup window to show branding, logo, and loading status.

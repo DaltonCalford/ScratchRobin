@@ -11,6 +11,7 @@ ScratchRobin UI and tooling.
 - [UI Window Model](UI_WINDOW_MODEL.md)
 - [UI Icon Assets](UI_ICON_ASSETS.md)
 - [Context-Sensitive Help](CONTEXT_SENSITIVE_HELP.md)
+- [Job Scheduler UI](JOB_SCHEDULER_UI.md)
 
 ## Diagramming
 

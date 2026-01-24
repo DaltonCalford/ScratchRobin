@@ -29,7 +29,7 @@ Required notations:
 - IDEF1X
 - UML Class (ERD profile)
 - Chen (optional)
-- Silverston (spec provided by project owner)
+- Silverston (see `docs/findings/silverston-diagram-specification.md`)
 
 Rules:
 - Notation is a rendering layer on top of a shared logical model.
