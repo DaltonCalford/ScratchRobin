@@ -47,6 +47,7 @@ struct DiagramEdge {
     bool identifying = false;
     Cardinality source_cardinality = Cardinality::One;
     Cardinality target_cardinality = Cardinality::OneOrMany;
+    int label_offset = 1;
 };
 
 class DiagramModel {

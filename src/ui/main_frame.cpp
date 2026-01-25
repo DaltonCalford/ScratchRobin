@@ -1,11 +1,16 @@
 #include "main_frame.h"
 #include "diagram_frame.h"
-#include "monitoring_frame.h"
-#include "sql_editor_frame.h"
-#include "users_roles_frame.h"
+#include "domain_manager_frame.h"
 #include "icon_bar.h"
+#include "index_designer_frame.h"
+#include "job_scheduler_frame.h"
 #include "menu_builder.h"
 #include "menu_ids.h"
+#include "monitoring_frame.h"
+#include "schema_manager_frame.h"
+#include "sql_editor_frame.h"
+#include "table_designer_frame.h"
+#include "users_roles_frame.h"
 #include "window_manager.h"
 
 #include <algorithm>
@@ -62,6 +67,11 @@ wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
     EVT_MENU(ID_MENU_NEW_DIAGRAM, MainFrame::OnNewDiagram)
     EVT_MENU(ID_MENU_MONITORING, MainFrame::OnOpenMonitoring)
     EVT_MENU(ID_MENU_USERS_ROLES, MainFrame::OnOpenUsersRoles)
+    EVT_MENU(ID_MENU_JOB_SCHEDULER, MainFrame::OnOpenJobScheduler)
+    EVT_MENU(ID_MENU_DOMAIN_MANAGER, MainFrame::OnOpenDomainManager)
+    EVT_MENU(ID_MENU_SCHEMA_MANAGER, MainFrame::OnOpenSchemaManager)
+    EVT_MENU(ID_MENU_TABLE_DESIGNER, MainFrame::OnOpenTableDesigner)
+    EVT_MENU(ID_MENU_INDEX_DESIGNER, MainFrame::OnOpenIndexDesigner)
     EVT_MENU(wxID_EXIT, MainFrame::OnQuit)
     EVT_CLOSE(MainFrame::OnClose)
     EVT_TREE_SEL_CHANGED(wxID_ANY, MainFrame::OnTreeSelection)
@@ -119,7 +129,7 @@ void MainFrame::BuildMenu() {
     options.includeView = true;
     options.includeWindow = true;
     options.includeHelp = true;
-    auto* menu_bar = BuildMenuBar(options);
+    auto* menu_bar = BuildMenuBar(options, window_manager_, this);
     SetMenuBar(menu_bar);
 }
 
@@ -475,6 +485,31 @@ void MainFrame::OnOpenMonitoring(wxCommandEvent&) {
 
 void MainFrame::OnOpenUsersRoles(wxCommandEvent&) {
     auto* frame = new UsersRolesFrame(window_manager_, connection_manager_, connections_, app_config_);
+    frame->Show(true);
+}
+
+void MainFrame::OnOpenJobScheduler(wxCommandEvent&) {
+    auto* frame = new JobSchedulerFrame(window_manager_, connection_manager_, connections_, app_config_);
+    frame->Show(true);
+}
+
+void MainFrame::OnOpenDomainManager(wxCommandEvent&) {
+    auto* frame = new DomainManagerFrame(window_manager_, connection_manager_, connections_, app_config_);
+    frame->Show(true);
+}
+
+void MainFrame::OnOpenSchemaManager(wxCommandEvent&) {
+    auto* frame = new SchemaManagerFrame(window_manager_, connection_manager_, connections_, app_config_);
+    frame->Show(true);
+}
+
+void MainFrame::OnOpenTableDesigner(wxCommandEvent&) {
+    auto* frame = new TableDesignerFrame(window_manager_, connection_manager_, connections_, app_config_);
+    frame->Show(true);
+}
+
+void MainFrame::OnOpenIndexDesigner(wxCommandEvent&) {
+    auto* frame = new IndexDesignerFrame(window_manager_, connection_manager_, connections_, app_config_);
     frame->Show(true);
 }
 

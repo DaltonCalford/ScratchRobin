@@ -27,6 +27,7 @@ Scheduler:
 - Default run timeout: `scheduler.job_timeout_seconds` (default 3600).
 - Cron evaluation uses 5 fields and UTC (gmtime).
 - SHOW commands provide the canonical query surface for jobs and runs.
+- `CREATE OR ALTER JOB` and `RECREATE JOB` are supported for job upserts.
 
 Built-in seeded jobs:
 - `daily_sweep` (CRON `0 2 * * *`, `SWEEP DATABASE`, enabled)
@@ -34,8 +35,11 @@ Built-in seeded jobs:
 - `rebuild_indexes` (CRON `0 3 * * 0`, `REINDEX DATABASE`, disabled)
 
 Permissions:
-- Create jobs: DB_OWNER or superuser.
-- Alter/Drop/Execute/Cancel: job owner OR DB_OWNER OR superuser.
+- `CREATE JOB` privilege (or DB_OWNER/superuser) required to create jobs.
+- Alter/Drop: job owner, job admin, DB_OWNER, or superuser.
+- Execute/Cancel: job owner, job admin, or `EXECUTE` on the job.
+- `EXECUTE EXTERNAL JOB` privilege required for external job bodies.
+- `VIEW JOB HISTORY` privilege expands SHOW access across jobs/runs.
 
 ## SQL Surface (Parser Support)
 
@@ -53,7 +57,7 @@ CREATE JOB job_name
   [ON COMPLETION PRESERVE | DROP]
   [RUN AS role_name]
   [DESCRIPTION = 'text']
-  [ENABLED | DISABLED]
+  [STATE = ENABLED | DISABLED | PAUSED]
   AS 'SQL text'
   | CALL schema.proc()
   | EXEC 'external command'
@@ -64,6 +68,12 @@ Schedule variants:
 - `SCHEDULE = EVERY n [unit] [STARTS 'timestamp'] [ENDS 'timestamp']`
 
 Units: `S/SEC/SECOND`, `M/MIN/MINUTE`, `H/HOUR`, `D/DAY` (case-insensitive).
+
+Also supported:
+```
+CREATE OR ALTER JOB job_name ...
+RECREATE JOB job_name ...
+```
 
 ### ALTER JOB
 
@@ -78,11 +88,19 @@ ALTER JOB job_name
   [SET] TIMEOUT = n [unit]
   [SET] RUN AS role_name
   [SET] DESCRIPTION = 'text'
+  [SET] ON COMPLETION PRESERVE | DROP
+  [SET] DEPENDS ON job_a, job_b | DEPENDS ON NONE
+  [SET] CLASS = class_name
+  [SET] PARTITION BY ALL_SHARDS | SINGLE_SHARD 'uuid' | SHARD_SET 'expr' | DYNAMIC 'expr'
+  [SET] AS 'SQL text'
+  [SET] CALL schema.proc()
+  [SET] EXEC 'external command'
 ```
 
 Notes:
-- Dependency edits are not supported after creation.
+- `DEPENDS ON NONE` clears dependencies.
 - `PAUSED` behaves like a non-running state (scheduler only executes ENABLED).
+- External job body changes require `EXECUTE EXTERNAL JOB` privilege.
 
 ### DROP JOB
 
@@ -114,6 +132,9 @@ SHOW JOBS [LIKE 'pattern']
 SHOW JOB job_name
 SHOW JOB RUNS [FOR] job_name
 ```
+
+`SHOW JOB` currently returns a subset of fields (schedule/type/state). Richer
+details should come from `sys.jobs` when available.
 
 ### GRANT / REVOKE JOB
 
@@ -279,7 +300,7 @@ Job list columns:
 - Name, State, Type, Schedule, Next Run, Last Run, Owner
 
 Actions:
-- Create / Edit / Drop
+- Create / Edit / Drop (Create dialog supports CREATE / CREATE OR ALTER / RECREATE)
 - Enable / Disable / Pause
 - Run Now (EXECUTE JOB)
 - Cancel Run (CANCEL JOB RUN)
@@ -288,16 +309,19 @@ Actions:
 
 Details panel:
 - Schedule builder (CRON/AT/EVERY)
+- Start/End timestamps for EVERY
 - Retry/backoff/timeout
 - On completion (Preserve/Drop)
 - Run as role
 - Description
+- Job body (SQL/CALL/EXEC)
+- Dependencies / Class / Partition
 
 Run history:
 - State, Started, Completed, Duration, Rows, Error, Message
 
 Dependencies:
-- List of required jobs (read-only once created)
+- List of required jobs (editable via ALTER JOB ... DEPENDS ON / DEPENDS ON NONE)
 
 Config panel:
 - `scheduler.*` settings with Apply action (ALTER SYSTEM)
@@ -307,6 +331,7 @@ Privileges panel:
 - Grant EXECUTE on job to user/role/public
 - Revoke EXECUTE on job
 - View current grants (SHOW GRANTS FOR job_name)
+ - Surface CREATE JOB / VIEW JOB HISTORY / EXECUTE EXTERNAL JOB as server-wide privileges
 
 ### UI Mock (ASCII)
 
@@ -339,9 +364,11 @@ Privileges panel:
 ### Error Handling
 
 Surface server error messages verbatim, including permission errors:
-- CREATE JOB requires DB_OWNER or superuser.
-- ALTER/DROP/EXECUTE/CANCEL requires job owner or DB_OWNER/superuser.
+- CREATE JOB requires CREATE JOB privilege (DB_OWNER or superuser may imply it).
+- SHOW JOB / SHOW JOB RUNS require job owner or VIEW JOB HISTORY privilege.
+- ALTER/DROP/EXECUTE/CANCEL require job owner or DB_OWNER/superuser.
 - GRANT/REVOKE on JOB requires job owner or admin privileges.
+- EXECUTE EXTERNAL JOB requires EXECUTE EXTERNAL JOB privilege.
 
 ## Examples
 

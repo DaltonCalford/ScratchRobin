@@ -188,6 +188,15 @@ void DiagramPage::BuildLayout() {
     edge_label_edit_ = new wxTextCtrl(propsPanel, wxID_ANY, "");
     propsSizer->Add(edge_label_edit_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
+    auto* labelPosLabel = new wxStaticText(propsPanel, wxID_ANY, "Label Position");
+    labelPosLabel->SetForegroundColour(wxColour(200, 200, 200));
+    propsSizer->Add(labelPosLabel, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+    label_position_choice_ = new wxChoice(propsPanel, wxID_ANY);
+    label_position_choice_->Append("Center");
+    label_position_choice_->Append("Above");
+    label_position_choice_->Append("Below");
+    propsSizer->Add(label_position_choice_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+
     auto* cardLabel = new wxStaticText(propsPanel, wxID_ANY, "Cardinality");
     cardLabel->SetForegroundColour(wxColour(200, 200, 200));
     propsSizer->Add(cardLabel, 0, wxLEFT | wxRIGHT | wxTOP, 8);
@@ -218,6 +227,7 @@ void DiagramPage::BuildLayout() {
     canvas_->Bind(EVT_DIAGRAM_SELECTION_CHANGED, &DiagramPage::OnSelectionChanged, this);
     name_edit_->Bind(wxEVT_TEXT, &DiagramPage::OnNameEdited, this);
     edge_label_edit_->Bind(wxEVT_TEXT, &DiagramPage::OnEdgeLabelEdited, this);
+    label_position_choice_->Bind(wxEVT_CHOICE, &DiagramPage::OnLabelPositionChanged, this);
     cardinality_source_choice_->Bind(wxEVT_CHOICE, &DiagramPage::OnCardinalityChanged, this);
     cardinality_target_choice_->Bind(wxEVT_CHOICE, &DiagramPage::OnCardinalityChanged, this);
     identifying_check_->Bind(wxEVT_CHECKBOX, &DiagramPage::OnIdentifyingChanged, this);
@@ -256,6 +266,7 @@ void DiagramPage::UpdateProperties() {
         edge_label_edit_->ChangeValue("");
         edge_label_edit_->Enable(false);
         edge_label_label_->Enable(false);
+        label_position_choice_->Enable(false);
         cardinality_source_choice_->Enable(false);
         cardinality_target_choice_->Enable(false);
         identifying_check_->Enable(false);
@@ -273,6 +284,7 @@ void DiagramPage::UpdateProperties() {
         edge_label_edit_->ChangeValue("");
         edge_label_edit_->Enable(false);
         edge_label_label_->Enable(false);
+        label_position_choice_->Enable(false);
         cardinality_source_choice_->Enable(false);
         cardinality_target_choice_->Enable(false);
         identifying_check_->Enable(false);
@@ -288,6 +300,14 @@ void DiagramPage::UpdateProperties() {
     edge_label_edit_->Enable(true);
     if (edge_label_edit_->GetValue() != selected_edge->label) {
         edge_label_edit_->ChangeValue(selected_edge->label);
+    }
+    label_position_choice_->Enable(true);
+    if (selected_edge->label_offset > 0) {
+        label_position_choice_->SetSelection(1);
+    } else if (selected_edge->label_offset < 0) {
+        label_position_choice_->SetSelection(2);
+    } else {
+        label_position_choice_->SetSelection(0);
     }
     bool erd_edge = diagram_type_ == DiagramType::Erd;
     cardinality_source_choice_->Enable(erd_edge);
@@ -332,6 +352,22 @@ void DiagramPage::OnIdentifyingChanged(wxCommandEvent&) {
         return;
     }
     selected->identifying = identifying_check_->GetValue();
+    canvas_->Refresh();
+}
+
+void DiagramPage::OnLabelPositionChanged(wxCommandEvent&) {
+    auto* selected = canvas_->GetSelectedEdgeMutable();
+    if (!selected) {
+        return;
+    }
+    int choice = label_position_choice_->GetSelection();
+    if (choice == 1) {
+        selected->label_offset = 1;
+    } else if (choice == 2) {
+        selected->label_offset = -1;
+    } else {
+        selected->label_offset = 0;
+    }
     canvas_->Refresh();
 }
 

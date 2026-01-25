@@ -45,4 +45,8 @@ wxFrame* WindowManager::GetDiagramHost() const {
     return diagram_host_;
 }
 
+std::vector<wxFrame*> WindowManager::GetWindows() const {
+    return std::vector<wxFrame*>(windows_.begin(), windows_.end());
+}
+
 } // namespace scratchrobin

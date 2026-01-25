@@ -41,6 +41,11 @@ private:
     void OnNewSqlEditor(wxCommandEvent& event);
     void OnNewDiagram(wxCommandEvent& event);
     void OnOpenMonitoring(wxCommandEvent& event);
+    void OnOpenJobScheduler(wxCommandEvent& event);
+    void OnOpenDomainManager(wxCommandEvent& event);
+    void OnOpenSchemaManager(wxCommandEvent& event);
+    void OnOpenTableDesigner(wxCommandEvent& event);
+    void OnOpenIndexDesigner(wxCommandEvent& event);
     void OnConnect(wxCommandEvent& event);
     void OnDisconnect(wxCommandEvent& event);
     void OnRefresh(wxCommandEvent& event);

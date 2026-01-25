@@ -94,6 +94,16 @@ if(SCRATCHROBIN_BUILD_UI)
         src/ui/diagram_canvas.cpp
         src/ui/diagram_page.cpp
         src/ui/diagram_template_dialog.cpp
+        src/ui/domain_editor_dialog.cpp
+        src/ui/domain_manager_frame.cpp
+        src/ui/index_designer_frame.cpp
+        src/ui/index_editor_dialog.cpp
+        src/ui/job_editor_dialog.cpp
+        src/ui/job_scheduler_frame.cpp
+        src/ui/schema_editor_dialog.cpp
+        src/ui/schema_manager_frame.cpp
+        src/ui/table_designer_frame.cpp
+        src/ui/table_editor_dialog.cpp
         src/ui/monitoring_frame.cpp
         src/ui/sql_editor_frame.cpp
         src/ui/users_roles_frame.cpp

@@ -1,12 +1,17 @@
 #include "users_roles_frame.h"
 
 #include "diagram_frame.h"
+#include "domain_manager_frame.h"
 #include "icon_bar.h"
+#include "index_designer_frame.h"
+#include "job_scheduler_frame.h"
 #include "menu_builder.h"
 #include "menu_ids.h"
 #include "monitoring_frame.h"
 #include "result_grid_table.h"
+#include "schema_manager_frame.h"
 #include "sql_editor_frame.h"
+#include "table_designer_frame.h"
 #include "window_manager.h"
 
 #include <algorithm>
@@ -327,6 +332,11 @@ wxBEGIN_EVENT_TABLE(UsersRolesFrame, wxFrame)
     EVT_MENU(ID_MENU_NEW_SQL_EDITOR, UsersRolesFrame::OnNewSqlEditor)
     EVT_MENU(ID_MENU_NEW_DIAGRAM, UsersRolesFrame::OnNewDiagram)
     EVT_MENU(ID_MENU_MONITORING, UsersRolesFrame::OnOpenMonitoring)
+    EVT_MENU(ID_MENU_JOB_SCHEDULER, UsersRolesFrame::OnOpenJobScheduler)
+    EVT_MENU(ID_MENU_DOMAIN_MANAGER, UsersRolesFrame::OnOpenDomainManager)
+    EVT_MENU(ID_MENU_SCHEMA_MANAGER, UsersRolesFrame::OnOpenSchemaManager)
+    EVT_MENU(ID_MENU_TABLE_DESIGNER, UsersRolesFrame::OnOpenTableDesigner)
+    EVT_MENU(ID_MENU_INDEX_DESIGNER, UsersRolesFrame::OnOpenIndexDesigner)
     EVT_MENU(wxID_REFRESH, UsersRolesFrame::OnRefresh)
     EVT_BUTTON(kMenuConnect, UsersRolesFrame::OnConnect)
     EVT_BUTTON(kMenuDisconnect, UsersRolesFrame::OnDisconnect)
@@ -380,7 +390,7 @@ void UsersRolesFrame::BuildMenu() {
     }
     MenuBuildOptions options;
     options.includeConnections = chrome.replicateMenu;
-    auto* menu_bar = BuildMenuBar(options);
+    auto* menu_bar = BuildMenuBar(options, window_manager_, this);
     SetMenuBar(menu_bar);
 }
 
@@ -636,6 +646,51 @@ void UsersRolesFrame::OnOpenMonitoring(wxCommandEvent&) {
     auto* monitor = new MonitoringFrame(window_manager_, connection_manager_, connections_,
                                          app_config_);
     monitor->Show(true);
+}
+
+void UsersRolesFrame::OnOpenJobScheduler(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* scheduler = new JobSchedulerFrame(window_manager_, connection_manager_, connections_,
+                                            app_config_);
+    scheduler->Show(true);
+}
+
+void UsersRolesFrame::OnOpenDomainManager(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* domains = new DomainManagerFrame(window_manager_, connection_manager_, connections_,
+                                           app_config_);
+    domains->Show(true);
+}
+
+void UsersRolesFrame::OnOpenSchemaManager(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* schemas = new SchemaManagerFrame(window_manager_, connection_manager_, connections_,
+                                           app_config_);
+    schemas->Show(true);
+}
+
+void UsersRolesFrame::OnOpenTableDesigner(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* tables = new TableDesignerFrame(window_manager_, connection_manager_, connections_,
+                                          app_config_);
+    tables->Show(true);
+}
+
+void UsersRolesFrame::OnOpenIndexDesigner(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* indexes = new IndexDesignerFrame(window_manager_, connection_manager_, connections_,
+                                           app_config_);
+    indexes->Show(true);
 }
 
 void UsersRolesFrame::OnDisconnect(wxCommandEvent&) {
