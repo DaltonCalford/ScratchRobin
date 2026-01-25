@@ -19,6 +19,7 @@
 #include <sstream>
 
 #include <wx/button.h>
+#include <wx/choicdlg.h>
 #include <wx/choice.h>
 #include <wx/grid.h>
 #include <wx/notebook.h>
