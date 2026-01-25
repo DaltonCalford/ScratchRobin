@@ -71,6 +71,7 @@ private:
     void OnMouseWheel(wxMouseEvent& event);
     void OnSize(wxSizeEvent& event);
 
+    wxPoint2DDouble ScreenToWorldDouble(const wxPoint& point) const;
     wxPoint ScreenToWorld(const wxPoint& point) const;
     wxRect2DDouble WorldRectForNode(const DiagramNode& node) const;
     wxPoint ComputeNodeCenter(const DiagramNode& node) const;
@@ -79,16 +80,17 @@ private:
     void DrawEdges(wxDC& dc);
     void DrawNodes(wxDC& dc);
     void DrawSelectionHandles(wxDC& dc, const DiagramNode& node);
+    void DrawEdgeHandles(wxDC& dc, const wxPoint& source, const wxPoint& target);
 
-    std::optional<size_t> HitTestNode(const wxPoint& world_point) const;
-    std::optional<size_t> HitTestEdge(const wxPoint& world_point) const;
-    ResizeHandle HitTestResizeHandle(const DiagramNode& node, const wxPoint& world_point) const;
-    EdgeDragEndpoint HitTestEdgeEndpoint(size_t edge_index, const wxPoint& world_point) const;
+    std::optional<size_t> HitTestNode(const wxPoint2DDouble& world_point) const;
+    std::optional<size_t> HitTestEdge(const wxPoint2DDouble& world_point) const;
+    ResizeHandle HitTestResizeHandle(const DiagramNode& node, const wxPoint2DDouble& world_point) const;
+    EdgeDragEndpoint HitTestEdgeEndpoint(size_t edge_index, const wxPoint2DDouble& world_point) const;
     void UpdateSelection(std::optional<size_t> node_index, std::optional<size_t> edge_index);
     wxPoint2DDouble NextInsertPosition(double width, double height);
     wxCursor CursorForHandle(ResizeHandle handle) const;
-    void UpdateHoverCursor(const wxPoint& world_point);
-    void ApplyResize(const wxPoint& world_point);
+    void UpdateHoverCursor(const wxPoint2DDouble& world_point);
+    void ApplyResize(const wxPoint2DDouble& world_point);
 
     DiagramModel model_;
     std::string template_key_ = "default";
