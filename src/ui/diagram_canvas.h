@@ -13,6 +13,24 @@ namespace scratchrobin {
 
 wxDECLARE_EVENT(EVT_DIAGRAM_SELECTION_CHANGED, wxCommandEvent);
 
+enum class ResizeHandle {
+    None,
+    TopLeft,
+    Top,
+    TopRight,
+    Right,
+    BottomRight,
+    Bottom,
+    BottomLeft,
+    Left
+};
+
+enum class EdgeDragEndpoint {
+    None,
+    Source,
+    Target
+};
+
 class DiagramCanvas : public wxPanel {
 public:
     DiagramCanvas(wxWindow* parent, DiagramType type);
@@ -55,6 +73,8 @@ private:
 
     wxPoint ScreenToWorld(const wxPoint& point) const;
     wxRect2DDouble WorldRectForNode(const DiagramNode& node) const;
+    wxPoint ComputeNodeCenter(const DiagramNode& node) const;
+    wxPoint ComputeEdgeAnchor(const DiagramNode& node, const wxPoint& toward) const;
     void DrawGrid(wxDC& dc);
     void DrawEdges(wxDC& dc);
     void DrawNodes(wxDC& dc);
@@ -62,8 +82,13 @@ private:
 
     std::optional<size_t> HitTestNode(const wxPoint& world_point) const;
     std::optional<size_t> HitTestEdge(const wxPoint& world_point) const;
+    ResizeHandle HitTestResizeHandle(const DiagramNode& node, const wxPoint& world_point) const;
+    EdgeDragEndpoint HitTestEdgeEndpoint(size_t edge_index, const wxPoint& world_point) const;
     void UpdateSelection(std::optional<size_t> node_index, std::optional<size_t> edge_index);
     wxPoint2DDouble NextInsertPosition(double width, double height);
+    wxCursor CursorForHandle(ResizeHandle handle) const;
+    void UpdateHoverCursor(const wxPoint& world_point);
+    void ApplyResize(const wxPoint& world_point);
 
     DiagramModel model_;
     std::string template_key_ = "default";
@@ -77,6 +102,13 @@ private:
     std::optional<size_t> selected_index_;
     std::optional<size_t> selected_edge_index_;
     std::optional<size_t> dragging_index_;
+    std::optional<size_t> resizing_index_;
+    ResizeHandle resize_handle_ = ResizeHandle::None;
+    wxRect2DDouble resize_start_rect_{0.0, 0.0, 0.0, 0.0};
+    wxPoint2DDouble resize_start_point_{0.0, 0.0};
+    std::optional<size_t> dragging_edge_index_;
+    EdgeDragEndpoint edge_drag_endpoint_ = EdgeDragEndpoint::None;
+    wxPoint edge_drag_point_{0, 0};
     wxPoint2DDouble drag_offset_{0.0, 0.0};
     bool is_panning_ = false;
     wxPoint last_mouse_;

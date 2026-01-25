@@ -4,11 +4,16 @@
 #include "core/statement_splitter.h"
 #include "core/value_formatter.h"
 #include "diagram_frame.h"
+#include "domain_manager_frame.h"
 #include "icon_bar.h"
+#include "index_designer_frame.h"
+#include "job_scheduler_frame.h"
 #include "menu_builder.h"
 #include "menu_ids.h"
 #include "monitoring_frame.h"
 #include "result_grid_table.h"
+#include "schema_manager_frame.h"
+#include "table_designer_frame.h"
 #include "users_roles_frame.h"
 #include "window_manager.h"
 
@@ -120,7 +125,7 @@ SqlEditorFrame::SqlEditorFrame(WindowManager* windowManager,
     if (chrome.showMenu) {
         MenuBuildOptions options;
         options.includeConnections = chrome.replicateMenu;
-        auto* menu_bar = BuildMenuBar(options);
+        auto* menu_bar = BuildMenuBar(options, window_manager_, this);
         SetMenuBar(menu_bar);
     }
     if (chrome.showIconBar) {
@@ -289,6 +294,11 @@ SqlEditorFrame::SqlEditorFrame(WindowManager* windowManager,
     Bind(wxEVT_MENU, &SqlEditorFrame::OnNewDiagram, this, ID_MENU_NEW_DIAGRAM);
     Bind(wxEVT_MENU, &SqlEditorFrame::OnOpenMonitoring, this, ID_MENU_MONITORING);
     Bind(wxEVT_MENU, &SqlEditorFrame::OnOpenUsersRoles, this, ID_MENU_USERS_ROLES);
+    Bind(wxEVT_MENU, &SqlEditorFrame::OnOpenJobScheduler, this, ID_MENU_JOB_SCHEDULER);
+    Bind(wxEVT_MENU, &SqlEditorFrame::OnOpenDomainManager, this, ID_MENU_DOMAIN_MANAGER);
+    Bind(wxEVT_MENU, &SqlEditorFrame::OnOpenSchemaManager, this, ID_MENU_SCHEMA_MANAGER);
+    Bind(wxEVT_MENU, &SqlEditorFrame::OnOpenTableDesigner, this, ID_MENU_TABLE_DESIGNER);
+    Bind(wxEVT_MENU, &SqlEditorFrame::OnOpenIndexDesigner, this, ID_MENU_INDEX_DESIGNER);
     run_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnExecuteQuery, this);
     cancel_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnCancelQuery, this);
     connect_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnConnect, this);
@@ -388,6 +398,46 @@ void SqlEditorFrame::OnOpenUsersRoles(wxCommandEvent&) {
     }
     auto* users = new UsersRolesFrame(window_manager_, connection_manager_, connections_, app_config_);
     users->Show(true);
+}
+
+void SqlEditorFrame::OnOpenJobScheduler(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* scheduler = new JobSchedulerFrame(window_manager_, connection_manager_, connections_, app_config_);
+    scheduler->Show(true);
+}
+
+void SqlEditorFrame::OnOpenDomainManager(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* domains = new DomainManagerFrame(window_manager_, connection_manager_, connections_, app_config_);
+    domains->Show(true);
+}
+
+void SqlEditorFrame::OnOpenSchemaManager(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* schemas = new SchemaManagerFrame(window_manager_, connection_manager_, connections_, app_config_);
+    schemas->Show(true);
+}
+
+void SqlEditorFrame::OnOpenTableDesigner(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* tables = new TableDesignerFrame(window_manager_, connection_manager_, connections_, app_config_);
+    tables->Show(true);
+}
+
+void SqlEditorFrame::OnOpenIndexDesigner(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* indexes = new IndexDesignerFrame(window_manager_, connection_manager_, connections_, app_config_);
+    indexes->Show(true);
 }
 
 void SqlEditorFrame::OnConnect(wxCommandEvent&) {

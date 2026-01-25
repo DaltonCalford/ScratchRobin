@@ -36,6 +36,7 @@ private:
     void OnEdgeLabelEdited(wxCommandEvent& event);
     void OnCardinalityChanged(wxCommandEvent& event);
     void OnIdentifyingChanged(wxCommandEvent& event);
+    void OnLabelPositionChanged(wxCommandEvent& event);
     void OnCanvasKey(wxKeyEvent& event);
 
     void StartRelationshipMode();
@@ -55,6 +56,7 @@ private:
     wxTextCtrl* name_edit_ = nullptr;
     wxTextCtrl* edge_label_edit_ = nullptr;
     wxStaticText* edge_label_label_ = nullptr;
+    wxChoice* label_position_choice_ = nullptr;
     wxChoice* cardinality_source_choice_ = nullptr;
     wxChoice* cardinality_target_choice_ = nullptr;
     wxCheckBox* identifying_check_ = nullptr;

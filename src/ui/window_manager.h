@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <unordered_set>
+#include <vector>
 
 #include <wx/frame.h>
 
@@ -17,6 +18,7 @@ public:
     void RegisterDiagramHost(wxFrame* frame);
     void UnregisterDiagramHost(wxFrame* frame);
     wxFrame* GetDiagramHost() const;
+    std::vector<wxFrame*> GetWindows() const;
 
 private:
     std::unordered_set<wxFrame*> windows_;

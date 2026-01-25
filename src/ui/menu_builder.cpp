@@ -1,8 +1,12 @@
 #include "menu_builder.h"
 
 #include "menu_ids.h"
+#include "window_manager.h"
+
+#include <algorithm>
 
 #include <wx/defs.h>
+#include <wx/frame.h>
 
 namespace scratchrobin {
 namespace {
@@ -86,6 +90,17 @@ wxMenu* BuildEditMenu() {
     return menu;
 }
 
+wxMenu* BuildObjectsMenu() {
+    auto* menu = new wxMenu();
+    menu->Append(ID_MENU_SCHEMA_MANAGER, "Schemas");
+    menu->Append(ID_MENU_TABLE_DESIGNER, "Tables");
+    menu->Append(ID_MENU_INDEX_DESIGNER, "Indexes");
+    menu->Append(ID_MENU_DOMAIN_MANAGER, "Domains");
+    menu->Append(ID_MENU_JOB_SCHEDULER, "Jobs");
+    menu->Append(ID_MENU_USERS_ROLES, "Users & Roles");
+    return menu;
+}
+
 wxMenu* BuildViewMenu() {
     auto* menu = new wxMenu();
     AppendItem(menu, wxID_ANY, "Toggle Panels", false);
@@ -93,13 +108,66 @@ wxMenu* BuildViewMenu() {
     return menu;
 }
 
-wxMenu* BuildWindowMenu() {
+void ClearMenu(wxMenu* menu) {
+    if (!menu) {
+        return;
+    }
+    while (menu->GetMenuItemCount() > 0) {
+        auto* item = menu->FindItemByPosition(0);
+        if (!item) {
+            break;
+        }
+        menu->Destroy(item);
+    }
+}
+
+void PopulateWindowMenu(wxMenu* menu,
+                        WindowManager* window_manager,
+                        wxFrame* current_frame) {
+    ClearMenu(menu);
+    if (!menu) {
+        return;
+    }
+    if (!window_manager) {
+        AppendItem(menu, wxID_ANY, "No windows", false);
+        return;
+    }
+    auto windows = window_manager->GetWindows();
+    if (windows.empty()) {
+        AppendItem(menu, wxID_ANY, "No windows", false);
+        return;
+    }
+    std::sort(windows.begin(), windows.end(),
+              [](const wxFrame* a, const wxFrame* b) {
+                  return a && b ? a->GetTitle().CmpNoCase(b->GetTitle()) < 0 : a < b;
+              });
+    for (auto* frame : windows) {
+        if (!frame) {
+            continue;
+        }
+        int id = wxWindow::NewControlId();
+        auto* item = menu->AppendRadioItem(id, frame->GetTitle());
+        if (frame == current_frame) {
+            item->Check(true);
+        }
+        if (current_frame) {
+            current_frame->Bind(wxEVT_MENU,
+                [frame](wxCommandEvent&) {
+                    if (!frame) {
+                        return;
+                    }
+                    frame->Show(true);
+                    frame->Raise();
+                    frame->SetFocus();
+                },
+                id);
+        }
+    }
+}
+
+wxMenu* BuildWindowMenu(WindowManager* window_manager, wxFrame* current_frame) {
     auto* menu = new wxMenu();
-    menu->Append(ID_MENU_NEW_SQL_EDITOR, "New SQL Editor");
-    menu->Append(ID_MENU_NEW_DIAGRAM, "New Diagram");
-    menu->AppendSeparator();
-    menu->Append(ID_MENU_MONITORING, "Monitoring");
-    menu->Append(ID_MENU_USERS_ROLES, "Users & Roles");
+    PopulateWindowMenu(menu, window_manager, current_frame);
     return menu;
 }
 
@@ -113,10 +181,15 @@ wxMenu* BuildHelpMenu() {
 
 } // namespace
 
-wxMenuBar* BuildMenuBar(const MenuBuildOptions& options) {
+wxMenuBar* BuildMenuBar(const MenuBuildOptions& options,
+                        WindowManager* window_manager,
+                        wxFrame* current_frame) {
     auto* menu_bar = new wxMenuBar();
     if (options.includeConnections) {
         menu_bar->Append(BuildConnectionsMenu(), "Connections");
+    }
+    if (options.includeObjects) {
+        menu_bar->Append(BuildObjectsMenu(), "Objects");
     }
     if (options.includeEdit) {
         menu_bar->Append(BuildEditMenu(), "Edit");
@@ -125,12 +198,26 @@ wxMenuBar* BuildMenuBar(const MenuBuildOptions& options) {
         menu_bar->Append(BuildViewMenu(), "View");
     }
     if (options.includeWindow) {
-        menu_bar->Append(BuildWindowMenu(), "Window");
+        auto* window_menu = BuildWindowMenu(window_manager, current_frame);
+        menu_bar->Append(window_menu, "Window");
+        if (current_frame) {
+            current_frame->Bind(wxEVT_MENU_OPEN,
+                [window_menu, window_manager, current_frame](wxMenuEvent& event) {
+                    if (event.GetMenu() == window_menu) {
+                        PopulateWindowMenu(window_menu, window_manager, current_frame);
+                    }
+                    event.Skip();
+                });
+        }
     }
     if (options.includeHelp) {
         menu_bar->Append(BuildHelpMenu(), "Help");
     }
     return menu_bar;
+}
+
+wxMenuBar* BuildMenuBar(const MenuBuildOptions& options) {
+    return BuildMenuBar(options, nullptr, nullptr);
 }
 
 } // namespace scratchrobin

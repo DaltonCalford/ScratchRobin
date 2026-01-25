@@ -12,6 +12,10 @@ ScratchRobin UI and tooling.
 - [UI Icon Assets](UI_ICON_ASSETS.md)
 - [Context-Sensitive Help](CONTEXT_SENSITIVE_HELP.md)
 - [Job Scheduler UI](JOB_SCHEDULER_UI.md)
+- [Domain Manager UI](DOMAIN_MANAGER_UI.md)
+- [Schema Manager UI](SCHEMA_MANAGER_UI.md)
+- [Table Designer UI](TABLE_DESIGNER_UI.md)
+- [Index Designer UI](INDEX_DESIGNER_UI.md)
 
 ## Diagramming
 

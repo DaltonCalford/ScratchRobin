@@ -40,6 +40,11 @@ private:
     void OnTreeOpenEditor(wxCommandEvent& event);
     void OnOpenMonitoring(wxCommandEvent& event);
     void OnOpenUsersRoles(wxCommandEvent& event);
+    void OnOpenJobScheduler(wxCommandEvent& event);
+    void OnOpenDomainManager(wxCommandEvent& event);
+    void OnOpenSchemaManager(wxCommandEvent& event);
+    void OnOpenTableDesigner(wxCommandEvent& event);
+    void OnOpenIndexDesigner(wxCommandEvent& event);
     void OnTreeCopyName(wxCommandEvent& event);
     void OnTreeCopyDdl(wxCommandEvent& event);
     void OnTreeShowDependencies(wxCommandEvent& event);

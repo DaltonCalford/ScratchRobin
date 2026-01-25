@@ -4,8 +4,10 @@
 #include <cmath>
 #include <vector>
 
+#include <wx/cursor.h>
 #include <wx/dcbuffer.h>
 #include <wx/geometry.h>
+#include <wx/utils.h>
 
 namespace scratchrobin {
 
@@ -16,6 +18,12 @@ namespace {
 constexpr double kMinZoom = 0.1;
 constexpr double kMaxZoom = 4.0;
 constexpr double kZoomStep = 0.1;
+constexpr double kMinErdWidth = 160.0;
+constexpr double kMinErdHeight = 120.0;
+constexpr double kMinSilverWidth = 120.0;
+constexpr double kMinSilverHeight = 100.0;
+constexpr int kHandleSize = 8;
+constexpr int kEdgeEndpointRadius = 10;
 
 wxColour GridColor() {
     return wxColour(55, 55, 55);
@@ -429,19 +437,58 @@ void DiagramCanvas::OnPaint(wxPaintEvent&) {
 void DiagramCanvas::OnLeftDown(wxMouseEvent& event) {
     SetFocus();
     wxPoint world_point = ScreenToWorld(event.GetPosition());
-    auto node_hit = HitTestNode(world_point);
-    if (node_hit.has_value()) {
-        UpdateSelection(node_hit, std::nullopt);
-        const auto& node = model_.nodes()[*node_hit];
-        dragging_index_ = node_hit;
-        drag_offset_.m_x = world_point.x - node.x;
-        drag_offset_.m_y = world_point.y - node.y;
-    } else {
-        auto edge_hit = HitTestEdge(world_point);
-        UpdateSelection(std::nullopt, edge_hit);
-        dragging_index_.reset();
+    bool capture = false;
+
+    if (selected_index_.has_value()) {
+        const auto& node = model_.nodes()[*selected_index_];
+        ResizeHandle handle = HitTestResizeHandle(node, world_point);
+        if (handle != ResizeHandle::None) {
+            resizing_index_ = selected_index_;
+            resize_handle_ = handle;
+            resize_start_rect_ = WorldRectForNode(node);
+            resize_start_point_ = wxPoint2DDouble(world_point.x, world_point.y);
+            capture = true;
+        }
     }
-    CaptureMouse();
+
+    if (!capture && selected_edge_index_.has_value()) {
+        EdgeDragEndpoint endpoint = HitTestEdgeEndpoint(*selected_edge_index_, world_point);
+        if (endpoint != EdgeDragEndpoint::None) {
+            dragging_edge_index_ = selected_edge_index_;
+            edge_drag_endpoint_ = endpoint;
+            edge_drag_point_ = world_point;
+            capture = true;
+        }
+    }
+
+    if (!capture) {
+        auto node_hit = HitTestNode(world_point);
+        if (node_hit.has_value()) {
+            UpdateSelection(node_hit, std::nullopt);
+            const auto& node = model_.nodes()[*node_hit];
+            dragging_index_ = node_hit;
+            drag_offset_.m_x = world_point.x - node.x;
+            drag_offset_.m_y = world_point.y - node.y;
+            capture = true;
+        } else {
+            auto edge_hit = HitTestEdge(world_point);
+            UpdateSelection(std::nullopt, edge_hit);
+            dragging_index_.reset();
+            if (edge_hit.has_value()) {
+                EdgeDragEndpoint endpoint = HitTestEdgeEndpoint(*edge_hit, world_point);
+                if (endpoint != EdgeDragEndpoint::None) {
+                    dragging_edge_index_ = edge_hit;
+                    edge_drag_endpoint_ = endpoint;
+                    edge_drag_point_ = world_point;
+                    capture = true;
+                }
+            }
+        }
+    }
+
+    if (capture) {
+        CaptureMouse();
+    }
 }
 
 void DiagramCanvas::OnLeftUp(wxMouseEvent&) {
@@ -449,6 +496,24 @@ void DiagramCanvas::OnLeftUp(wxMouseEvent&) {
         ReleaseMouse();
     }
     dragging_index_.reset();
+    resizing_index_.reset();
+    resize_handle_ = ResizeHandle::None;
+    if (dragging_edge_index_.has_value()) {
+        wxPoint world_point = ScreenToWorld(ScreenToClient(wxGetMousePosition()));
+        auto node_hit = HitTestNode(world_point);
+        if (node_hit.has_value()) {
+            auto& edge = model_.edges()[*dragging_edge_index_];
+            const auto& node = model_.nodes()[*node_hit];
+            if (edge_drag_endpoint_ == EdgeDragEndpoint::Source && node.id != edge.target_id) {
+                edge.source_id = node.id;
+            } else if (edge_drag_endpoint_ == EdgeDragEndpoint::Target && node.id != edge.source_id) {
+                edge.target_id = node.id;
+            }
+        }
+        dragging_edge_index_.reset();
+        edge_drag_endpoint_ = EdgeDragEndpoint::None;
+        Refresh();
+    }
 }
 
 void DiagramCanvas::OnRightDown(wxMouseEvent& event) {
@@ -465,6 +530,17 @@ void DiagramCanvas::OnRightUp(wxMouseEvent&) {
 }
 
 void DiagramCanvas::OnMotion(wxMouseEvent& event) {
+    if (resizing_index_.has_value() && event.Dragging() && event.LeftIsDown()) {
+        ApplyResize(ScreenToWorld(event.GetPosition()));
+        return;
+    }
+
+    if (dragging_edge_index_.has_value() && event.Dragging() && event.LeftIsDown()) {
+        edge_drag_point_ = ScreenToWorld(event.GetPosition());
+        Refresh();
+        return;
+    }
+
     if (dragging_index_.has_value() && event.Dragging() && event.LeftIsDown()) {
         wxPoint world_point = ScreenToWorld(event.GetPosition());
         auto& node = model_.nodes()[*dragging_index_];
@@ -481,7 +557,10 @@ void DiagramCanvas::OnMotion(wxMouseEvent& event) {
         pan_offset_.m_y += delta.y / zoom_;
         last_mouse_ = current;
         Refresh();
+        return;
     }
+
+    UpdateHoverCursor(ScreenToWorld(event.GetPosition()));
 }
 
 void DiagramCanvas::OnMouseWheel(wxMouseEvent& event) {
@@ -517,6 +596,32 @@ wxPoint DiagramCanvas::ScreenToWorld(const wxPoint& point) const {
 
 wxRect2DDouble DiagramCanvas::WorldRectForNode(const DiagramNode& node) const {
     return wxRect2DDouble(node.x, node.y, node.width, node.height);
+}
+
+wxPoint DiagramCanvas::ComputeNodeCenter(const DiagramNode& node) const {
+    return wxPoint(static_cast<int>(node.x + node.width / 2.0),
+                   static_cast<int>(node.y + node.height / 2.0));
+}
+
+wxPoint DiagramCanvas::ComputeEdgeAnchor(const DiagramNode& node, const wxPoint& toward) const {
+    wxPoint center = ComputeNodeCenter(node);
+    double dx = toward.x - center.x;
+    double dy = toward.y - center.y;
+    if (std::abs(dx) < 0.001 && std::abs(dy) < 0.001) {
+        return center;
+    }
+    double half_w = node.width / 2.0;
+    double half_h = node.height / 2.0;
+    double abs_dx = std::abs(dx);
+    double abs_dy = std::abs(dy);
+    double scale = 1.0;
+    if (abs_dx * half_h > abs_dy * half_w) {
+        scale = half_w / abs_dx;
+    } else {
+        scale = half_h / abs_dy;
+    }
+    return wxPoint(static_cast<int>(center.x + dx * scale),
+                   static_cast<int>(center.y + dy * scale));
 }
 
 void DiagramCanvas::DrawGrid(wxDC& dc) {
@@ -567,12 +672,19 @@ void DiagramCanvas::DrawEdges(wxDC& dc) {
             pen.SetStyle(wxPENSTYLE_SHORT_DASH);
         }
         dc.SetPen(pen);
-        wxRect2DDouble source_rect = WorldRectForNode(*source_it);
-        wxRect2DDouble target_rect = WorldRectForNode(*target_it);
-        wxPoint source(static_cast<int>(source_rect.m_x + source_rect.m_width / 2.0),
-                       static_cast<int>(source_rect.m_y + source_rect.m_height / 2.0));
-        wxPoint target(static_cast<int>(target_rect.m_x + target_rect.m_width / 2.0),
-                       static_cast<int>(target_rect.m_y + target_rect.m_height / 2.0));
+        wxPoint source_center = ComputeNodeCenter(*source_it);
+        wxPoint target_center = ComputeNodeCenter(*target_it);
+        wxPoint source = ComputeEdgeAnchor(*source_it, target_center);
+        wxPoint target = ComputeEdgeAnchor(*target_it, source_center);
+        if (dragging_edge_index_.has_value() && *dragging_edge_index_ == index) {
+            if (edge_drag_endpoint_ == EdgeDragEndpoint::Source) {
+                source = edge_drag_point_;
+                target = ComputeEdgeAnchor(*target_it, source);
+            } else if (edge_drag_endpoint_ == EdgeDragEndpoint::Target) {
+                target = edge_drag_point_;
+                source = ComputeEdgeAnchor(*source_it, target);
+            }
+        }
 
         std::vector<wxPoint> path = BuildOrthogonalPath(source, target);
         for (size_t i = 0; i + 1 < path.size(); ++i) {
@@ -605,8 +717,9 @@ void DiagramCanvas::DrawEdges(wxDC& dc) {
         if (!edge.label.empty()) {
             LabelAnchor anchor = ComputeLabelAnchor(path);
             wxPoint2DDouble perp(-anchor.direction.m_y, anchor.direction.m_x);
-            wxPoint label_pos(static_cast<int>(anchor.point.x + perp.m_x * 8.0),
-                              static_cast<int>(anchor.point.y + perp.m_y * 8.0));
+            double offset = 8.0 * static_cast<double>(edge.label_offset);
+            wxPoint label_pos(static_cast<int>(anchor.point.x + perp.m_x * offset),
+                              static_cast<int>(anchor.point.y + perp.m_y * offset));
             wxSize text_size = dc.GetTextExtent(edge.label);
             wxRect label_rect(label_pos.x - text_size.x / 2 - 4,
                               label_pos.y - text_size.y / 2 - 2,
@@ -716,7 +829,7 @@ void DiagramCanvas::DrawSelectionHandles(wxDC& dc, const DiagramNode& node) {
     double y = rect.m_y;
     double w = rect.m_width;
     double h = rect.m_height;
-    const int handle = 6;
+    const int handle = kHandleSize;
     const double half = handle / 2.0;
 
     std::vector<wxPoint> points = {
@@ -762,12 +875,10 @@ std::optional<size_t> DiagramCanvas::HitTestEdge(const wxPoint& world_point) con
         if (source_it == model_.nodes().end() || target_it == model_.nodes().end()) {
             continue;
         }
-        wxRect2DDouble source_rect = WorldRectForNode(*source_it);
-        wxRect2DDouble target_rect = WorldRectForNode(*target_it);
-        wxPoint source(static_cast<int>(source_rect.m_x + source_rect.m_width / 2.0),
-                       static_cast<int>(source_rect.m_y + source_rect.m_height / 2.0));
-        wxPoint target(static_cast<int>(target_rect.m_x + target_rect.m_width / 2.0),
-                       static_cast<int>(target_rect.m_y + target_rect.m_height / 2.0));
+        wxPoint source_center = ComputeNodeCenter(*source_it);
+        wxPoint target_center = ComputeNodeCenter(*target_it);
+        wxPoint source = ComputeEdgeAnchor(*source_it, target_center);
+        wxPoint target = ComputeEdgeAnchor(*target_it, source_center);
         std::vector<wxPoint> path = BuildOrthogonalPath(source, target);
         for (size_t seg = 0; seg + 1 < path.size(); ++seg) {
             double distance = DistancePointToSegment(world_point, path[seg], path[seg + 1]);
@@ -777,6 +888,66 @@ std::optional<size_t> DiagramCanvas::HitTestEdge(const wxPoint& world_point) con
         }
     }
     return std::nullopt;
+}
+
+ResizeHandle DiagramCanvas::HitTestResizeHandle(const DiagramNode& node, const wxPoint& world_point) const {
+    double x = node.x;
+    double y = node.y;
+    double w = node.width;
+    double h = node.height;
+    double half = kHandleSize / 2.0;
+
+    struct HandlePoint {
+        ResizeHandle handle;
+        double hx;
+        double hy;
+    };
+    std::vector<HandlePoint> handles = {
+        {ResizeHandle::TopLeft, x, y},
+        {ResizeHandle::Top, x + w / 2.0, y},
+        {ResizeHandle::TopRight, x + w, y},
+        {ResizeHandle::Right, x + w, y + h / 2.0},
+        {ResizeHandle::BottomRight, x + w, y + h},
+        {ResizeHandle::Bottom, x + w / 2.0, y + h},
+        {ResizeHandle::BottomLeft, x, y + h},
+        {ResizeHandle::Left, x, y + h / 2.0}
+    };
+    for (const auto& handle : handles) {
+        if (std::abs(world_point.x - handle.hx) <= half &&
+            std::abs(world_point.y - handle.hy) <= half) {
+            return handle.handle;
+        }
+    }
+    return ResizeHandle::None;
+}
+
+EdgeDragEndpoint DiagramCanvas::HitTestEdgeEndpoint(size_t edge_index, const wxPoint& world_point) const {
+    if (edge_index >= model_.edges().size()) {
+        return EdgeDragEndpoint::None;
+    }
+    const auto& edge = model_.edges()[edge_index];
+    auto source_it = std::find_if(model_.nodes().begin(), model_.nodes().end(),
+                                  [&](const DiagramNode& node) { return node.id == edge.source_id; });
+    auto target_it = std::find_if(model_.nodes().begin(), model_.nodes().end(),
+                                  [&](const DiagramNode& node) { return node.id == edge.target_id; });
+    if (source_it == model_.nodes().end() || target_it == model_.nodes().end()) {
+        return EdgeDragEndpoint::None;
+    }
+    wxPoint source_center = ComputeNodeCenter(*source_it);
+    wxPoint target_center = ComputeNodeCenter(*target_it);
+    wxPoint source = ComputeEdgeAnchor(*source_it, target_center);
+    wxPoint target = ComputeEdgeAnchor(*target_it, source_center);
+    double source_dist = std::sqrt(std::pow(world_point.x - source.x, 2) +
+                                   std::pow(world_point.y - source.y, 2));
+    double target_dist = std::sqrt(std::pow(world_point.x - target.x, 2) +
+                                   std::pow(world_point.y - target.y, 2));
+    if (source_dist <= kEdgeEndpointRadius && source_dist <= target_dist) {
+        return EdgeDragEndpoint::Source;
+    }
+    if (target_dist <= kEdgeEndpointRadius) {
+        return EdgeDragEndpoint::Target;
+    }
+    return EdgeDragEndpoint::None;
 }
 
 void DiagramCanvas::UpdateSelection(std::optional<size_t> node_index, std::optional<size_t> edge_index) {
@@ -808,6 +979,119 @@ wxPoint2DDouble DiagramCanvas::NextInsertPosition(double width, double height) {
     double gap = 40.0;
     return wxPoint2DDouble(40.0 + column * (width + gap),
                            40.0 + row * (height + gap));
+}
+
+wxCursor DiagramCanvas::CursorForHandle(ResizeHandle handle) const {
+    switch (handle) {
+        case ResizeHandle::TopLeft:
+        case ResizeHandle::BottomRight:
+            return wxCursor(wxCURSOR_SIZENWSE);
+        case ResizeHandle::TopRight:
+        case ResizeHandle::BottomLeft:
+            return wxCursor(wxCURSOR_SIZENESW);
+        case ResizeHandle::Top:
+        case ResizeHandle::Bottom:
+            return wxCursor(wxCURSOR_SIZENS);
+        case ResizeHandle::Left:
+        case ResizeHandle::Right:
+            return wxCursor(wxCURSOR_SIZEWE);
+        default:
+            return wxCursor(wxCURSOR_ARROW);
+    }
+}
+
+void DiagramCanvas::UpdateHoverCursor(const wxPoint& world_point) {
+    if (selected_index_.has_value()) {
+        const auto& node = model_.nodes()[*selected_index_];
+        ResizeHandle handle = HitTestResizeHandle(node, world_point);
+        if (handle != ResizeHandle::None) {
+            SetCursor(CursorForHandle(handle));
+            return;
+        }
+    }
+    if (selected_edge_index_.has_value()) {
+        EdgeDragEndpoint endpoint = HitTestEdgeEndpoint(*selected_edge_index_, world_point);
+        if (endpoint != EdgeDragEndpoint::None) {
+            SetCursor(wxCursor(wxCURSOR_CROSS));
+            return;
+        }
+    }
+    SetCursor(wxCursor(wxCURSOR_ARROW));
+}
+
+void DiagramCanvas::ApplyResize(const wxPoint& world_point) {
+    if (!resizing_index_.has_value()) {
+        return;
+    }
+    auto& node = model_.nodes()[*resizing_index_];
+    double min_w = model_.type() == DiagramType::Erd ? kMinErdWidth : kMinSilverWidth;
+    double min_h = model_.type() == DiagramType::Erd ? kMinErdHeight : kMinSilverHeight;
+    double dx = world_point.x - resize_start_point_.m_x;
+    double dy = world_point.y - resize_start_point_.m_y;
+    double x = resize_start_rect_.m_x;
+    double y = resize_start_rect_.m_y;
+    double w = resize_start_rect_.m_width;
+    double h = resize_start_rect_.m_height;
+
+    switch (resize_handle_) {
+        case ResizeHandle::TopLeft:
+            x += dx;
+            y += dy;
+            w -= dx;
+            h -= dy;
+            break;
+        case ResizeHandle::Top:
+            y += dy;
+            h -= dy;
+            break;
+        case ResizeHandle::TopRight:
+            y += dy;
+            w += dx;
+            h -= dy;
+            break;
+        case ResizeHandle::Right:
+            w += dx;
+            break;
+        case ResizeHandle::BottomRight:
+            w += dx;
+            h += dy;
+            break;
+        case ResizeHandle::Bottom:
+            h += dy;
+            break;
+        case ResizeHandle::BottomLeft:
+            x += dx;
+            w -= dx;
+            h += dy;
+            break;
+        case ResizeHandle::Left:
+            x += dx;
+            w -= dx;
+            break;
+        default:
+            break;
+    }
+
+    if (w < min_w) {
+        if (resize_handle_ == ResizeHandle::TopLeft || resize_handle_ == ResizeHandle::Left ||
+            resize_handle_ == ResizeHandle::BottomLeft) {
+            x -= (min_w - w);
+        }
+        w = min_w;
+    }
+    if (h < min_h) {
+        if (resize_handle_ == ResizeHandle::TopLeft || resize_handle_ == ResizeHandle::Top ||
+            resize_handle_ == ResizeHandle::TopRight) {
+            y -= (min_h - h);
+        }
+        h = min_h;
+    }
+
+    node.x = x;
+    node.y = y;
+    node.width = w;
+    node.height = h;
+    Refresh();
 }
 
 } // namespace scratchrobin
