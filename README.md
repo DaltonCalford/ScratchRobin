@@ -32,6 +32,49 @@ cmake -S . -B build
 cmake --build build
 ```
 
+### Windows (MinGW cross-compile from Linux)
+
+Prereqs:
+- MinGW-w64 toolchain (x86_64-w64-mingw32)
+- wxWidgets built for MinGW (see `/home/dcalford/CliWork/wxwidgets-3.2.9-mingw64`)
+
+Configure/build:
+```bash
+cmake -S . -B build-mingw64 \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw64.cmake \
+  -DwxWidgets_CONFIG_EXECUTABLE=/home/dcalford/CliWork/wxwidgets-3.2.9-mingw64/bin/wx-config \
+  -DSCRATCHROBIN_USE_LIBSECRET=OFF \
+  -DSCRATCHROBIN_USE_LIBPQ=OFF \
+  -DSCRATCHROBIN_USE_MYSQL=OFF \
+  -DSCRATCHROBIN_USE_FIREBIRD=OFF \
+  -DSCRATCHROBIN_USE_SCRATCHBIRD=OFF
+cmake --build build-mingw64
+```
+Resulting binary: `build-mingw64/scratchrobin.exe`
+
+### Windows (MSVC native)
+
+Prereqs:
+- Visual Studio 2022 (C++ workload)
+- CMake 3.20+
+- wxWidgets built with MSVC (or installed via vcpkg)
+
+Configure/build (Developer Command Prompt):
+```cmd
+cmake -S . -B build-msvc -G "Visual Studio 17 2022" -A x64 ^
+  -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/msvc.cmake ^
+  -DwxWidgets_ROOT_DIR=C:\wxwidgets ^
+  -DSCRATCHROBIN_USE_LIBSECRET=OFF ^
+  -DSCRATCHROBIN_USE_LIBPQ=OFF ^
+  -DSCRATCHROBIN_USE_MYSQL=OFF ^
+  -DSCRATCHROBIN_USE_FIREBIRD=OFF ^
+  -DSCRATCHROBIN_USE_SCRATCHBIRD=OFF
+cmake --build build-msvc --config Release
+```
+
+If you use vcpkg for wxWidgets, omit `msvc.cmake` and pass:
+`-DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake`.
+
 Firebird detection note: if the client libraries live outside system paths,
 set `FIREBIRD_ROOT=/opt/firebird` (default) or add the prefix to `CMAKE_PREFIX_PATH`.
 
