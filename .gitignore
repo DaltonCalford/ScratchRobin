@@ -32,3 +32,8 @@ Makefile
 # OS files
 .DS_Store
 Thumbs.db
+
+# Keep toolchain files tracked.
+!cmake/
+!cmake/toolchains/
+!cmake/toolchains/*.cmake
