@@ -1,3 +1,12 @@
+/*
+ * ScratchRobin
+ * Copyright (c) 2025-2026 Dalton Calford
+ *
+ * Licensed under the Initial Developer's Public License Version 1.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ * https://www.firebirdsql.org/en/initial-developer-s-public-license-version-1-0/
+ */
 #ifndef SCRATCHROBIN_CONNECTION_MANAGER_H
 #define SCRATCHROBIN_CONNECTION_MANAGER_H
 
@@ -23,7 +32,14 @@ struct ConnectionProfile {
     std::string database;
     std::string username;
     std::string credentialId;
+    std::string applicationName;
+    std::string role;
     std::string sslMode;
+    std::string sslRootCert;
+    std::string sslCert;
+    std::string sslKey;
+    std::string sslPassword;
+    std::string options;
     std::string backend;
     std::string fixturePath;
 };

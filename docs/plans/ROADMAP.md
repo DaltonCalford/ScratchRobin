@@ -25,7 +25,7 @@ ScratchBird network listeners are not ready yet, so early phases rely on a mock 
 - Surface server notices, warnings, and error stacks in UI. (Done)
 
 ## Phase 3: Metadata System (In progress)
-- Live catalog fetch (information_schema + ScratchBird catalogs). (Pending on listeners)
+- Live catalog fetch (information_schema + ScratchBird catalogs). (Done; depends on listener availability)
 - Recursive schema paths and emulated catalog support. (Done, fixture-backed)
 - Metadata cache + observer refresh on DDL. (Done, fixture-backed)
 - Tree search/filter and object context menus. (Done)
@@ -45,7 +45,7 @@ ScratchBird network listeners are not ready yet, so early phases rely on a mock 
 ## Phase 5: Admin Tools (Pending)
 - Users/roles/groups management UI. (In progress: users/roles browser + membership tab + templates)
 - Backup/restore UI tied to ScratchBird tooling.
-- Monitoring panels (sessions, locks, perf counters). (In progress: external backends wired + statements/long-running views)
+- Monitoring panels (sessions, transactions, locks, perf, table stats, I/O stats). (In progress)
 
 ## Phase 6: Beta Placeholders (Pending)
 - Replication and cluster/HA panels as disabled stubs.

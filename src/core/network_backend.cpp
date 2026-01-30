@@ -1,3 +1,12 @@
+/*
+ * ScratchRobin
+ * Copyright (c) 2025-2026 Dalton Calford
+ *
+ * Licensed under the Initial Developer's Public License Version 1.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ * https://www.firebirdsql.org/en/initial-developer-s-public-license-version-1-0/
+ */
 #include "network_backend.h"
 
 #include <algorithm>
@@ -210,11 +219,24 @@ public:
         net_config.database = config.database;
         net_config.username = config.username;
         net_config.password = config.password;
-        net_config.application_name = "scratchrobin";
+        if (!config.applicationName.empty()) {
+            net_config.application_name = config.applicationName;
+        } else {
+            net_config.application_name = "scratchrobin";
+        }
         net_config.connect_timeout_ms = static_cast<uint32_t>(config.connectTimeoutMs);
         net_config.read_timeout_ms = static_cast<uint32_t>(config.readTimeoutMs);
         net_config.write_timeout_ms = static_cast<uint32_t>(config.writeTimeoutMs);
         net_config.ssl_mode = ParseSslMode(config.sslMode);
+        if (!config.sslCert.empty()) {
+            net_config.ssl_cert = config.sslCert;
+        }
+        if (!config.sslKey.empty()) {
+            net_config.ssl_key = config.sslKey;
+        }
+        if (!config.sslRootCert.empty()) {
+            net_config.ssl_root_cert = config.sslRootCert;
+        }
 
         scratchbird::core::ErrorContext ctx;
         auto status = client_.connect(net_config, &ctx);
@@ -338,9 +360,13 @@ public:
         caps.supportsCancel = false;
         caps.supportsTransactions = true;
         caps.supportsPaging = true;
-        caps.supportsUserAdmin = false;
-        caps.supportsRoleAdmin = false;
-        caps.supportsGroupAdmin = false;
+        caps.supportsExplain = true;
+        caps.supportsSblr = true;
+        caps.supportsDdlExtract = true;
+        caps.supportsDependencies = true;
+        caps.supportsUserAdmin = true;
+        caps.supportsRoleAdmin = true;
+        caps.supportsGroupAdmin = true;
         return caps;
     }
 
