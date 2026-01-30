@@ -32,13 +32,18 @@ Each backend is compiled only when its client library is detected. If not
 available, `ConnectionManager` returns a clear error.
 
 ## Connection Profile Fields
-Existing fields already cover most needs:
+Existing fields cover most needs:
 - `host`, `port`, `database`, `username`, `credentialId`, `sslMode`.
 - `backend` selects the adapter.
 
-Planned additions (if needed):
-- `options` (string) for extra DSN flags (e.g., `application_name` for libpq).
-- `service` (string) for Firebird service manager operations later.
+Implemented additions:
+- `application_name` (native + PostgreSQL).
+- `role` (PostgreSQL options, Firebird SQL role).
+- `ssl_root_cert`, `ssl_cert`, `ssl_key`, `ssl_password` (backend support varies).
+- `options` (string) for extra DSN flags (libpq `options`).
+
+Planned (later):
+- `service` (string) for Firebird service manager operations.
 
 ## Capability Flags
 Initial defaults per backend:

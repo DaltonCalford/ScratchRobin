@@ -1,3 +1,12 @@
+/*
+ * ScratchRobin
+ * Copyright (c) 2025-2026 Dalton Calford
+ *
+ * Licensed under the Initial Developer's Public License Version 1.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ * https://www.firebirdsql.org/en/initial-developer-s-public-license-version-1-0/
+ */
 #include "mysql_backend.h"
 
 #include <algorithm>
@@ -167,6 +176,21 @@ public:
                 ssl_mode = SSL_MODE_PREFERRED;
             }
             mysql_options(conn, MYSQL_OPT_SSL_MODE, &ssl_mode);
+        }
+#endif
+#ifdef MYSQL_OPT_SSL_CA
+        if (!config.sslRootCert.empty()) {
+            mysql_options(conn, MYSQL_OPT_SSL_CA, config.sslRootCert.c_str());
+        }
+#endif
+#ifdef MYSQL_OPT_SSL_CERT
+        if (!config.sslCert.empty()) {
+            mysql_options(conn, MYSQL_OPT_SSL_CERT, config.sslCert.c_str());
+        }
+#endif
+#ifdef MYSQL_OPT_SSL_KEY
+        if (!config.sslKey.empty()) {
+            mysql_options(conn, MYSQL_OPT_SSL_KEY, config.sslKey.c_str());
         }
 #endif
 

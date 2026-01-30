@@ -1,3 +1,12 @@
+/*
+ * ScratchRobin
+ * Copyright (c) 2025-2026 Dalton Calford
+ *
+ * Licensed under the Initial Developer's Public License Version 1.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ * https://www.firebirdsql.org/en/initial-developer-s-public-license-version-1-0/
+ */
 #include "monitoring_frame.h"
 
 #include "diagram_frame.h"
@@ -35,10 +44,14 @@ constexpr int kMenuRefresh = wxID_HIGHEST + 22;
 constexpr int kConnectionChoiceId = wxID_HIGHEST + 23;
 constexpr int kViewChoiceId = wxID_HIGHEST + 24;
 constexpr int kViewSessions = 0;
-constexpr int kViewLocks = 1;
-constexpr int kViewPerf = 2;
+constexpr int kViewTransactions = 1;
+constexpr int kViewLocks = 2;
 constexpr int kViewStatements = 3;
 constexpr int kViewLongRunning = 4;
+constexpr int kViewPerformance = 5;
+constexpr int kViewTableStats = 6;
+constexpr int kViewIoStats = 7;
+constexpr int kViewBgWriter = 8;
 
 std::string Trim(std::string value) {
     auto not_space = [](unsigned char ch) { return !std::isspace(ch); };
@@ -100,15 +113,17 @@ bool BuildMonitoringQuery(const std::string& backend,
                 "client_addr, client_port, state, connected_at, last_activity_at, "
                 "transaction_id, statement_id, current_query, wait_event, wait_resource "
                 "FROM sys.sessions ORDER BY connected_at DESC;";
+        } else if (view_index == kViewTransactions) {
+            *out_query =
+                "SELECT transaction_id, transaction_uuid, session_id, state, isolation_level, "
+                "read_only, start_time, duration_ms, current_query, wait_event, wait_resource, "
+                "locks_held, pages_modified "
+                "FROM sys.transactions ORDER BY start_time DESC;";
         } else if (view_index == kViewLocks) {
             *out_query =
                 "SELECT lock_id, lock_type, lock_mode, granted, lock_state, relation_name, "
                 "transaction_id, session_id, wait_start "
                 "FROM sys.locks ORDER BY lock_id;";
-        } else if (view_index == kViewPerf) {
-            *out_query =
-                "SELECT metric, value, unit, scope, database_name, updated_at "
-                "FROM sys.performance ORDER BY metric;";
         } else if (view_index == kViewStatements) {
             *out_query =
                 "SELECT statement_id, session_id, transaction_id, state, start_time, "
@@ -120,6 +135,26 @@ bool BuildMonitoringQuery(const std::string& backend,
                 "elapsed_ms, rows_processed, wait_event, wait_resource, sql_text "
                 "FROM sys.statements WHERE elapsed_ms > 5000 "
                 "ORDER BY elapsed_ms DESC;";
+        } else if (view_index == kViewPerformance) {
+            *out_query =
+                "SELECT metric, value, unit, scope, database_name, updated_at "
+                "FROM sys.performance ORDER BY metric;";
+        } else if (view_index == kViewTableStats) {
+            *out_query =
+                "SELECT schema_name, table_name, seq_scan_count, seq_rows_read, "
+                "idx_scan_count, idx_rows_fetch, rows_inserted, rows_updated, rows_deleted, "
+                "live_rows_estimate, dead_rows_estimate, last_vacuum_at, last_analyze_at "
+                "FROM sys.table_stats ORDER BY schema_name, table_name;";
+        } else if (view_index == kViewIoStats) {
+            *out_query =
+                "SELECT stat_group, stat_id, session_id, transaction_id, statement_id, "
+                "page_reads, page_writes, page_fetches, page_marks "
+                "FROM sys.io_stats ORDER BY stat_group, stat_id;";
+        } else {
+            if (out_message) {
+                *out_message = "Unsupported monitoring view for ScratchBird";
+            }
+            return false;
         }
         return true;
     }
@@ -130,6 +165,13 @@ bool BuildMonitoringQuery(const std::string& backend,
                 "SELECT pid, usename, datname, client_addr, state, "
                 "backend_start, xact_start, query_start, wait_event_type, wait_event, query "
                 "FROM pg_stat_activity ORDER BY pid;";
+        } else if (view_index == kViewTransactions) {
+            *out_query =
+                "SELECT pid, usename, datname, xact_start, "
+                "now() - xact_start AS duration, state, wait_event_type, wait_event, query "
+                "FROM pg_stat_activity "
+                "WHERE xact_start IS NOT NULL "
+                "ORDER BY xact_start;";
         } else if (view_index == kViewLocks) {
             *out_query =
                 "SELECT l.pid, l.locktype, l.mode, l.granted, n.nspname, c.relname "
@@ -137,12 +179,6 @@ bool BuildMonitoringQuery(const std::string& backend,
                 "LEFT JOIN pg_class c ON l.relation = c.oid "
                 "LEFT JOIN pg_namespace n ON c.relnamespace = n.oid "
                 "ORDER BY l.pid;";
-        } else if (view_index == kViewPerf) {
-            *out_query =
-                "SELECT datname, numbackends, xact_commit, xact_rollback, "
-                "blks_read, blks_hit, tup_returned, tup_fetched, "
-                "tup_inserted, tup_updated, tup_deleted "
-                "FROM pg_stat_database ORDER BY datname;";
         } else if (view_index == kViewStatements) {
             *out_query =
                 "SELECT pid, usename, datname, state, query_start, query "
@@ -156,6 +192,36 @@ bool BuildMonitoringQuery(const std::string& backend,
                 "FROM pg_stat_activity "
                 "WHERE state <> 'idle' AND query_start IS NOT NULL "
                 "ORDER BY duration DESC;";
+        } else if (view_index == kViewPerformance) {
+            *out_query =
+                "SELECT datname, numbackends, xact_commit, xact_rollback, "
+                "blks_read, blks_hit, tup_returned, tup_fetched, "
+                "tup_inserted, tup_updated, tup_deleted "
+                "FROM pg_stat_database ORDER BY datname;";
+        } else if (view_index == kViewTableStats) {
+            *out_query =
+                "SELECT schemaname, relname, seq_scan, seq_tup_read, "
+                "idx_scan, idx_tup_fetch, n_tup_ins, n_tup_upd, n_tup_del, "
+                "n_live_tup, n_dead_tup, last_vacuum, last_autovacuum, "
+                "last_analyze, last_autoanalyze "
+                "FROM pg_stat_all_tables "
+                "ORDER BY schemaname, relname;";
+        } else if (view_index == kViewIoStats) {
+            *out_query =
+                "SELECT schemaname, relname, heap_blks_read, heap_blks_hit, "
+                "idx_blks_read, idx_blks_hit, toast_blks_read, toast_blks_hit "
+                "FROM pg_statio_all_tables "
+                "ORDER BY schemaname, relname;";
+        } else if (view_index == kViewBgWriter) {
+            *out_query =
+                "SELECT checkpoints_timed, checkpoints_req, buffers_checkpoint, "
+                "buffers_clean, buffers_backend, maxwritten_clean, buffers_alloc "
+                "FROM pg_stat_bgwriter;";
+        } else {
+            if (out_message) {
+                *out_message = "Unsupported monitoring view for PostgreSQL";
+            }
+            return false;
         }
         return true;
     }
@@ -165,18 +231,14 @@ bool BuildMonitoringQuery(const std::string& backend,
             *out_query =
                 "SELECT ID, USER, HOST, DB, COMMAND, TIME, STATE, INFO "
                 "FROM information_schema.PROCESSLIST ORDER BY ID;";
+        } else if (view_index == kViewTransactions) {
+            *out_query =
+                "SELECT trx_id, trx_state, trx_started, trx_mysql_thread_id, trx_query "
+                "FROM information_schema.innodb_trx ORDER BY trx_started;";
         } else if (view_index == kViewLocks) {
             *out_query =
                 "SELECT ENGINE, LOCK_ID, LOCK_TYPE, LOCK_MODE, LOCK_STATUS, LOCK_DATA "
                 "FROM performance_schema.data_locks ORDER BY ENGINE, LOCK_ID;";
-        } else if (view_index == kViewPerf) {
-            *out_query =
-                "SELECT VARIABLE_NAME, VARIABLE_VALUE "
-                "FROM performance_schema.global_status "
-                "WHERE VARIABLE_NAME IN ("
-                "'Threads_connected','Threads_running','Connections','Uptime',"
-                "'Questions','Queries','Com_select','Com_insert','Com_update','Com_delete'"
-                ") ORDER BY VARIABLE_NAME;";
         } else if (view_index == kViewStatements) {
             *out_query =
                 "SELECT THREAD_ID, EVENT_ID, EVENT_NAME, SQL_TEXT, TIMER_WAIT "
@@ -188,6 +250,31 @@ bool BuildMonitoringQuery(const std::string& backend,
                 "FROM information_schema.PROCESSLIST "
                 "WHERE COMMAND <> 'Sleep' "
                 "ORDER BY TIME DESC;";
+        } else if (view_index == kViewPerformance) {
+            *out_query =
+                "SELECT VARIABLE_NAME, VARIABLE_VALUE "
+                "FROM performance_schema.global_status "
+                "WHERE VARIABLE_NAME IN ("
+                "'Threads_connected','Threads_running','Connections','Uptime',"
+                "'Questions','Queries','Com_select','Com_insert','Com_update','Com_delete'"
+                ") ORDER BY VARIABLE_NAME;";
+        } else if (view_index == kViewTableStats) {
+            *out_query =
+                "SELECT OBJECT_SCHEMA, OBJECT_NAME, COUNT_READ, COUNT_WRITE, "
+                "COUNT_FETCH, COUNT_INSERT, COUNT_UPDATE, COUNT_DELETE "
+                "FROM performance_schema.table_io_waits_summary_by_table "
+                "ORDER BY OBJECT_SCHEMA, OBJECT_NAME;";
+        } else if (view_index == kViewIoStats) {
+            *out_query =
+                "SELECT FILE_NAME, EVENT_NAME, COUNT_READ, SUM_TIMER_READ, "
+                "COUNT_WRITE, SUM_TIMER_WRITE "
+                "FROM performance_schema.file_summary_by_instance "
+                "ORDER BY FILE_NAME;";
+        } else {
+            if (out_message) {
+                *out_message = "Unsupported monitoring view for MySQL";
+            }
+            return false;
         }
         return true;
     }
@@ -198,15 +285,16 @@ bool BuildMonitoringQuery(const std::string& backend,
                 "SELECT MON$ATTACHMENT_ID, MON$USER, MON$REMOTE_ADDRESS, "
                 "MON$REMOTE_PROTOCOL, MON$REMOTE_PID, MON$STATE "
                 "FROM MON$ATTACHMENTS ORDER BY MON$ATTACHMENT_ID;";
+        } else if (view_index == kViewTransactions) {
+            *out_query =
+                "SELECT MON$TRANSACTION_ID, MON$STATE, MON$TIMESTAMP, "
+                "MON$ISOLATION_MODE, MON$READ_ONLY, MON$LOCK_TIMEOUT, "
+                "MON$ATTACHMENT_ID "
+                "FROM MON$TRANSACTIONS ORDER BY MON$TRANSACTION_ID;";
         } else if (view_index == kViewLocks) {
             *out_query =
                 "SELECT MON$LOCK_ID, MON$LOCK_TYPE, MON$LOCK_MODE, MON$LOCK_STATE, "
                 "MON$OBJECT_NAME FROM MON$LOCKS ORDER BY MON$LOCK_ID;";
-        } else if (view_index == kViewPerf) {
-            *out_query =
-                "SELECT MON$PAGE_SIZE, MON$ODS_MAJOR, MON$ODS_MINOR, "
-                "MON$ALLOCATED_PAGES, MON$PAGE_BUFFERS, MON$NEXT_TRANSACTION, "
-                "MON$OLDEST_TRANSACTION FROM MON$DATABASE;";
         } else if (view_index == kViewStatements) {
             *out_query =
                 "SELECT MON$STATEMENT_ID, MON$ATTACHMENT_ID, MON$STATE, "
@@ -220,6 +308,27 @@ bool BuildMonitoringQuery(const std::string& backend,
                 "FROM MON$STATEMENTS "
                 "WHERE MON$STATE <> 0 "
                 "ORDER BY DURATION DESC;";
+        } else if (view_index == kViewPerformance) {
+            *out_query =
+                "SELECT MON$PAGE_SIZE, MON$ODS_MAJOR, MON$ODS_MINOR, "
+                "MON$ALLOCATED_PAGES, MON$PAGE_BUFFERS, MON$NEXT_TRANSACTION, "
+                "MON$OLDEST_TRANSACTION FROM MON$DATABASE;";
+        } else if (view_index == kViewTableStats) {
+            *out_query =
+                "SELECT MON$RELATION_NAME, MON$RECORD_SEQ_READS, MON$RECORD_IDX_READS, "
+                "MON$RECORD_INSERTS, MON$RECORD_UPDATES, MON$RECORD_DELETES, "
+                "MON$RECORD_BACKOUTS, MON$RECORD_PURGES, MON$RECORD_EXPUNGES "
+                "FROM MON$TABLE_STATS ORDER BY MON$RELATION_NAME;";
+        } else if (view_index == kViewIoStats) {
+            *out_query =
+                "SELECT MON$STAT_GROUP, MON$STAT_ID, MON$PAGE_READS, MON$PAGE_WRITES, "
+                "MON$PAGE_FETCHES, MON$PAGE_MARKS "
+                "FROM MON$IO_STATS ORDER BY MON$STAT_GROUP, MON$STAT_ID;";
+        } else {
+            if (out_message) {
+                *out_message = "Unsupported monitoring view for Firebird";
+            }
+            return false;
         }
         return true;
     }
@@ -311,10 +420,14 @@ void MonitoringFrame::BuildLayout() {
                   wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
     view_choice_ = new wxChoice(topPanel, kViewChoiceId);
     view_choice_->Append("Sessions");
+    view_choice_->Append("Transactions");
     view_choice_->Append("Locks");
-    view_choice_->Append("Performance");
     view_choice_->Append("Statements");
     view_choice_->Append("Long Running");
+    view_choice_->Append("Performance");
+    view_choice_->Append("Table Stats");
+    view_choice_->Append("I/O Stats");
+    view_choice_->Append("BG Writer");
     view_choice_->SetSelection(0);
     topSizer->Add(view_choice_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
     refresh_button_ = new wxButton(topPanel, kMenuRefresh, "Refresh");

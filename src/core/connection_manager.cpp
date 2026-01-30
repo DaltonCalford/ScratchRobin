@@ -1,3 +1,12 @@
+/*
+ * ScratchRobin
+ * Copyright (c) 2025-2026 Dalton Calford
+ *
+ * Licensed under the Initial Developer's Public License Version 1.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ * https://www.firebirdsql.org/en/initial-developer-s-public-license-version-1-0/
+ */
 #include "connection_manager.h"
 
 #include "connection_backend.h"
@@ -69,7 +78,7 @@ std::unique_ptr<ConnectionBackend> ConnectionManager::CreateBackendForProfile(
         return CreateMockBackend();
     }
 
-    if (backend_name == "network") {
+    if (backend_name == "network" || backend_name == "scratchbird" || backend_name == "native") {
         auto backend = CreateNetworkBackend();
         if (!backend) {
             if (error) {
@@ -141,12 +150,31 @@ bool ConnectionManager::Connect(const ConnectionProfile& profile) {
     config.host = profile.host;
     config.port = profile.port;
     if (config.port == 0) {
-        config.port = kDefaultScratchBirdPort;
+        std::string backend_name = ToLower(Trim(profile.backend));
+        if (backend_name.empty()) {
+            backend_name = profile.fixturePath.empty() ? "network" : "mock";
+        }
+        if (backend_name == "postgresql" || backend_name == "postgres" || backend_name == "pg") {
+            config.port = 5432;
+        } else if (backend_name == "mysql" || backend_name == "mariadb") {
+            config.port = 3306;
+        } else if (backend_name == "firebird" || backend_name == "fb") {
+            config.port = 3050;
+        } else {
+            config.port = kDefaultScratchBirdPort;
+        }
     }
     config.database = profile.database;
     config.username = profile.username;
     config.password = password;
+    config.applicationName = profile.applicationName.empty() ? "scratchrobin" : profile.applicationName;
+    config.role = profile.role;
     config.sslMode = profile.sslMode;
+    config.sslRootCert = profile.sslRootCert;
+    config.sslCert = profile.sslCert;
+    config.sslKey = profile.sslKey;
+    config.sslPassword = profile.sslPassword;
+    config.options = profile.options;
     config.fixturePath = profile.fixturePath.empty() ? kDefaultFixturePath : profile.fixturePath;
     config.connectTimeoutMs = network_options_.connectTimeoutMs;
     config.queryTimeoutMs = network_options_.queryTimeoutMs;

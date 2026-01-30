@@ -1,3 +1,12 @@
+/*
+ * ScratchRobin
+ * Copyright (c) 2025-2026 Dalton Calford
+ *
+ * Licensed under the Initial Developer's Public License Version 1.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ * https://www.firebirdsql.org/en/initial-developer-s-public-license-version-1-0/
+ */
 #include "postgres_backend.h"
 
 #include <algorithm>
@@ -33,30 +42,60 @@ std::string BytesToHex(const unsigned char* data, size_t size) {
     return out.str();
 }
 
+std::string EscapeConnValue(const std::string& value) {
+    std::string out;
+    out.reserve(value.size());
+    for (char c : value) {
+        if (c == '\'' || c == '\\') {
+            out.push_back('\\');
+        }
+        out.push_back(c);
+    }
+    return out;
+}
+
+void AppendConnParam(std::ostringstream& out, const std::string& key, const std::string& value) {
+    if (value.empty()) {
+        return;
+    }
+    bool needs_quote = value.find_first_of(" \t\r\n'\\") != std::string::npos;
+    out << key << "=";
+    if (needs_quote) {
+        out << '\'' << EscapeConnValue(value) << '\'';
+    } else {
+        out << value;
+    }
+    out << " ";
+}
+
 std::string BuildConnInfo(const BackendConfig& config) {
     std::ostringstream out;
-    if (!config.host.empty()) {
-        out << "host=" << config.host << " ";
-    }
+    AppendConnParam(out, "host", config.host);
     if (config.port > 0) {
-        out << "port=" << config.port << " ";
+        AppendConnParam(out, "port", std::to_string(config.port));
     }
-    if (!config.database.empty()) {
-        out << "dbname=" << config.database << " ";
-    }
-    if (!config.username.empty()) {
-        out << "user=" << config.username << " ";
-    }
-    if (!config.password.empty()) {
-        out << "password=" << config.password << " ";
-    }
-    if (!config.sslMode.empty()) {
-        out << "sslmode=" << config.sslMode << " ";
-    }
+    AppendConnParam(out, "dbname", config.database);
+    AppendConnParam(out, "user", config.username);
+    AppendConnParam(out, "password", config.password);
+    AppendConnParam(out, "sslmode", config.sslMode);
+    AppendConnParam(out, "sslrootcert", config.sslRootCert);
+    AppendConnParam(out, "sslcert", config.sslCert);
+    AppendConnParam(out, "sslkey", config.sslKey);
+    AppendConnParam(out, "sslpassword", config.sslPassword);
     if (config.connectTimeoutMs > 0) {
-        out << "connect_timeout=" << (config.connectTimeoutMs / 1000) << " ";
+        AppendConnParam(out, "connect_timeout", std::to_string(config.connectTimeoutMs / 1000));
     }
-    out << "application_name=scratchrobin";
+    AppendConnParam(out, "application_name",
+                    config.applicationName.empty() ? "scratchrobin" : config.applicationName);
+
+    std::string options = config.options;
+    if (!config.role.empty()) {
+        if (!options.empty()) {
+            options += " ";
+        }
+        options += "-c role=" + config.role;
+    }
+    AppendConnParam(out, "options", options);
     return Trim(out.str());
 }
 

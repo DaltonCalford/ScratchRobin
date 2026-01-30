@@ -1,3 +1,12 @@
+/*
+ * ScratchRobin
+ * Copyright (c) 2025-2026 Dalton Calford
+ *
+ * Licensed under the Initial Developer's Public License Version 1.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ * https://www.firebirdsql.org/en/initial-developer-s-public-license-version-1-0/
+ */
 #include "config.h"
 
 #include <algorithm>
@@ -279,8 +288,22 @@ bool ConfigStore::LoadConnections(const std::string& path, std::vector<Connectio
             ParseString(value, &current.username);
         } else if (key == "credential_id") {
             ParseString(value, &current.credentialId);
+        } else if (key == "application_name") {
+            ParseString(value, &current.applicationName);
+        } else if (key == "role") {
+            ParseString(value, &current.role);
         } else if (key == "ssl_mode") {
             ParseString(value, &current.sslMode);
+        } else if (key == "ssl_root_cert") {
+            ParseString(value, &current.sslRootCert);
+        } else if (key == "ssl_cert") {
+            ParseString(value, &current.sslCert);
+        } else if (key == "ssl_key") {
+            ParseString(value, &current.sslKey);
+        } else if (key == "ssl_password") {
+            ParseString(value, &current.sslPassword);
+        } else if (key == "options") {
+            ParseString(value, &current.options);
         } else if (key == "backend") {
             ParseString(value, &current.backend);
         } else if (key == "fixture_path" || key == "fixture") {

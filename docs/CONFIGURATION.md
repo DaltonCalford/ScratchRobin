@@ -79,7 +79,14 @@ port = 3092
 database = "/data/scratchbird/demo.sdb"
 username = "sysdba"
 credential_id = "scratchrobin:local-sysdba"
+application_name = "scratchrobin"
+role = "app_readonly"
 ssl_mode = "prefer"
+ssl_root_cert = "/etc/ssl/certs/ca-certificates.crt"
+ssl_cert = "/etc/ssl/certs/scratchrobin-client.crt"
+ssl_key = "/etc/ssl/private/scratchrobin-client.key"
+ssl_password = "optional-passphrase"
+options = "-c search_path=users.public"
 # backend = "mock"
 # fixture_path = "config/fixtures/default.json"
 ```
@@ -96,6 +103,13 @@ database = "postgres"
 username = "postgres"
 credential_id = "env:PGPASSWORD"
 ssl_mode = "prefer"
+application_name = "scratchrobin"
+role = "reporting"
+ssl_root_cert = "/etc/ssl/certs/ca-certificates.crt"
+ssl_cert = "/etc/ssl/certs/pg-client.crt"
+ssl_key = "/etc/ssl/private/pg-client.key"
+ssl_password = "optional-passphrase"
+options = "-c search_path=public"
 ```
 
 MySQL/MariaDB:
@@ -109,6 +123,9 @@ database = "mysql"
 username = "root"
 credential_id = "env:MYSQL_PWD"
 ssl_mode = "prefer"
+ssl_root_cert = "/etc/ssl/certs/ca-certificates.crt"
+ssl_cert = "/etc/ssl/certs/mysql-client.crt"
+ssl_key = "/etc/ssl/private/mysql-client.key"
 ```
 
 Firebird:
@@ -121,11 +138,18 @@ port = 3050
 database = "/data/firebird/demo.fdb"
 username = "sysdba"
 credential_id = "env:ISC_PASSWORD"
+role = "readwrite"
 ```
 
 ### Mock backend
 Use `backend = "mock"` and `fixture_path` to load canned responses from JSON fixtures.
 Fixture schema is documented in `docs/fixtures/README.md`.
+
+### Advanced connection fields
+- `application_name`: Client label for audit/monitoring (native + PostgreSQL).
+- `role`: Default role name (PostgreSQL via libpq options; Firebird via SQL role).
+- `options`: Extra driver options (PostgreSQL `options` parameter).
+- `ssl_root_cert`, `ssl_cert`, `ssl_key`, `ssl_password`: TLS files (backend support varies).
 
 ### Environment-backed credentials
 ```toml

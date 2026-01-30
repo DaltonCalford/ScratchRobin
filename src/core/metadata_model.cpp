@@ -1,3 +1,12 @@
+/*
+ * ScratchRobin
+ * Copyright (c) 2025-2026 Dalton Calford
+ *
+ * Licensed under the Initial Developer's Public License Version 1.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ * https://www.firebirdsql.org/en/initial-developer-s-public-license-version-1-0/
+ */
 #include "metadata_model.h"
 
 #include <algorithm>
@@ -530,6 +539,81 @@ bool LoadFirebirdMetadata(ConnectionManager& manager,
     return true;
 }
 
+bool LoadScratchBirdMetadata(ConnectionManager& manager,
+                             const std::string& catalog,
+                             MetadataSnapshot* snapshot,
+                             std::string* error) {
+    if (!snapshot) {
+        if (error) {
+            *error = "Missing metadata snapshot";
+        }
+        return false;
+    }
+
+    QueryResult result;
+    if (!ExecuteMetadataQuery(manager,
+                              "SELECT schema_name "
+                              "FROM sys.schemas "
+                              "WHERE is_valid = 1 "
+                              "ORDER BY schema_name;",
+                              &result, error)) {
+        return false;
+    }
+    for (const auto& row : result.rows) {
+        std::string schema;
+        if (!GetRowValue(row, 0, &schema)) {
+            continue;
+        }
+        AddSchemaNode(snapshot->roots, catalog, schema);
+    }
+
+    if (!ExecuteMetadataQuery(manager,
+                              "SELECT s.schema_name, t.table_name, t.table_type "
+                              "FROM sys.tables t "
+                              "JOIN sys.schemas s ON t.schema_id = s.schema_id "
+                              "WHERE t.is_valid = 1 "
+                              "ORDER BY s.schema_name, t.table_name;",
+                              &result, error)) {
+        return false;
+    }
+    for (const auto& row : result.rows) {
+        std::string schema;
+        std::string table;
+        std::string type;
+        if (!GetRowValue(row, 0, &schema) || !GetRowValue(row, 1, &table)) {
+            continue;
+        }
+        GetRowValue(row, 2, &type);
+        std::string type_lower = ToLowerCopy(type);
+        std::string kind = type_lower.find("view") != std::string::npos ? "view" : "table";
+        AddTableNode(snapshot->roots, catalog, schema, table, kind);
+    }
+
+    if (!ExecuteMetadataQuery(manager,
+                              "SELECT s.schema_name, t.table_name, c.column_name, c.ordinal_position "
+                              "FROM sys.columns c "
+                              "JOIN sys.tables t ON c.table_id = t.table_id "
+                              "JOIN sys.schemas s ON t.schema_id = s.schema_id "
+                              "WHERE c.is_valid = 1 "
+                              "ORDER BY s.schema_name, t.table_name, c.ordinal_position;",
+                              &result, error)) {
+        return false;
+    }
+    for (const auto& row : result.rows) {
+        std::string schema;
+        std::string table;
+        std::string column;
+        if (!GetRowValue(row, 0, &schema) ||
+            !GetRowValue(row, 1, &table) ||
+            !GetRowValue(row, 2, &column)) {
+            continue;
+        }
+        AddColumnNode(snapshot->roots, catalog, schema, table, column);
+    }
+
+    return true;
+}
+
 void AppendConnectionsRoot(MetadataSnapshot* snapshot,
                            const std::vector<ConnectionProfile>& profiles) {
     if (!snapshot || profiles.empty()) {
@@ -768,7 +852,7 @@ bool MetadataModel::LoadFromConnections(std::string* error) {
         if (backend == "mock") {
             continue;
         }
-        if (!IsExternalBackend(backend)) {
+        if (!IsExternalBackend(backend) && backend != "native") {
             continue;
         }
 
@@ -788,7 +872,9 @@ bool MetadataModel::LoadFromConnections(std::string* error) {
 
         std::string load_error;
         bool ok = false;
-        if (backend == "postgresql") {
+        if (backend == "native") {
+            ok = LoadScratchBirdMetadata(manager, backend, &snapshot, &load_error);
+        } else if (backend == "postgresql") {
             ok = LoadPostgresMetadata(manager, backend, &snapshot, &load_error);
         } else if (backend == "mysql") {
             ok = LoadMySqlMetadata(manager, backend, &snapshot, &load_error);

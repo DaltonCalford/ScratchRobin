@@ -1,3 +1,12 @@
+/*
+ * ScratchRobin
+ * Copyright (c) 2025-2026 Dalton Calford
+ *
+ * Licensed under the Initial Developer's Public License Version 1.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ * https://www.firebirdsql.org/en/initial-developer-s-public-license-version-1-0/
+ */
 #include "users_roles_frame.h"
 
 #include "diagram_frame.h"
@@ -96,6 +105,13 @@ bool BuildUsersQuery(const std::string& backend,
     }
     out_query->clear();
 
+    if (backend == "native") {
+        *out_query =
+            "SELECT user_name, is_superuser, default_schema, created_at, last_login_at, "
+            "auth_provider, password_state "
+            "FROM sys.users ORDER BY user_name;";
+        return true;
+    }
     if (backend == "postgresql") {
         *out_query =
             "SELECT rolname AS name, rolsuper, rolcreatedb, rolcreaterole, "
@@ -133,6 +149,13 @@ bool BuildRolesQuery(const std::string& backend,
     }
     out_query->clear();
 
+    if (backend == "native") {
+        *out_query =
+            "SELECT role_name, can_login, is_superuser, is_system_role, "
+            "default_schema, created_at "
+            "FROM sys.roles ORDER BY role_name;";
+        return true;
+    }
     if (backend == "postgresql") {
         *out_query =
             "SELECT rolname AS role, rolsuper, rolcreatedb, rolcreaterole, "
@@ -171,6 +194,12 @@ bool BuildMembershipsQuery(const std::string& backend,
     }
     out_query->clear();
 
+    if (backend == "native") {
+        *out_query =
+            "SELECT role_name, member_name, admin_option, is_default, granted_at "
+            "FROM sys.role_members ORDER BY role_name, member_name;";
+        return true;
+    }
     if (backend == "postgresql") {
         *out_query =
             "SELECT r.rolname AS role, m.rolname AS member, a.admin_option "
@@ -211,6 +240,9 @@ bool BuildMembershipsQuery(const std::string& backend,
 }
 
 std::string BuildCreateUserTemplate(const std::string& backend) {
+    if (backend == "native") {
+        return "CREATE USER user_name WITH PASSWORD 'password';";
+    }
     if (backend == "postgresql") {
         return "CREATE ROLE user_name WITH LOGIN PASSWORD 'password';";
     }
@@ -225,6 +257,9 @@ std::string BuildCreateUserTemplate(const std::string& backend) {
 
 std::string BuildDropUserTemplate(const std::string& backend, const std::string& name) {
     std::string target = name.empty() ? "user_name" : name;
+    if (backend == "native") {
+        return "DROP USER " + target + ";";
+    }
     if (backend == "postgresql") {
         return "DROP ROLE " + target + ";";
     }
@@ -238,6 +273,9 @@ std::string BuildDropUserTemplate(const std::string& backend, const std::string&
 }
 
 std::string BuildCreateRoleTemplate(const std::string& backend) {
+    if (backend == "native") {
+        return "CREATE ROLE role_name NOLOGIN;";
+    }
     if (backend == "postgresql") {
         return "CREATE ROLE role_name;";
     }
@@ -252,6 +290,9 @@ std::string BuildCreateRoleTemplate(const std::string& backend) {
 
 std::string BuildDropRoleTemplate(const std::string& backend, const std::string& name) {
     std::string target = name.empty() ? "role_name" : name;
+    if (backend == "native") {
+        return "DROP ROLE " + target + ";";
+    }
     if (backend == "postgresql") {
         return "DROP ROLE " + target + ";";
     }
@@ -266,6 +307,9 @@ std::string BuildDropRoleTemplate(const std::string& backend, const std::string&
 
 std::string BuildGrantRoleTemplate(const std::string& backend, const std::string& role) {
     std::string target = role.empty() ? "role_name" : role;
+    if (backend == "native") {
+        return "GRANT " + target + " TO user_name;";
+    }
     if (backend == "postgresql") {
         return "GRANT " + target + " TO user_name;";
     }
@@ -280,6 +324,9 @@ std::string BuildGrantRoleTemplate(const std::string& backend, const std::string
 
 std::string BuildRevokeRoleTemplate(const std::string& backend, const std::string& role) {
     std::string target = role.empty() ? "role_name" : role;
+    if (backend == "native") {
+        return "REVOKE " + target + " FROM user_name;";
+    }
     if (backend == "postgresql") {
         return "REVOKE " + target + " FROM user_name;";
     }
@@ -297,6 +344,9 @@ std::string BuildGrantMembershipTemplate(const std::string& backend,
                                          const std::string& member) {
     std::string role_name = role.empty() ? "role_name" : role;
     std::string member_name = member.empty() ? "user_name" : member;
+    if (backend == "native") {
+        return "GRANT " + role_name + " TO " + member_name + ";";
+    }
     if (backend == "postgresql") {
         return "GRANT " + role_name + " TO " + member_name + ";";
     }
@@ -314,6 +364,9 @@ std::string BuildRevokeMembershipTemplate(const std::string& backend,
                                           const std::string& member) {
     std::string role_name = role.empty() ? "role_name" : role;
     std::string member_name = member.empty() ? "user_name" : member;
+    if (backend == "native") {
+        return "REVOKE " + role_name + " FROM " + member_name + ";";
+    }
     if (backend == "postgresql") {
         return "REVOKE " + role_name + " FROM " + member_name + ";";
     }
