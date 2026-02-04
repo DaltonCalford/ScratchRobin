@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=ScratchRobin
+Comment=Database administration tool for ScratchBird
+Exec=scratchrobin
+Icon=scratchrobin
+Type=Application
+Categories=Development;Database;GTK;
+Keywords=database;sql;scratchbird;postgresql;mysql;firebird;
+Terminal=false

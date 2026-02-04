@@ -464,10 +464,16 @@ add_executable(scratchrobin_tests
     tests/unit/test_diagram_model.cpp
     tests/unit/test_layout_engine.cpp
     tests/unit/test_forward_engineer.cpp
+    # Performance tests
+    tests/unit/test_diagram_performance.cpp
+    tests/unit/test_memory_usage.cpp
     # Integration tests (environment-gated)
+    tests/unit/test_embedded_backend.cpp
+    tests/unit/test_ipc_backend.cpp
     tests/integration/test_postgres_backend.cpp
     tests/integration/test_mysql_backend.cpp
     tests/integration/test_firebird_backend.cpp
+    tests/integration/test_scratchbird_backend.cpp
 )
 
 target_link_libraries(scratchrobin_tests PRIVATE 

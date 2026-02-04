@@ -1,0 +1,23 @@
+Package: scratchrobin
+Version: 1.0.0
+Section: database
+Priority: optional
+Architecture: amd64
+Depends: libwxgtk3.2-1 | libwxgtk3.0-gtk3-0v5, libsecret-1-0
+Recommends: libpq5, libmysqlclient21 | libmariadb3
+Suggests: firebird3.0-utils
+Maintainer: Dalton Calford <dcalford@stacktrace.ca>
+Description: Database administration tool for ScratchBird
+ ScratchRobin is a lightweight, ScratchBird-native database
+ administration tool inspired by FlameRobin. It provides a
+ comprehensive GUI for managing ScratchBird databases with
+ support for PostgreSQL, MySQL, and Firebird through optional
+ backend adapters.
+ .
+ Features include:
+  - Visual table designer
+  - ERD diagramming with auto-layout
+  - SQL editor with syntax highlighting
+  - Reverse/forward engineering
+  - User and role management
+  - Backup and restore

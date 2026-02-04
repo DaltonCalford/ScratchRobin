@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	dh_auto_configure -- -DCMAKE_BUILD_TYPE=Release
+
+override_dh_auto_install:
+	dh_auto_install
+	# Install desktop file
+	install -D -m 0644 packaging/debian/scratchrobin.desktop \
+		$(DESTDIR)/usr/share/applications/scratchrobin.desktop
+	# Install icon
+	install -D -m 0644 resources/icons/scratchrobin.png \
+		$(DESTDIR)/usr/share/pixmaps/scratchrobin.png

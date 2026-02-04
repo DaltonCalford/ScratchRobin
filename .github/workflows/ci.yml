@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake g++ libwxgtk3.2-dev libsecret-1-dev
+        sudo apt-get install -y libpq-dev libmysqlclient-dev libfbclient2-dev
+    
+    - name: Configure
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    
+    - name: Build
+      run: cmake --build build -j$(nproc)
+    
+    - name: Test
+      run: |
+        cd build
+        ctest --output-on-failure
+    
+    - name: Package
+      run: |
+        cd build
+        cpack -G DEB
+        cpack -G TGZ
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: linux-packages
+        path: build/packages/*
+
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+    
+    - name: Install wxWidgets
+      run: |
+        # Download and install wxWidgets
+        choco install wxwidgets
+    
+    - name: Configure
+      run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+    
+    - name: Build
+      run: cmake --build build --config Release
+    
+    - name: Test
+      run: |
+        cd build
+        ctest -C Release --output-on-failure
+    
+    - name: Package
+      run: |
+        cd build
+        cpack -G NSIS
+        cpack -G ZIP
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: windows-packages
+        path: build/packages/*
+
+  build-macos:
+    runs-on: macos-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        brew install cmake wxwidgets
+    
+    - name: Configure
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    
+    - name: Build
+      run: cmake --build build -j$(sysctl -n hw.ncpu)
+    
+    - name: Test
+      run: |
+        cd build
+        ctest --output-on-failure
+    
+    - name: Package
+      run: |
+        cd build
+        cpack -G DragNDrop
+        cpack -G TGZ
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: macos-packages
+        path: build/packages/*
+
+  code-quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install clang-format and clang-tidy
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang-format clang-tidy
+    
+    - name: Check formatting
+      run: |
+        find src -name "*.cpp" -o -name "*.h" | xargs clang-format --dry-run --Werror
+    
+    - name: Static analysis
+      run: |
+        # Run clang-tidy on key files
+        clang-tidy src/core/*.cpp -- -Isrc
