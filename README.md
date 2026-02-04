@@ -11,7 +11,7 @@ ScratchRobin brings software engineering best practices (version control, testin
 **Release Targets:** `docs/planning/RELEASE_TARGETS.md`
 
 ---
-###**Note To New Users**
+### **Note To New Users**
 
 ScratchBird is in early alpha release. No binaries have been officially released at this time. The code is ready to be built and tested if you want to setup your own test environment.
 
