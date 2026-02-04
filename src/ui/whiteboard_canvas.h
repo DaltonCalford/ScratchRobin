@@ -26,6 +26,65 @@ class WhiteboardConnection;
 class WhiteboardDocument;
 
 // ============================================================================
+// Whiteboard Object Types
+// ============================================================================
+enum class WhiteboardObjectType {
+    DATABASE,
+    SCHEMA,
+    TABLE,
+    VIEW,
+    PROCEDURE,
+    FUNCTION,
+    TRIGGER,
+    INDEX,
+    DATASTORE,
+    SERVER,
+    CLUSTER,
+    GENERIC
+};
+
+std::string WhiteboardObjectTypeToString(WhiteboardObjectType type);
+wxColour GetTypeColor(WhiteboardObjectType type);
+
+// ============================================================================
+// Typed Object - Rectangular shape with name and details
+// ============================================================================
+class TypedObject {
+public:
+    WhiteboardObjectType object_type = WhiteboardObjectType::GENERIC;
+    std::string name;
+    std::string details;  // Free-form text area content
+    
+    // Visual settings
+    wxColour header_color;
+    wxColour body_color;
+    wxColour text_color;
+    int header_height = 24;
+    int padding = 8;
+    
+    // Type-specific metadata
+    std::map<std::string, std::string> metadata;
+    
+    TypedObject();
+    explicit TypedObject(WhiteboardObjectType type, const std::string& name = "");
+    
+    void SetType(WhiteboardObjectType type);
+    void SetName(const std::string& new_name);
+    void SetDetails(const std::string& new_details);
+    
+    // Get suggested default details based on type
+    std::string GetDefaultDetails() const;
+    
+    // Type helpers
+    bool IsDatabaseObject() const;
+    bool IsContainer() const;  // Database, Schema can contain other objects
+    
+    // Serialization
+    void ToJson(std::ostream& out) const;
+    static TypedObject FromJson(const std::string& json);
+};
+
+// ============================================================================
 // Whiteboard Canvas - Interactive diagramming surface
 // ============================================================================
 class WhiteboardCanvas : public wxScrolledCanvas {
@@ -34,12 +93,11 @@ public:
         SELECT,
         PAN,
         RECTANGLE,
-        ELLIPSE,
+        TYPED_OBJECT,  // New tool for creating typed objects
         TEXT,
         LINE,
         ARROW,
         CONNECTOR,
-        TABLE,
         NOTE,
         IMAGE,
         ERASER
@@ -51,12 +109,17 @@ public:
     // Tool management
     void SetTool(Tool tool);
     Tool GetTool() const { return current_tool_; }
+    void SetObjectTypeForNextCreation(WhiteboardObjectType type);
     
     // Document operations
     void NewDocument();
     bool LoadDocument(const std::string& path);
     bool SaveDocument(const std::string& path);
-    void LoadFromProject(const class Project& project);
+    
+    // Typed object operations
+    void AddTypedObject(const wxPoint& position, WhiteboardObjectType type, 
+                        const std::string& name = "");
+    void AddTypedObject(const wxPoint& position, const TypedObject& template_obj);
     
     // Object operations
     void AddObject(std::unique_ptr<WhiteboardObject> obj);
@@ -64,10 +127,7 @@ public:
     void SelectObject(const std::string& id);
     void ClearSelection();
     std::vector<WhiteboardObject*> GetSelectedObjects() const;
-    
-    // Connection operations
-    void AddConnection(std::unique_ptr<WhiteboardConnection> conn);
-    void RemoveConnection(const std::string& id);
+    WhiteboardObject* GetObjectAt(const wxPoint& pt) const;
     
     // View operations
     void ZoomIn();
@@ -89,28 +149,17 @@ public:
     void ExportAsSvg(const std::string& path);
     void Print();
     
-    // Clipboard
-    void Cut();
-    void Copy();
-    void Paste();
-    void Delete();
-    bool CanPaste() const;
-    
-    // Undo/Redo
-    void Undo();
-    void Redo();
-    bool CanUndo() const;
-    bool CanRedo() const;
+    // Editing
+    void EditSelectedObjectName();
+    void EditSelectedObjectDetails();
     
     // Layout algorithms
     void AutoLayout();
     void ArrangeInGrid(int cols);
     void ArrangeHierarchical();
-    void ArrangeCircular();
     
-    // Data model integration
-    void SynchronizeFromDatabase();
-    void ApplyToDatabase();
+    // Get document
+    WhiteboardDocument* GetDocument() { return document_.get(); }
     
 private:
     // Event handlers
@@ -130,7 +179,6 @@ private:
     // Coordinate conversion
     wxPoint ScreenToCanvas(const wxPoint& pt) const;
     wxPoint CanvasToScreen(const wxPoint& pt) const;
-    wxRect ScreenToCanvas(const wxRect& rect) const;
     wxPoint SnapToGrid(const wxPoint& pt) const;
     
     // Selection handling
@@ -156,14 +204,13 @@ private:
     
     // Tool handling
     void HandleSelectTool(wxMouseEvent& event);
-    void HandleDrawTool(wxMouseEvent& event);
+    void HandleTypedObjectTool(const wxPoint& pt);
     void HandlePanTool(wxMouseEvent& event);
     void HandleConnectorTool(wxMouseEvent& event);
-    void HandleTextTool(const wxPoint& pt);
-    void HandleTableTool(const wxPoint& pt);
     
     // State
     Tool current_tool_ = Tool::SELECT;
+    WhiteboardObjectType next_object_type_ = WhiteboardObjectType::GENERIC;
     double zoom_scale_ = 1.0;
     bool show_grid_ = true;
     bool snap_to_grid_ = true;
@@ -190,9 +237,6 @@ private:
     std::vector<wxPoint> rubber_band_points_;
     int resize_handle_ = -1;
     
-    // Canvas offset for scrolling
-    wxPoint canvas_offset_;
-    
     wxDECLARE_EVENT_TABLE();
 };
 
@@ -202,11 +246,11 @@ private:
 class WhiteboardObject {
 public:
     enum class Type {
-        RECTANGLE,
+        BASIC_RECTANGLE,
+        TYPED_OBJECT,    // New type with header and details area
         ELLIPSE,
         TEXT,
         IMAGE,
-        TABLE,
         NOTE,
         CUSTOM
     };
@@ -217,25 +261,29 @@ public:
     bool selected = false;
     bool locked = false;
     
-    // Appearance
+    // Typed object data (only used when type == TYPED_OBJECT)
+    std::unique_ptr<TypedObject> typed_data;
+    
+    // Basic appearance (fallback when not a typed object)
     wxColour fill_color = wxColour(255, 255, 255);
     wxColour border_color = wxColour(0, 0, 0);
     wxColour text_color = wxColour(0, 0, 0);
     int border_width = 1;
     int corner_radius = 0;
     
-    // Text
+    // Basic text (fallback when not a typed object)
     std::string text;
     wxFont font = wxFont(10, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
     int text_alignment = wxALIGN_CENTER;
     
-    // Metadata
-    std::string linked_object_id;  // Link to database object
-    std::string linked_object_type;
-    std::map<std::string, std::string> properties;
-    
     WhiteboardObject(Type t);
     virtual ~WhiteboardObject() = default;
+    
+    // Typed object helpers
+    bool IsTypedObject() const { return type == Type::TYPED_OBJECT && typed_data != nullptr; }
+    TypedObject* GetTypedObject() { return typed_data.get(); }
+    const TypedObject* GetTypedObject() const { return typed_data.get(); }
+    void MakeTypedObject(WhiteboardObjectType obj_type, const std::string& name = "");
     
     // Drawing
     virtual void Draw(wxDC& dc) const;
@@ -243,10 +291,20 @@ public:
     virtual wxRect GetBounds() const { return bounds; }
     virtual void SetBounds(const wxRect& rect) { bounds = rect; }
     
+    // Typed object drawing
+    void DrawTypedObject(wxDC& dc) const;
+    void DrawBasicRectangle(wxDC& dc) const;
+    
     // Hit testing
     virtual bool HitTest(const wxPoint& pt) const;
+    virtual bool HitTestHeader(const wxPoint& pt) const;  // For typed objects
+    virtual bool HitTestDetailsArea(const wxPoint& pt) const;  // For typed objects
     virtual int HitTestResizeHandle(const wxPoint& pt) const;
     virtual wxPoint GetConnectionPoint(int side) const;
+    
+    // Editing
+    virtual void StartNameEdit();
+    virtual void StartDetailsEdit();
     
     // Serialization
     virtual void ToJson(std::ostream& out) const;
@@ -257,47 +315,6 @@ public:
     
 protected:
     void DrawResizeHandles(wxDC& dc) const;
-};
-
-// ============================================================================
-// Table Object
-// ============================================================================
-class TableObject : public WhiteboardObject {
-public:
-    struct Column {
-        std::string name;
-        std::string type;
-        bool is_pk = false;
-        bool is_fk = false;
-        bool is_nullable = true;
-    };
-    
-    std::string table_name;
-    std::string schema;
-    std::vector<Column> columns;
-    
-    TableObject();
-    
-    void AddColumn(const Column& col);
-    void RemoveColumn(const std::string& name);
-    
-    void Draw(wxDC& dc) const override;
-    bool HitTest(const wxPoint& pt) const override;
-    
-    static std::unique_ptr<TableObject> FromDatabaseTable(
-        const std::string& schema, 
-        const std::string& table,
-        const std::vector<std::pair<std::string, std::string>>& columns);
-};
-
-// ============================================================================
-// Note Object
-// ============================================================================
-class NoteObject : public WhiteboardObject {
-public:
-    NoteObject();
-    
-    void Draw(wxDC& dc) const override;
 };
 
 // ============================================================================
@@ -330,9 +347,8 @@ public:
     wxColour color = wxColour(0, 0, 0);
     int width = 2;
     
-    // For relationships
     std::string label;
-    std::string cardinality_from;  // 1, 0..1, 0..*, 1..*
+    std::string cardinality_from;
     std::string cardinality_to;
     
     std::vector<wxPoint> waypoints;
@@ -374,6 +390,10 @@ public:
     void AddConnection(std::unique_ptr<WhiteboardConnection> conn);
     void RemoveConnection(const std::string& id);
     
+    // Typed object helpers
+    std::vector<WhiteboardObject*> GetObjectsByType(WhiteboardObjectType type) const;
+    std::vector<WhiteboardObject*> GetChildObjects(const std::string& parent_id) const;
+    
     // Serialization
     void ToJson(std::ostream& out) const;
     static std::unique_ptr<WhiteboardDocument> FromJson(const std::string& json);
@@ -397,6 +417,10 @@ public:
     
     WhiteboardCanvas* GetCanvas() { return canvas_; }
     
+    // Toolbar helpers
+    void AddObjectTypeTool(WhiteboardObjectType type, const wxString& label, 
+                           const wxBitmap& bitmap);
+    
 private:
     void BuildToolbar();
     void BuildLayout();
@@ -405,11 +429,46 @@ private:
     wxToolBar* toolbar_ = nullptr;
     wxComboBox* zoom_combo_ = nullptr;
     
-    void OnToolSelect(wxCommandEvent& event);
-    void OnZoomChange(wxCommandEvent& event);
-    void OnShowGrid(wxCommandEvent& event);
-    void OnSnapToGrid(wxCommandEvent& event);
-    void OnAutoLayout(wxCommandEvent& event);
+    wxDECLARE_EVENT_TABLE();
+};
+
+// ============================================================================
+// Object Type Dialog - For selecting object type when creating
+// ============================================================================
+class ObjectTypeDialog : public wxDialog {
+public:
+    ObjectTypeDialog(wxWindow* parent);
+    
+    WhiteboardObjectType GetSelectedType() const { return selected_type_; }
+    std::string GetObjectName() const { return object_name_; }
+    
+private:
+    void BuildLayout();
+    void OnTypeSelect(wxCommandEvent& event);
+    void OnOK(wxCommandEvent& event);
+    
+    WhiteboardObjectType selected_type_ = WhiteboardObjectType::GENERIC;
+    std::string object_name_;
+    wxChoice* type_choice_ = nullptr;
+    wxTextCtrl* name_ctrl_ = nullptr;
+    
+    wxDECLARE_EVENT_TABLE();
+};
+
+// ============================================================================
+// Object Edit Dialog - For editing name and details
+// ============================================================================
+class ObjectEditDialog : public wxDialog {
+public:
+    ObjectEditDialog(wxWindow* parent, TypedObject* object);
+    
+private:
+    void BuildLayout();
+    void OnOK(wxCommandEvent& event);
+    
+    TypedObject* object_;
+    wxTextCtrl* name_ctrl_ = nullptr;
+    wxTextCtrl* details_ctrl_ = nullptr;
     
     wxDECLARE_EVENT_TABLE();
 };
