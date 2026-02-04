@@ -659,10 +659,12 @@ src/diagram/
 |---------|------|--------|----------|-------------|--------------|---------------------|
 | 10.2.1 | Design link data model | ✅ | P0 | 1d | - | ObjectReference, IssueReference, IssueLink |
 | 10.2.2 | Implement IssueLinkManager | ✅ | P0 | 2d | 10.2.1 | Central registry with CRUD operations |
-| 10.2.3 | Add persistence layer | ✅ | P0 | 1d | 10.2.2 | JSON-based storage |
+| 10.2.3 | Add persistence layer | ✅ | P0 | 1d | 10.2.2 | JSON-based storage (SaveLinks/LoadLinks) |
 | 10.2.4 | Add link search/indexing | ✅ | P1 | 1d | 10.2.2 | Query links by object or issue |
+| 10.2.5 | Add context generator | ✅ | P0 | 2d | 10.2.1 | Generate issue content from database context |
+| 10.2.6 | Add template manager | ✅ | P1 | 1d | 10.2.1 | Template system for auto-created issues |
 
-### 10.3 Sync Scheduler
+### 10.3 Sync Scheduler & Webhooks
 
 | Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
 |---------|------|--------|----------|-------------|--------------|---------------------|
@@ -671,6 +673,12 @@ src/diagram/
 | 10.3.3 | Add webhook handler interface | ✅ | P0 | 1d | 10.3.1 | Provider-specific webhook processing |
 | 10.3.4 | Implement issue sync task | ✅ | P0 | 1d | 10.3.2 | Periodic issue status sync |
 | 10.3.5 | Implement drift detection | ✅ | P1 | 1d | 10.3.2 | Detect out-of-sync issues |
+| 10.3.6 | Implement health check task | ✅ | P1 | 1d | 10.3.2 | Monitor tracker connectivity |
+| 10.3.7 | Implement HTTP webhook server | ✅ | P0 | 2d | 10.3.3 | Socket-based HTTP server for webhooks |
+| 10.3.8 | Implement signature verification | ✅ | P0 | 1d | 10.3.7 | HMAC-SHA256 signature verification |
+| 10.3.9 | Implement Jira webhook handler | ✅ | P0 | 1d | 10.3.7 | Parse Jira webhook events |
+| 10.3.10 | Implement GitHub webhook handler | ✅ | P0 | 1d | 10.3.7 | Parse GitHub webhook events |
+| 10.3.11 | Implement GitLab webhook handler | ✅ | P0 | 1d | 10.3.7 | Parse GitLab webhook events |
 
 ### 10.4 Issue Tracker UI
 
@@ -680,9 +688,21 @@ src/diagram/
 | 10.4.2 | Create CreateIssueDialog | ✅ | P0 | 2d | 10.4.1 | Dialog for creating new issues |
 | 10.4.3 | Create LinkIssueDialog | ✅ | P0 | 2d | 10.4.1 | Dialog for linking existing issues |
 | 10.4.4 | Create IssueTrackerSettingsDialog | ✅ | P0 | 2d | 10.1.1 | Configuration for tracker connections |
-| 10.4.5 | Add issue templates | ✅ | P1 | 1d | 10.4.2 | Templates for bug/enhancement/refactor |
-| 10.4.6 | Add context generation | ✅ | P1 | 1d | 10.4.2 | Auto-extract context from objects |
-| 10.4.7 | Wire into object manager context menus | ✅ | P0 | 1d | 10.4.1 | Right-click menu integration |
+| 10.4.5 | Create AddTrackerDialog | ✅ | P0 | 1d | 10.4.4 | Dialog for adding new trackers |
+| 10.4.6 | Add issue templates | ✅ | P1 | 1d | 10.4.2 | Templates for bug/enhancement/refactor |
+| 10.4.7 | Add context generation | ✅ | P1 | 1d | 10.4.2 | Auto-extract context from objects |
+| 10.4.8 | Wire into object manager context menus | ✅ | P0 | 1d | 10.4.1 | Right-click menu integration |
+| 10.4.9 | Implement test connection | ✅ | P0 | 1d | 10.4.4 | Test tracker connectivity from UI |
+| 10.4.10 | Implement refresh tracker list | ✅ | P0 | 1d | 10.4.4 | Dynamic tracker list updates |
+
+### 10.5 Additional Features
+
+| Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
+|---------|------|--------|----------|-------------|--------------|---------------------|
+| 10.5.1 | Add comment support | ✅ | P2 | 1d | 10.1.x | Add comments to linked issues |
+| 10.5.2 | Add attachment support | ✅ | P2 | 1d | 10.1.x | Attach files to issues |
+| 10.5.3 | Add label management | ✅ | P2 | 1d | 10.1.x | Manage issue labels |
+| 10.5.4 | Add user/assignee lookup | ✅ | P2 | 1d | 10.1.x | Lookup and assign users |
 
 **Implementation**: 
 - `src/core/issue_tracker*.h/cpp` - Core data models and manager
@@ -829,7 +849,7 @@ src/diagram/
 | Phase 7 | 12 | 12 | 0 | 100% ✅ |
 | Phase 8 | 28 | 26 | 0 | 93% 🟡 |
 | Phase 9 | 15 | 15 | 0 | 100% ✅ |
-| Phase 10 | 19 | 19 | 0 | 100% ✅ |
+| Phase 10 | 28 | 28 | 0 | 100% ✅ |
 
 ### Phase Effort Summary
 
