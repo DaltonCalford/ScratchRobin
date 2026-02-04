@@ -18,16 +18,52 @@
 namespace scratchrobin {
 
 struct BackendCapabilities {
+    // Core capabilities
     bool supportsCancel = false;
     bool supportsTransactions = true;
     bool supportsPaging = true;
+    bool supportsSavepoints = true;
+    
+    // Query capabilities
     bool supportsExplain = false;
     bool supportsSblr = false;
+    bool supportsStreaming = true;
+    
+    // Schema capabilities
     bool supportsDdlExtract = false;
     bool supportsDependencies = false;
+    bool supportsConstraints = true;
+    bool supportsIndexes = true;
+    
+    // Admin capabilities
     bool supportsUserAdmin = false;
     bool supportsRoleAdmin = false;
     bool supportsGroupAdmin = false;
+    bool supportsJobScheduler = false;
+    
+    // Feature availability
+    bool supportsDomains = false;
+    bool supportsSequences = false;
+    bool supportsTriggers = false;
+    bool supportsProcedures = false;
+    bool supportsViews = true;
+    bool supportsTempTables = true;
+    
+    // Database capabilities
+    bool supportsMultipleDatabases = true;
+    bool supportsTablespaces = false;
+    bool supportsSchemas = true;
+    
+    // Utility
+    bool supportsBackup = false;
+    bool supportsImportExport = true;
+    
+    // Server info (populated on connect)
+    std::string serverVersion;
+    std::string serverType;
+    int majorVersion = 0;
+    int minorVersion = 0;
+    int patchVersion = 0;
 };
 
 struct BackendConfig {

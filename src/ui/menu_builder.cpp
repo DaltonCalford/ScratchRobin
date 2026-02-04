@@ -30,6 +30,10 @@ wxMenuItem* AppendItem(wxMenu* menu, int id, const wxString& label,
 wxMenu* BuildConnectionsMenu() {
     auto* menu = new wxMenu();
 
+    // Connection management
+    menu->Append(ID_CONN_MANAGE, "&Manage Connections...");
+    menu->AppendSeparator();
+
     auto* server_menu = new wxMenu();
     AppendItem(server_menu, ID_CONN_SERVER_CREATE, "Create...", false);
     AppendItem(server_menu, ID_CONN_SERVER_CONNECT, "Connect...", false);

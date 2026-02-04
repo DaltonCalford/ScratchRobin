@@ -51,6 +51,8 @@ private:
 
     void RefreshSchemas();
     void RefreshSchemaDetails(const std::string& schema_name);
+    void FetchObjectCounts(const std::string& schema_name);
+    void LoadSchemaObjectCounts(const std::string& schema_name);
     void RunCommand(const std::string& sql, const std::string& success_message);
 
     std::string GetSelectedSchemaName() const;
@@ -90,6 +92,7 @@ private:
     wxStaticText* status_text_ = nullptr;
     wxTextCtrl* message_text_ = nullptr;
     wxTextCtrl* details_text_ = nullptr;
+    wxStaticText* object_counts_label_ = nullptr;
 
     wxGrid* schemas_grid_ = nullptr;
     ResultGridTable* schemas_table_ = nullptr;

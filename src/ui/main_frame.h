@@ -14,6 +14,7 @@
 #include <wx/notebook.h>
 #include <wx/treectrl.h>
 
+#include "connection_editor_dialog.h"
 #include "core/config.h"
 #include "core/metadata_model.h"
 
@@ -29,7 +30,7 @@ public:
     MainFrame(WindowManager* windowManager,
               MetadataModel* metadataModel,
               ConnectionManager* connectionManager,
-              const std::vector<ConnectionProfile>* connections,
+              std::vector<ConnectionProfile>* connections,
               const AppConfig* appConfig);
 
     void OnMetadataUpdated(const MetadataSnapshot& snapshot) override;
@@ -58,6 +59,7 @@ private:
     void OnTreeCopyDdl(wxCommandEvent& event);
     void OnTreeShowDependencies(wxCommandEvent& event);
     void OnTreeRefresh(wxCommandEvent& event);
+    void OnManageConnections(wxCommandEvent& event);
     void PopulateTree(const MetadataSnapshot& snapshot);
     void UpdateInspector(const MetadataNode* node);
     const MetadataNode* GetSelectedNode() const;
@@ -68,7 +70,7 @@ private:
     WindowManager* window_manager_ = nullptr;
     MetadataModel* metadata_model_ = nullptr;
     ConnectionManager* connection_manager_ = nullptr;
-    const std::vector<ConnectionProfile>* connections_ = nullptr;
+    std::vector<ConnectionProfile>* connections_ = nullptr;
     const AppConfig* app_config_ = nullptr;
     wxTreeCtrl* tree_ = nullptr;
     wxTextCtrl* filter_ctrl_ = nullptr;

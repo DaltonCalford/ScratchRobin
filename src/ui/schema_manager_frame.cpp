@@ -107,6 +107,20 @@ std::string QuoteIdentifier(const std::string& value) {
     return out;
 }
 
+std::string EscapeString(const std::string& value) {
+    std::string out;
+    for (char ch : value) {
+        if (ch == '\'') {
+            out += "''";
+        } else if (ch == '\\') {
+            out += "\\\\";
+        } else {
+            out.push_back(ch);
+        }
+    }
+    return out;
+}
+
 std::string NormalizeBackendName(const std::string& raw) {
     std::string value = ToLowerCopy(Trim(raw));
     if (value.empty() || value == "network" || value == "scratchbird") {
@@ -243,6 +257,12 @@ void SchemaManagerFrame::BuildLayout() {
     auto* detailSizer = new wxBoxSizer(wxVERTICAL);
     detailSizer->Add(new wxStaticText(detailPanel, wxID_ANY, "Details"), 0,
                      wxLEFT | wxRIGHT | wxTOP, 8);
+    
+    // Object counts label
+    object_counts_label_ = new wxStaticText(detailPanel, wxID_ANY, "Select a schema to view object counts");
+    object_counts_label_->SetForegroundColour(wxColour(100, 100, 100));
+    detailSizer->Add(object_counts_label_, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    
     details_text_ = new wxTextCtrl(detailPanel, wxID_ANY, "", wxDefaultPosition,
                                    wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH2);
     detailSizer->Add(details_text_, 1, wxEXPAND | wxALL, 8);
@@ -399,14 +419,16 @@ void SchemaManagerFrame::RefreshSchemaDetails(const std::string& schema_name) {
     pending_queries_++;
     UpdateControls();
     connection_manager_->ExecuteQueryAsync(
-        sql, [this](bool ok, QueryResult result, const std::string& error) {
-            CallAfter([this, ok, result = std::move(result), error]() mutable {
+        sql, [this, schema_name](bool ok, QueryResult result, const std::string& error) {
+            CallAfter([this, ok, result = std::move(result), error, schema_name]() mutable {
                 pending_queries_ = std::max(0, pending_queries_ - 1);
                 schema_details_result_ = result;
                 if (ok) {
                     if (details_text_) {
                         details_text_->SetValue(FormatDetails(schema_details_result_));
                     }
+                    // Fetch object counts for this schema
+                    FetchObjectCounts(schema_name);
                 } else if (!error.empty()) {
                     SetMessage(error);
                 }
@@ -661,6 +683,78 @@ void SchemaManagerFrame::OnOpenIndexDesigner(wxCommandEvent&) {
     auto* indexes = new IndexDesignerFrame(window_manager_, connection_manager_, connections_,
                                            app_config_);
     indexes->Show(true);
+}
+
+void SchemaManagerFrame::FetchObjectCounts(const std::string& schema_name) {
+    if (!connection_manager_ || schema_name.empty()) {
+        return;
+    }
+    
+    // Query object counts from catalog tables (native profiles only)
+    std::string sql = "SELECT\n"
+                     "  (SELECT COUNT(*) FROM sb_catalog.sb_tables WHERE schema_name = '" + 
+                     EscapeString(schema_name) + "') as table_count,\n"
+                     "  (SELECT COUNT(*) FROM sb_catalog.sb_views WHERE schema_name = '" + 
+                     EscapeString(schema_name) + "') as view_count,\n"
+                     "  (SELECT COUNT(*) FROM sb_catalog.sb_procedures WHERE schema_name = '" + 
+                     EscapeString(schema_name) + "') as procedure_count,\n"
+                     "  (SELECT COUNT(*) FROM sb_catalog.sb_functions WHERE schema_name = '" + 
+                     EscapeString(schema_name) + "') as function_count,\n"
+                     "  (SELECT COUNT(*) FROM sb_catalog.sb_domains WHERE schema_name = '" + 
+                     EscapeString(schema_name) + "') as domain_count,\n"
+                     "  (SELECT COUNT(*) FROM sb_catalog.sb_sequences WHERE schema_name = '" + 
+                     EscapeString(schema_name) + "') as sequence_count;";
+    
+    pending_queries_++;
+    UpdateControls();
+    connection_manager_->ExecuteQueryAsync(
+        sql, [this](bool ok, QueryResult result, const std::string& error) {
+            CallAfter([this, ok, result = std::move(result), error]() mutable {
+                pending_queries_ = std::max(0, pending_queries_ - 1);
+                if (ok && object_counts_label_) {
+                    std::string counts_text;
+                    if (!result.rows.empty() && result.rows[0].size() >= 6) {
+                        auto& row = result.rows[0];
+                        auto get_value = [](const QueryValue& val) -> std::string {
+                            return val.isNull ? "0" : val.text;
+                        };
+                        auto table_count = get_value(row[0]);
+                        auto view_count = get_value(row[1]);
+                        auto proc_count = get_value(row[2]);
+                        auto func_count = get_value(row[3]);
+                        auto domain_count = get_value(row[4]);
+                        auto seq_count = get_value(row[5]);
+                        
+                        counts_text = "Objects: ";
+                        bool first = true;
+                        auto add_count = [&](const std::string& name, const std::string& val) {
+                            if (val == "0" || val.empty()) return;
+                            if (!first) counts_text += ", ";
+                            first = false;
+                            counts_text += val + " " + name;
+                            if (val != "1") counts_text += "s";
+                        };
+                        add_count("table", table_count);
+                        add_count("view", view_count);
+                        add_count("procedure", proc_count);
+                        add_count("function", func_count);
+                        add_count("domain", domain_count);
+                        add_count("sequence", seq_count);
+                        
+                        if (first) {
+                            counts_text = "No objects in this schema";
+                        }
+                    } else {
+                        counts_text = "Object counts unavailable";
+                    }
+                    object_counts_label_->SetLabel(counts_text);
+                } else if (!ok && !error.empty()) {
+                    // Silently ignore errors - catalog tables may not exist
+                    object_counts_label_->SetLabel("Object counts unavailable");
+                }
+                UpdateControls();
+            });
+        });
 }
 
 void SchemaManagerFrame::OnClose(wxCloseEvent&) {

@@ -67,6 +67,8 @@ constexpr int ID_CONN_GIT_STATUS = wxID_HIGHEST + 593;
 constexpr int ID_CONN_GIT_PULL = wxID_HIGHEST + 594;
 constexpr int ID_CONN_GIT_PUSH = wxID_HIGHEST + 595;
 
+constexpr int ID_CONN_MANAGE = wxID_HIGHEST + 600;
+
 } // namespace scratchrobin
 
 #endif // SCRATCHROBIN_MENU_IDS_H

@@ -36,6 +36,7 @@ private:
     void UpdateProperties();
 
     void OnDiagramTypeChanged(wxCommandEvent& event);
+    void OnNotationChanged(wxCommandEvent& event);
     void OnTemplateChanged(wxCommandEvent& event);
     void OnTemplateEdit(wxCommandEvent& event);
     void OnPaletteAdd(wxCommandEvent& event);
@@ -55,6 +56,7 @@ private:
     std::string relationship_source_id_;
     std::string relationship_kind_;
     wxChoice* diagram_type_choice_ = nullptr;
+    wxChoice* notation_choice_ = nullptr;  // ERD notation selector (Phase 3.2)
     wxChoice* template_choice_ = nullptr;
     wxButton* template_edit_button_ = nullptr;
     wxStaticText* mode_label_ = nullptr;

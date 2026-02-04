@@ -61,7 +61,13 @@ private:
     void OnBegin(wxCommandEvent& event);
     void OnCommit(wxCommandEvent& event);
     void OnRollback(wxCommandEvent& event);
+    void OnSavepoint(wxCommandEvent& event);
+    void OnRollbackToSavepoint(wxCommandEvent& event);
+    void OnReleaseSavepoint(wxCommandEvent& event);
     void OnToggleAutoCommit(wxCommandEvent& event);
+    void OnIsolationLevelChanged(wxCommandEvent& event);
+    void UpdateTransactionUI();
+    bool ConfirmCloseWithTransaction();
     void OnTogglePaging(wxCommandEvent& event);
     void OnPrevPage(wxCommandEvent& event);
     void OnNextPage(wxCommandEvent& event);
@@ -125,6 +131,9 @@ private:
     wxButton* begin_button_ = nullptr;
     wxButton* commit_button_ = nullptr;
     wxButton* rollback_button_ = nullptr;
+    wxButton* savepoint_button_ = nullptr;
+    wxChoice* savepoint_choice_ = nullptr;
+    std::vector<std::string> savepoints_;
     wxButton* run_button_ = nullptr;
     wxButton* cancel_button_ = nullptr;
     wxCheckBox* paging_check_ = nullptr;
@@ -145,6 +154,8 @@ private:
     wxGrid* result_grid_ = nullptr;
     ResultGridTable* result_table_ = nullptr;
     wxStaticText* status_label_ = nullptr;
+    wxStaticText* transaction_indicator_ = nullptr;
+    wxChoice* isolation_choice_ = nullptr;
     wxNotebook* result_notebook_ = nullptr;
     wxTextCtrl* message_log_ = nullptr;
     wxTextCtrl* plan_view_ = nullptr;
@@ -175,6 +186,11 @@ private:
     size_t pending_query_length_ = 0;
     JobHandle active_query_job_;
     bool pending_metadata_refresh_ = false;
+    
+    // Transaction tracking
+    std::chrono::steady_clock::time_point transaction_start_time_;
+    int transaction_statement_count_ = 0;
+    bool transaction_failed_ = false;
 
     struct ResultEntry {
         std::string statement;

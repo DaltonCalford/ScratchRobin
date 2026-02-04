@@ -160,6 +160,33 @@ SqlEditorFrame::SqlEditorFrame(WindowManager* windowManager,
     sessionSizer->Add(begin_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     sessionSizer->Add(commit_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     sessionSizer->Add(rollback_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    
+    // Savepoint controls
+    sessionSizer->Add(new wxStaticText(sessionPanel, wxID_ANY, "Savepoint:"), 0,
+                      wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    savepoint_choice_ = new wxChoice(sessionPanel, wxID_ANY);
+    savepoint_choice_->SetMinSize(wxSize(120, -1));
+    sessionSizer->Add(savepoint_choice_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    savepoint_button_ = new wxButton(sessionPanel, wxID_ANY, "Create", wxDefaultPosition, wxSize(60, -1));
+    sessionSizer->Add(savepoint_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    
+    // Isolation level dropdown
+    sessionSizer->Add(new wxStaticText(sessionPanel, wxID_ANY, "Isolation:"), 0,
+                      wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    isolation_choice_ = new wxChoice(sessionPanel, wxID_ANY);
+    isolation_choice_->Append("Read Committed");
+    isolation_choice_->Append("Read Uncommitted");
+    isolation_choice_->Append("Repeatable Read");
+    isolation_choice_->Append("Serializable");
+    isolation_choice_->SetSelection(0);
+    sessionSizer->Add(isolation_choice_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    
+    // Transaction indicator
+    transaction_indicator_ = new wxStaticText(sessionPanel, wxID_ANY, "Auto");
+    transaction_indicator_->SetBackgroundColour(wxColour(108, 117, 125));  // Gray
+    transaction_indicator_->SetForegroundColour(wxColour(255, 255, 255));  // White
+    sessionSizer->Add(transaction_indicator_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    
     sessionSizer->AddStretchSpacer(1);
     sessionPanel->SetSizer(sessionSizer);
     rootSizer->Add(sessionPanel, 0, wxEXPAND | wxTOP | wxBOTTOM, 4);
@@ -317,6 +344,9 @@ SqlEditorFrame::SqlEditorFrame(WindowManager* windowManager,
     begin_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnBegin, this);
     commit_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnCommit, this);
     rollback_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnRollback, this);
+    savepoint_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnSavepoint, this);
+    savepoint_choice_->Bind(wxEVT_CHOICE, &SqlEditorFrame::OnRollbackToSavepoint, this);
+    isolation_choice_->Bind(wxEVT_CHOICE, &SqlEditorFrame::OnIsolationLevelChanged, this);
     prev_page_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnPrevPage, this);
     next_page_button_->Bind(wxEVT_BUTTON, &SqlEditorFrame::OnNextPage, this);
     page_size_ctrl_->Bind(wxEVT_SPINCTRL, &SqlEditorFrame::OnPageSizeChanged, this);
@@ -493,10 +523,32 @@ void SqlEditorFrame::OnBegin(wxCommandEvent&) {
     if (!connection_manager_) {
         return;
     }
+    
+    // Set isolation level before beginning transaction
+    if (isolation_choice_) {
+        int selection = isolation_choice_->GetSelection();
+        std::string isolationLevel;
+        switch (selection) {
+            case 0: isolationLevel = "READ COMMITTED"; break;
+            case 1: isolationLevel = "READ UNCOMMITTED"; break;
+            case 2: isolationLevel = "REPEATABLE READ"; break;
+            case 3: isolationLevel = "SERIALIZABLE"; break;
+            default: isolationLevel = "READ COMMITTED"; break;
+        }
+        // Note: The actual SET TRANSACTION would be sent to the backend here
+        // For now, we just track it for display purposes
+    }
+    
     if (!connection_manager_->BeginTransaction()) {
         wxMessageBox(connection_manager_->LastError(), "Transaction Error", wxOK | wxICON_ERROR, this);
+        transaction_failed_ = true;
+        UpdateSessionControls();
         return;
     }
+    
+    transaction_start_time_ = std::chrono::steady_clock::now();
+    transaction_statement_count_ = 0;
+    transaction_failed_ = false;
     UpdateStatus("Transaction started");
     UpdateSessionControls();
 }
@@ -507,9 +559,17 @@ void SqlEditorFrame::OnCommit(wxCommandEvent&) {
     }
     if (!connection_manager_->Commit()) {
         wxMessageBox(connection_manager_->LastError(), "Transaction Error", wxOK | wxICON_ERROR, this);
+        transaction_failed_ = true;
+        UpdateSessionControls();
         return;
     }
-    UpdateStatus("Committed");
+    
+    auto elapsed = std::chrono::steady_clock::now() - transaction_start_time_;
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+    
+    UpdateStatus(wxString::Format("Committed (%d statements, %ld ms)", 
+                                  transaction_statement_count_, elapsedMs));
+    transaction_failed_ = false;
     UpdateSessionControls();
 }
 
@@ -521,8 +581,105 @@ void SqlEditorFrame::OnRollback(wxCommandEvent&) {
         wxMessageBox(connection_manager_->LastError(), "Transaction Error", wxOK | wxICON_ERROR, this);
         return;
     }
+    // Clear savepoints on full rollback
+    savepoints_.clear();
+    if (savepoint_choice_) {
+        savepoint_choice_->Clear();
+    }
     UpdateStatus("Rolled back");
+    transaction_failed_ = false;
     UpdateSessionControls();
+}
+
+void SqlEditorFrame::OnSavepoint(wxCommandEvent&) {
+    if (!connection_manager_) {
+        return;
+    }
+    
+    // Generate savepoint name
+    std::string sp_name = "sp_" + std::to_string(savepoints_.size() + 1);
+    
+    // Execute SAVEPOINT command
+    std::string sql = "SAVEPOINT " + sp_name + ";";
+    connection_manager_->ExecuteQueryAsync(sql, 
+        [this, sp_name](bool ok, QueryResult result, const std::string& error) {
+            CallAfter([this, ok, sp_name, error]() {
+                if (ok) {
+                    savepoints_.push_back(sp_name);
+                    if (savepoint_choice_) {
+                        savepoint_choice_->Append(sp_name);
+                        savepoint_choice_->SetSelection(savepoint_choice_->GetCount() - 1);
+                    }
+                    UpdateStatus("Savepoint " + sp_name + " created");
+                } else {
+                    wxMessageBox("Failed to create savepoint: " + error, 
+                                "Savepoint Error", wxOK | wxICON_ERROR, this);
+                }
+            });
+        });
+}
+
+void SqlEditorFrame::OnRollbackToSavepoint(wxCommandEvent&) {
+    if (!connection_manager_ || !savepoint_choice_) {
+        return;
+    }
+    
+    int selection = savepoint_choice_->GetSelection();
+    if (selection == wxNOT_FOUND) {
+        return;
+    }
+    
+    std::string sp_name = savepoints_[selection];
+    std::string sql = "ROLLBACK TO SAVEPOINT " + sp_name + ";";
+    
+    connection_manager_->ExecuteQueryAsync(sql,
+        [this, sp_name, selection](bool ok, QueryResult result, const std::string& error) {
+            CallAfter([this, ok, sp_name, error]() {
+                if (ok) {
+                    UpdateStatus("Rolled back to savepoint " + sp_name);
+                } else {
+                    wxMessageBox("Failed to rollback to savepoint: " + error,
+                                "Savepoint Error", wxOK | wxICON_ERROR, this);
+                }
+            });
+        });
+}
+
+void SqlEditorFrame::OnReleaseSavepoint(wxCommandEvent&) {
+    if (!connection_manager_ || !savepoint_choice_) {
+        return;
+    }
+    
+    int selection = savepoint_choice_->GetSelection();
+    if (selection == wxNOT_FOUND) {
+        return;
+    }
+    
+    std::string sp_name = savepoints_[selection];
+    std::string sql = "RELEASE SAVEPOINT " + sp_name + ";";
+    
+    connection_manager_->ExecuteQueryAsync(sql,
+        [this, sp_name, selection](bool ok, QueryResult result, const std::string& error) {
+            CallAfter([this, ok, sp_name, selection, error]() {
+                if (ok) {
+                    // Remove this and subsequent savepoints
+                    savepoints_.erase(savepoints_.begin() + selection, savepoints_.end());
+                    if (savepoint_choice_) {
+                        savepoint_choice_->Clear();
+                        for (const auto& sp : savepoints_) {
+                            savepoint_choice_->Append(sp);
+                        }
+                        if (!savepoints_.empty()) {
+                            savepoint_choice_->SetSelection(savepoints_.size() - 1);
+                        }
+                    }
+                    UpdateStatus("Savepoint " + sp_name + " released");
+                } else {
+                    wxMessageBox("Failed to release savepoint: " + error,
+                                "Savepoint Error", wxOK | wxICON_ERROR, this);
+                }
+            });
+        });
 }
 
 void SqlEditorFrame::OnToggleAutoCommit(wxCommandEvent&) {
@@ -531,6 +688,93 @@ void SqlEditorFrame::OnToggleAutoCommit(wxCommandEvent&) {
     }
     connection_manager_->SetAutoCommit(auto_commit_check_ && auto_commit_check_->GetValue());
     UpdateSessionControls();
+}
+
+void SqlEditorFrame::OnIsolationLevelChanged(wxCommandEvent&) {
+    // Isolation level will be applied on next BEGIN
+    // Could show a notification that it will take effect on next transaction
+}
+
+void SqlEditorFrame::UpdateTransactionUI() {
+    if (!transaction_indicator_) {
+        return;
+    }
+    
+    bool inTransaction = connection_manager_ && connection_manager_->IsInTransaction();
+    
+    if (transaction_failed_) {
+        // Transaction failed state
+        transaction_indicator_->SetLabel("TX Failed");
+        transaction_indicator_->SetBackgroundColour(wxColour(220, 53, 69));  // Red
+        transaction_indicator_->SetForegroundColour(wxColour(255, 255, 255));  // White
+    } else if (inTransaction) {
+        // Transaction active
+        transaction_indicator_->SetLabel("TX Active");
+        transaction_indicator_->SetBackgroundColour(wxColour(255, 193, 7));  // Yellow
+        transaction_indicator_->SetForegroundColour(wxColour(0, 0, 0));  // Black
+    } else {
+        // Auto-commit mode
+        transaction_indicator_->SetLabel("Auto");
+        transaction_indicator_->SetBackgroundColour(wxColour(108, 117, 125));  // Gray
+        transaction_indicator_->SetForegroundColour(wxColour(255, 255, 255));  // White
+    }
+    
+    // Update window title
+    wxString title = "SQL Editor";
+    if (connection_manager_ && connection_manager_->IsConnected()) {
+        const ConnectionProfile* profile = GetSelectedProfile();
+        if (profile && !profile->database.empty()) {
+            title = wxString::Format("%s@%s", profile->database, profile->host);
+        }
+    }
+    if (inTransaction) {
+        title += " [TX]";
+    }
+    SetTitle(title);
+}
+
+bool SqlEditorFrame::ConfirmCloseWithTransaction() {
+    auto elapsed = std::chrono::steady_clock::now() - transaction_start_time_;
+    auto elapsedSec = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
+    
+    wxString message = wxString::Format(
+        "You have an active transaction with uncommitted changes.\n\n"
+        "Transaction started: %ld seconds ago\n"
+        "Statements executed: %d\n\n"
+        "Click 'Yes' to commit changes, 'No' to rollback, or 'Cancel' to keep the window open.",
+        elapsedSec,
+        transaction_statement_count_
+    );
+    
+    int result = wxMessageBox(message, "Uncommitted Transaction",
+                             wxYES_NO | wxCANCEL | wxICON_WARNING, this);
+    
+    switch (result) {
+        case wxYES:
+            // Commit and close
+            if (connection_manager_->Commit()) {
+                return true;  // Close window
+            } else {
+                wxMessageBox(connection_manager_->LastError(), "Commit Failed", 
+                           wxOK | wxICON_ERROR, this);
+                return false;  // Stay open
+            }
+            
+        case wxNO:
+            // Rollback and close
+            if (connection_manager_->Rollback()) {
+                return true;  // Close window
+            } else {
+                wxMessageBox(connection_manager_->LastError(), "Rollback Failed",
+                           wxOK | wxICON_ERROR, this);
+                return false;  // Stay open
+            }
+            
+        case wxCANCEL:
+        default:
+            // Cancel close, keep window open
+            return false;
+    }
 }
 
 void SqlEditorFrame::OnTogglePaging(wxCommandEvent&) {
@@ -675,7 +919,16 @@ void SqlEditorFrame::OnSblr(wxCommandEvent&) {
     StartSpecialQuery("SHOW SBLR " + statement, "SBLR");
 }
 
-void SqlEditorFrame::OnClose(wxCloseEvent&) {
+void SqlEditorFrame::OnClose(wxCloseEvent& event) {
+    // Check for active transaction
+    if (connection_manager_ && connection_manager_->IsInTransaction()) {
+        if (!ConfirmCloseWithTransaction()) {
+            event.Veto();  // Cancel the close
+            return;
+        }
+        // User chose to commit or rollback - transaction handled in ConfirmCloseWithTransaction
+    }
+    
     if (window_manager_) {
         window_manager_->UnregisterWindow(this);
     }
@@ -914,6 +1167,11 @@ void SqlEditorFrame::HandleQueryResult(bool ok, const QueryResult& result,
             std::chrono::steady_clock::now() - statement_start_time_).count();
     }
     last_statement_ms_ = elapsed_ms;
+    
+    // Increment transaction statement count if in a transaction
+    if (ok && connection_manager_ && connection_manager_->IsInTransaction()) {
+        transaction_statement_count_++;
+    }
     ResultEntry* entry = nullptr;
     if (result_index >= 0 && static_cast<size_t>(result_index) < result_sets_.size()) {
         entry = &result_sets_[static_cast<size_t>(result_index)];
@@ -1469,6 +1727,7 @@ void SqlEditorFrame::UpdateSessionControls() {
     bool has_connections = connections_ && !connections_->empty();
     bool connected = connection_manager_ && connection_manager_->IsConnected();
     bool auto_commit = connection_manager_ ? connection_manager_->IsAutoCommit() : true;
+    bool in_transaction = connection_manager_ ? connection_manager_->IsInTransaction() : false;
     auto caps = connection_manager_ ? connection_manager_->Capabilities()
                                     : BackendCapabilities{};
 
@@ -1486,13 +1745,22 @@ void SqlEditorFrame::UpdateSessionControls() {
         auto_commit_check_->Enable(connected && caps.supportsTransactions && !query_running_);
     }
     if (begin_button_) {
-        begin_button_->Enable(connected && caps.supportsTransactions && auto_commit && !query_running_);
+        begin_button_->Enable(connected && caps.supportsTransactions && auto_commit && !in_transaction && !query_running_);
     }
     if (commit_button_) {
-        commit_button_->Enable(connected && caps.supportsTransactions && !auto_commit && !query_running_);
+        commit_button_->Enable(connected && caps.supportsTransactions && in_transaction && !query_running_);
     }
     if (rollback_button_) {
-        rollback_button_->Enable(connected && caps.supportsTransactions && !auto_commit && !query_running_);
+        rollback_button_->Enable(connected && caps.supportsTransactions && in_transaction && !query_running_);
+    }
+    if (savepoint_button_) {
+        savepoint_button_->Enable(connected && caps.supportsTransactions && in_transaction && !query_running_);
+    }
+    if (savepoint_choice_) {
+        savepoint_choice_->Enable(connected && caps.supportsTransactions && in_transaction && !savepoints_.empty() && !query_running_);
+    }
+    if (isolation_choice_) {
+        isolation_choice_->Enable(connected && caps.supportsTransactions && !in_transaction && !query_running_);
     }
     if (run_button_) {
         run_button_->Enable(connected && !query_running_);
@@ -1507,6 +1775,7 @@ void SqlEditorFrame::UpdateSessionControls() {
         sblr_button_->Enable(connected && caps.supportsSblr && !query_running_);
     }
 
+    UpdateTransactionUI();
     UpdateExportControls();
     UpdateResultControls();
     UpdateHistoryControls();

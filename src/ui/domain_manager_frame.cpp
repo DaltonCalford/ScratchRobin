@@ -256,6 +256,12 @@ void DomainManagerFrame::BuildLayout() {
     auto* detailSizer = new wxBoxSizer(wxVERTICAL);
     detailSizer->Add(new wxStaticText(detailPanel, wxID_ANY, "Details"), 0,
                      wxLEFT | wxRIGHT | wxTOP, 8);
+    
+    // Domain usage reference label
+    usage_label_ = new wxStaticText(detailPanel, wxID_ANY, "Select a domain to view usage");
+    usage_label_->SetForegroundColour(wxColour(100, 100, 100));
+    detailSizer->Add(usage_label_, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    
     details_text_ = new wxTextCtrl(detailPanel, wxID_ANY, "", wxDefaultPosition,
                                    wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH2);
     detailSizer->Add(details_text_, 1, wxEXPAND | wxALL, 8);
@@ -412,14 +418,16 @@ void DomainManagerFrame::RefreshDomainDetails(const std::string& domain_name) {
     pending_queries_++;
     UpdateControls();
     connection_manager_->ExecuteQueryAsync(
-        sql, [this](bool ok, QueryResult result, const std::string& error) {
-            CallAfter([this, ok, result = std::move(result), error]() mutable {
+        sql, [this, domain_name](bool ok, QueryResult result, const std::string& error) {
+            CallAfter([this, ok, result = std::move(result), error, domain_name]() mutable {
                 pending_queries_ = std::max(0, pending_queries_ - 1);
                 domain_details_result_ = result;
                 if (ok) {
                     if (details_text_) {
                         details_text_->SetValue(FormatDetails(domain_details_result_));
                     }
+                    // Fetch usage information for this domain
+                    FetchDomainUsage(domain_name);
                 } else if (!error.empty()) {
                     SetMessage(error);
                 }
@@ -660,6 +668,64 @@ void DomainManagerFrame::OnOpenIndexDesigner(wxCommandEvent&) {
     auto* indexes = new IndexDesignerFrame(window_manager_, connection_manager_, connections_,
                                            app_config_);
     indexes->Show(true);
+}
+
+void DomainManagerFrame::FetchDomainUsage(const std::string& domain_name) {
+    if (!connection_manager_ || domain_name.empty()) {
+        return;
+    }
+    
+    // Query domain usage from catalog tables - look for columns using this domain
+    std::string sql = "SELECT schema_name, table_name, column_name\n"
+                     "FROM sb_catalog.sb_columns\n"
+                     "WHERE domain_name = '" + EscapeSqlLiteral(domain_name) + "'\n"
+                     "ORDER BY schema_name, table_name, column_name\n"
+                     "LIMIT 50;";  // Limit to prevent overwhelming display
+    
+    pending_queries_++;
+    UpdateControls();
+    connection_manager_->ExecuteQueryAsync(
+        sql, [this, domain_name](bool ok, QueryResult result, const std::string& error) {
+            CallAfter([this, ok, result = std::move(result), error, domain_name]() mutable {
+                pending_queries_ = std::max(0, pending_queries_ - 1);
+                domain_usage_result_ = result;
+                if (ok && usage_label_) {
+                    std::string usage_text;
+                    if (result.rows.empty()) {
+                        usage_text = "No columns use this domain";
+                    } else {
+                        size_t count = result.rows.size();
+                        if (count >= 50) {
+                            usage_text = "Used by 50+ columns (showing first 50): ";
+                        } else {
+                            usage_text = "Used by " + std::to_string(count) + " column" + 
+                                        (count == 1 ? "" : "s") + ": ";
+                        }
+                        
+                        bool first = true;
+                        for (const auto& row : result.rows) {
+                            if (row.size() >= 3) {
+                                if (!first) usage_text += ", ";
+                                first = false;
+                                std::string schema = row[0].isNull ? "" : row[0].text;
+                                std::string table = row[1].isNull ? "" : row[1].text;
+                                std::string col = row[2].isNull ? "" : row[2].text;
+                                if (!schema.empty() && !table.empty()) {
+                                    usage_text += schema + "." + table + "." + col;
+                                }
+                            }
+                        }
+                    }
+                    usage_label_->SetLabel(usage_text);
+                    usage_label_->SetForegroundColour(wxColour(80, 80, 80));
+                } else if (!ok && !error.empty()) {
+                    // Catalog tables may not exist - show friendly message
+                    usage_label_->SetLabel("Usage info unavailable (requires ScratchBird catalog)");
+                    usage_label_->SetForegroundColour(wxColour(150, 150, 150));
+                }
+                UpdateControls();
+            });
+        });
 }
 
 void DomainManagerFrame::OnClose(wxCloseEvent&) {

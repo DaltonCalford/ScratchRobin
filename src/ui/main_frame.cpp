@@ -8,6 +8,7 @@
  * https://www.firebirdsql.org/en/initial-developer-s-public-license-version-1-0/
  */
 #include "main_frame.h"
+#include "connection_editor_dialog.h"
 #include "diagram_frame.h"
 #include "domain_manager_frame.h"
 #include "icon_bar.h"
@@ -81,6 +82,7 @@ wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
     EVT_MENU(ID_MENU_SCHEMA_MANAGER, MainFrame::OnOpenSchemaManager)
     EVT_MENU(ID_MENU_TABLE_DESIGNER, MainFrame::OnOpenTableDesigner)
     EVT_MENU(ID_MENU_INDEX_DESIGNER, MainFrame::OnOpenIndexDesigner)
+    EVT_MENU(ID_CONN_MANAGE, MainFrame::OnManageConnections)
     EVT_MENU(wxID_EXIT, MainFrame::OnQuit)
     EVT_CLOSE(MainFrame::OnClose)
     EVT_TREE_SEL_CHANGED(wxID_ANY, MainFrame::OnTreeSelection)
@@ -97,7 +99,7 @@ wxEND_EVENT_TABLE()
 MainFrame::MainFrame(WindowManager* windowManager,
                      MetadataModel* metadataModel,
                      ConnectionManager* connectionManager,
-                     const std::vector<ConnectionProfile>* connections,
+                     std::vector<ConnectionProfile>* connections,
                      const AppConfig* appConfig)
     : wxFrame(nullptr, wxID_ANY, "ScratchRobin", wxDefaultPosition, wxSize(1024, 768)),
       window_manager_(windowManager),
@@ -569,6 +571,29 @@ void MainFrame::OnTreeRefresh(wxCommandEvent&) {
         SetStatusText(metadata_model_->LastError());
     } else {
         SetStatusText("Metadata refreshed");
+    }
+}
+
+void MainFrame::OnManageConnections(wxCommandEvent&) {
+    if (!connections_) {
+        return;
+    }
+    
+    // Make a copy of connections to edit
+    std::vector<ConnectionProfile> editableConnections = *connections_;
+    
+    ConnectionManagerDialog dialog(this, &editableConnections);
+    if (dialog.ShowModal() == wxID_OK) {
+        // Update the original connections
+        // Note: In a real implementation, this would also save to config file
+        *connections_ = editableConnections;
+        
+        // Refresh metadata model if available
+        if (metadata_model_) {
+            metadata_model_->Refresh();
+        }
+        
+        SetStatusText("Connections updated");
     }
 }
 

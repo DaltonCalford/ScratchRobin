@@ -54,6 +54,10 @@ private:
     void RefreshJobDetails(const std::string& job_name);
     void RefreshJobRuns(const std::string& job_name);
     void RefreshJobGrants(const std::string& job_name);
+    void RefreshJobDependencies(const std::string& job_name);
+    void RefreshSchedulerConfig();
+    void SaveSchedulerConfig();
+    std::string BuildDependenciesText(const QueryResult& prerequisites, const QueryResult& dependents);
 
     void RunCommand(const std::string& sql, const std::string& success_message);
 
@@ -75,6 +79,9 @@ private:
     void OnCancelRun(wxCommandEvent& event);
     void OnGrant(wxCommandEvent& event);
     void OnRevoke(wxCommandEvent& event);
+    void OnConfigRefresh(wxCommandEvent& event);
+    void OnConfigSave(wxCommandEvent& event);
+    void OnConfigEnable(wxCommandEvent& event);
     void OnNewSqlEditor(wxCommandEvent& event);
     void OnNewDiagram(wxCommandEvent& event);
     void OnOpenMonitoring(wxCommandEvent& event);
@@ -103,6 +110,15 @@ private:
     wxButton* revoke_button_ = nullptr;
     wxTextCtrl* grant_principal_ctrl_ = nullptr;
     wxStaticText* status_text_ = nullptr;
+    
+    // Scheduler config controls
+    wxCheckBox* config_enabled_chk_ = nullptr;
+    wxTextCtrl* config_max_concurrent_ctrl_ = nullptr;
+    wxTextCtrl* config_poll_interval_ctrl_ = nullptr;
+    wxChoice* config_timezone_choice_ = nullptr;
+    wxTextCtrl* config_text_ctrl_ = nullptr;
+    wxButton* config_refresh_btn_ = nullptr;
+    wxButton* config_save_btn_ = nullptr;
     wxTextCtrl* message_text_ = nullptr;
     wxTextCtrl* details_text_ = nullptr;
 
@@ -112,6 +128,7 @@ private:
     ResultGridTable* jobs_table_ = nullptr;
     ResultGridTable* runs_table_ = nullptr;
     ResultGridTable* grants_table_ = nullptr;
+    wxTextCtrl* deps_text_ = nullptr;  // NEW: Dependencies visualization
 
     int active_profile_index_ = -1;
     int pending_queries_ = 0;

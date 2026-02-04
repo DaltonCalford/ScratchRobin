@@ -21,6 +21,12 @@ public:
     virtual bool ResolvePassword(const std::string& credentialId,
                                  std::string* outPassword,
                                  std::string* outError) = 0;
+    virtual bool StorePassword(const std::string& credentialId,
+                               const std::string& password,
+                               std::string* outError) = 0;
+    virtual bool DeletePassword(const std::string& credentialId,
+                                std::string* outError) = 0;
+    virtual bool HasPassword(const std::string& credentialId) = 0;
 };
 
 std::unique_ptr<CredentialStore> CreateDefaultCredentialStore();

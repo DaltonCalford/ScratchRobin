@@ -28,6 +28,7 @@
 #include <sstream>
 
 #include <wx/button.h>
+#include <wx/checkbox.h>
 #include <wx/choicdlg.h>
 #include <wx/choice.h>
 #include <wx/grid.h>
@@ -288,9 +289,80 @@ void JobSchedulerFrame::BuildLayout() {
     grantsSizer->Add(grants_grid_, 1, wxEXPAND | wxALL, 8);
     grantsTab->SetSizer(grantsSizer);
 
+    // Dependencies tab
+    auto* depsTab = new wxPanel(notebook, wxID_ANY);
+    auto* depsSizer = new wxBoxSizer(wxVERTICAL);
+    deps_text_ = new wxTextCtrl(depsTab, wxID_ANY, "", wxDefaultPosition, wxDefaultSize,
+                                wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH2);
+    depsSizer->Add(deps_text_, 1, wxEXPAND | wxALL, 8);
+    depsTab->SetSizer(depsSizer);
+
+    // Scheduler Configuration tab
+    auto* configTab = new wxPanel(notebook, wxID_ANY);
+    auto* configSizer = new wxBoxSizer(wxVERTICAL);
+    
+    auto* configTopBar = new wxBoxSizer(wxHORIZONTAL);
+    config_refresh_btn_ = new wxButton(configTab, wxID_ANY, "Refresh Config");
+    config_save_btn_ = new wxButton(configTab, wxID_ANY, "Save Config");
+    configTopBar->Add(config_refresh_btn_, 0, wxRIGHT, 6);
+    configTopBar->Add(config_save_btn_, 0, wxRIGHT, 6);
+    configSizer->Add(configTopBar, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+    
+    // Config form - using vertical sizer with horizontal rows
+    auto* configForm = new wxBoxSizer(wxVERTICAL);
+    
+    auto* row1 = new wxBoxSizer(wxHORIZONTAL);
+    row1->Add(new wxStaticText(configTab, wxID_ANY, "Enabled:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    config_enabled_chk_ = new wxCheckBox(configTab, wxID_ANY, "");
+    row1->Add(config_enabled_chk_, 0);
+    configForm->Add(row1, 0, wxEXPAND | wxBOTTOM, 4);
+    
+    auto* row2 = new wxBoxSizer(wxHORIZONTAL);
+    row2->Add(new wxStaticText(configTab, wxID_ANY, "Max Concurrent Jobs:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    config_max_concurrent_ctrl_ = new wxTextCtrl(configTab, wxID_ANY, "", wxDefaultPosition, wxSize(80, -1));
+    row2->Add(config_max_concurrent_ctrl_, 0);
+    configForm->Add(row2, 0, wxEXPAND | wxBOTTOM, 4);
+    
+    auto* row3 = new wxBoxSizer(wxHORIZONTAL);
+    row3->Add(new wxStaticText(configTab, wxID_ANY, "Poll Interval (seconds):"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    config_poll_interval_ctrl_ = new wxTextCtrl(configTab, wxID_ANY, "", wxDefaultPosition, wxSize(80, -1));
+    row3->Add(config_poll_interval_ctrl_, 0);
+    configForm->Add(row3, 0, wxEXPAND | wxBOTTOM, 4);
+    
+    auto* row4 = new wxBoxSizer(wxHORIZONTAL);
+    row4->Add(new wxStaticText(configTab, wxID_ANY, "Default Timezone:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    config_timezone_choice_ = new wxChoice(configTab, wxID_ANY);
+    config_timezone_choice_->Append("UTC");
+    config_timezone_choice_->Append("Local");
+    config_timezone_choice_->Append("America/New_York");
+    config_timezone_choice_->Append("America/Chicago");
+    config_timezone_choice_->Append("America/Denver");
+    config_timezone_choice_->Append("America/Los_Angeles");
+    config_timezone_choice_->Append("Europe/London");
+    config_timezone_choice_->Append("Europe/Paris");
+    config_timezone_choice_->Append("Europe/Berlin");
+    config_timezone_choice_->Append("Asia/Tokyo");
+    config_timezone_choice_->Append("Asia/Shanghai");
+    config_timezone_choice_->Append("Australia/Sydney");
+    config_timezone_choice_->SetSelection(0);
+    row4->Add(config_timezone_choice_, 1);
+    configForm->Add(row4, 0, wxEXPAND | wxBOTTOM, 4);
+    
+    configSizer->Add(configForm, 0, wxEXPAND | wxALL, 8);
+    
+    // Config text view (raw view of configuration)
+    config_text_ctrl_ = new wxTextCtrl(configTab, wxID_ANY, "", wxDefaultPosition, wxDefaultSize,
+                                       wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH2);
+    configSizer->Add(new wxStaticText(configTab, wxID_ANY, "Raw Configuration:"), 0, wxLEFT | wxRIGHT | wxTOP, 8);
+    configSizer->Add(config_text_ctrl_, 1, wxEXPAND | wxALL, 8);
+    
+    configTab->SetSizer(configSizer);
+
     notebook->AddPage(detailTab, "Details");
     notebook->AddPage(runsTab, "Runs");
     notebook->AddPage(grantsTab, "Privileges");
+    notebook->AddPage(depsTab, "Dependencies");
+    notebook->AddPage(configTab, "Configuration");
 
     detailsSizer->Add(notebook, 1, wxEXPAND);
     detailsPanel->SetSizer(detailsSizer);
@@ -313,6 +385,11 @@ void JobSchedulerFrame::BuildLayout() {
 
     jobs_grid_->Bind(wxEVT_GRID_SELECT_CELL, &JobSchedulerFrame::OnJobSelected, this);
     runs_grid_->Bind(wxEVT_GRID_SELECT_CELL, &JobSchedulerFrame::OnRunSelected, this);
+    
+    // Config tab bindings
+    config_refresh_btn_->Bind(wxEVT_BUTTON, &JobSchedulerFrame::OnConfigRefresh, this);
+    config_save_btn_->Bind(wxEVT_BUTTON, &JobSchedulerFrame::OnConfigSave, this);
+    config_enabled_chk_->Bind(wxEVT_CHECKBOX, &JobSchedulerFrame::OnConfigEnable, this);
 }
 
 void JobSchedulerFrame::PopulateConnections() {
@@ -452,14 +529,16 @@ void JobSchedulerFrame::RefreshJobDetails(const std::string& job_name) {
     pending_queries_++;
     UpdateControls();
     connection_manager_->ExecuteQueryAsync(sql,
-        [this](bool ok, QueryResult result, const std::string& error) {
-            CallAfter([this, ok, result = std::move(result), error]() mutable {
+        [this, job_name](bool ok, QueryResult result, const std::string& error) {
+            CallAfter([this, ok, result = std::move(result), error, job_name]() mutable {
                 pending_queries_ = std::max(0, pending_queries_ - 1);
                 job_details_result_ = result;
                 if (ok) {
                     if (details_text_) {
                         details_text_->SetValue(FormatJobDetails(job_details_result_));
                     }
+                    // Refresh dependencies visualization
+                    RefreshJobDependencies(job_name);
                 } else if (!error.empty()) {
                     SetMessage(error);
                 }
@@ -807,6 +886,105 @@ void JobSchedulerFrame::OnClose(wxCloseEvent&) {
     Destroy();
 }
 
+void JobSchedulerFrame::RefreshJobDependencies(const std::string& job_name) {
+    if (!connection_manager_ || job_name.empty()) {
+        return;
+    }
+    
+    // Query job prerequisites (jobs this job depends on)
+    std::string prereq_sql = "SELECT prerequisite_job_name FROM sb_catalog.sb_job_prerequisites\n"
+                            "WHERE job_name = '" + EscapeSqlLiteral(job_name) + "'\n"
+                            "ORDER BY prerequisite_job_name;";
+    
+    // Query job dependents (jobs that depend on this job)
+    std::string dep_sql = "SELECT job_name FROM sb_catalog.sb_job_prerequisites\n"
+                         "WHERE prerequisite_job_name = '" + EscapeSqlLiteral(job_name) + "'\n"
+                         "ORDER BY job_name;";
+    
+    pending_queries_++;
+    UpdateControls();
+    
+    // First query: prerequisites
+    connection_manager_->ExecuteQueryAsync(prereq_sql,
+        [this, job_name, dep_sql](bool ok1, QueryResult prereq_result, const std::string& error1) {
+            CallAfter([this, ok1, prereq_result = std::move(prereq_result), error1, job_name, dep_sql]() mutable {
+                if (!ok1) {
+                    // Catalog table may not exist - show friendly message
+                    if (deps_text_) {
+                        deps_text_->SetValue("Job dependencies information is not available.\n"
+                                            "This feature requires ScratchBird catalog tables.");
+                    }
+                    pending_queries_ = std::max(0, pending_queries_ - 1);
+                    UpdateControls();
+                    return;
+                }
+                
+                // Second query: dependents
+                connection_manager_->ExecuteQueryAsync(dep_sql,
+                    [this, prereq_result](bool ok2, QueryResult dep_result, const std::string& error2) mutable {
+                        CallAfter([this, ok2, prereq_result = std::move(prereq_result), 
+                                   dep_result = std::move(dep_result), error2]() mutable {
+                            pending_queries_ = std::max(0, pending_queries_ - 1);
+                            if (ok2 && deps_text_) {
+                                deps_text_->SetValue(BuildDependenciesText(prereq_result, dep_result));
+                            } else if (deps_text_) {
+                                deps_text_->SetValue("Unable to load job dependencies.");
+                            }
+                            UpdateControls();
+                        });
+                    });
+            });
+        });
+}
+
+std::string JobSchedulerFrame::BuildDependenciesText(const QueryResult& prerequisites,
+                                                      const QueryResult& dependents) {
+    std::string text;
+    
+    // Header
+    text += "╔══════════════════════════════════════════════════════════════╗\n";
+    text += "║                    JOB DEPENDENCIES                          ║\n";
+    text += "╚══════════════════════════════════════════════════════════════╝\n\n";
+    
+    // Prerequisites section (jobs this job depends on)
+    text += "📋 PREREQUISITES (This job waits for):\n";
+    text += "────────────────────────────────────────────────────────────────\n";
+    if (prerequisites.rows.empty()) {
+        text += "   (none - this job has no prerequisites)\n";
+    } else {
+        for (const auto& row : prerequisites.rows) {
+            if (!row.empty() && !row[0].isNull) {
+                text += "   ↳ " + row[0].text + "\n";
+            }
+        }
+    }
+    text += "\n";
+    
+    // Dependents section (jobs that depend on this job)
+    text += "📎 DEPENDENTS (Jobs waiting for this):\n";
+    text += "────────────────────────────────────────────────────────────────\n";
+    if (dependents.rows.empty()) {
+        text += "   (none - no jobs depend on this job)\n";
+    } else {
+        for (const auto& row : dependents.rows) {
+            if (!row.empty() && !row[0].isNull) {
+                text += "   ↱ " + row[0].text + "\n";
+            }
+        }
+    }
+    text += "\n";
+    
+    // Summary
+    size_t prereq_count = prerequisites.rows.size();
+    size_t dep_count = dependents.rows.size();
+    text += "────────────────────────────────────────────────────────────────\n";
+    text += "Summary: " + std::to_string(prereq_count) + " prerequisite" + 
+            (prereq_count == 1 ? "" : "s") + ", " +
+            std::to_string(dep_count) + " dependent" + (dep_count == 1 ? "" : "s") + "\n";
+    
+    return text;
+}
+
 void JobSchedulerFrame::OnNewSqlEditor(wxCommandEvent&) {
     auto* editor = new SqlEditorFrame(window_manager_, connection_manager_, connections_, app_config_, nullptr);
     editor->Show(true);
@@ -850,6 +1028,137 @@ void JobSchedulerFrame::OnOpenTableDesigner(wxCommandEvent&) {
 void JobSchedulerFrame::OnOpenIndexDesigner(wxCommandEvent&) {
     auto* indexes = new IndexDesignerFrame(window_manager_, connection_manager_, connections_, app_config_);
     indexes->Show(true);
+}
+
+void JobSchedulerFrame::RefreshSchedulerConfig() {
+    if (!connection_manager_) {
+        return;
+    }
+    const auto* profile = GetSelectedProfile();
+    if (!profile || !IsNativeProfile(*profile)) {
+        if (config_text_ctrl_) {
+            config_text_ctrl_->SetValue("Scheduler configuration is only available for ScratchBird connections.");
+        }
+        return;
+    }
+    
+    pending_queries_++;
+    UpdateControls();
+    UpdateStatus("Loading scheduler config...");
+    
+    // Query scheduler configuration from system catalog
+    std::string sql = "SELECT config_key, config_value FROM sb_catalog.sb_scheduler_config ORDER BY config_key;";
+    connection_manager_->ExecuteQueryAsync(sql,
+        [this](bool ok, QueryResult result, const std::string& error) {
+            CallAfter([this, ok, result = std::move(result), error]() mutable {
+                pending_queries_ = std::max(0, pending_queries_ - 1);
+                if (ok) {
+                    // Parse config values and update UI
+                    std::string raw_text;
+                    bool enabled = false;
+                    int max_concurrent = 4;
+                    int poll_interval = 30;
+                    std::string timezone = "UTC";
+                    
+                    for (const auto& row : result.rows) {
+                        if (row.size() >= 2) {
+                            std::string key = row[0].isNull ? "" : row[0].text;
+                            std::string value = row[1].isNull ? "" : row[1].text;
+                            raw_text += key + " = " + value + "\n";
+                            
+                            if (key == "enabled") {
+                                enabled = (value == "true" || value == "1" || value == "yes");
+                            } else if (key == "max_concurrent_jobs") {
+                                max_concurrent = std::stoi(value);
+                            } else if (key == "poll_interval_seconds") {
+                                poll_interval = std::stoi(value);
+                            } else if (key == "default_timezone") {
+                                timezone = value;
+                            }
+                        }
+                    }
+                    
+                    // Update UI controls
+                    if (config_enabled_chk_) {
+                        config_enabled_chk_->SetValue(enabled);
+                    }
+                    if (config_max_concurrent_ctrl_) {
+                        config_max_concurrent_ctrl_->SetValue(std::to_string(max_concurrent));
+                    }
+                    if (config_poll_interval_ctrl_) {
+                        config_poll_interval_ctrl_->SetValue(std::to_string(poll_interval));
+                    }
+                    if (config_timezone_choice_) {
+                        int tz_sel = config_timezone_choice_->FindString(timezone);
+                        if (tz_sel != wxNOT_FOUND) {
+                            config_timezone_choice_->SetSelection(tz_sel);
+                        }
+                    }
+                    if (config_text_ctrl_) {
+                        if (raw_text.empty()) {
+                            config_text_ctrl_->SetValue("No scheduler configuration found.");
+                        } else {
+                            config_text_ctrl_->SetValue(raw_text);
+                        }
+                    }
+                    UpdateStatus("Config loaded");
+                } else {
+                    if (config_text_ctrl_) {
+                        config_text_ctrl_->SetValue("Failed to load scheduler configuration:\n" + 
+                                                    (error.empty() ? "Unknown error" : error));
+                    }
+                    UpdateStatus("Config load failed");
+                }
+                UpdateControls();
+            });
+        });
+}
+
+void JobSchedulerFrame::SaveSchedulerConfig() {
+    if (!connection_manager_) {
+        return;
+    }
+    const auto* profile = GetSelectedProfile();
+    if (!profile || !IsNativeProfile(*profile)) {
+        SetMessage("Scheduler configuration is only available for ScratchBird connections.");
+        return;
+    }
+    
+    // Build SQL to update config
+    bool enabled = config_enabled_chk_ ? config_enabled_chk_->GetValue() : false;
+    std::string max_concurrent = config_max_concurrent_ctrl_ ? 
+                                 config_max_concurrent_ctrl_->GetValue().ToStdString() : "4";
+    std::string poll_interval = config_poll_interval_ctrl_ ? 
+                                config_poll_interval_ctrl_->GetValue().ToStdString() : "30";
+    std::string timezone = config_timezone_choice_ ? 
+                          config_timezone_choice_->GetStringSelection().ToStdString() : "UTC";
+    
+    std::string sql = "UPDATE sb_catalog.sb_scheduler_config SET config_value = CASE config_key "
+                     "WHEN 'enabled' THEN '" + std::string(enabled ? "true" : "false") + "' "
+                     "WHEN 'max_concurrent_jobs' THEN '" + EscapeSqlLiteral(max_concurrent) + "' "
+                     "WHEN 'poll_interval_seconds' THEN '" + EscapeSqlLiteral(poll_interval) + "' "
+                     "WHEN 'default_timezone' THEN '" + EscapeSqlLiteral(timezone) + "' "
+                     "ELSE config_value END "
+                     "WHERE config_key IN ('enabled', 'max_concurrent_jobs', 'poll_interval_seconds', 'default_timezone');";
+    
+    RunCommand(sql, "Configuration saved");
+}
+
+void JobSchedulerFrame::OnConfigRefresh(wxCommandEvent&) {
+    RefreshSchedulerConfig();
+}
+
+void JobSchedulerFrame::OnConfigSave(wxCommandEvent&) {
+    SaveSchedulerConfig();
+}
+
+void JobSchedulerFrame::OnConfigEnable(wxCommandEvent&) {
+    // Auto-save when enable checkbox is toggled (optional UX improvement)
+    // For now, just mark that user needs to click Save
+    if (config_text_ctrl_) {
+        config_text_ctrl_->SetValue(config_text_ctrl_->GetValue() + 
+                                    "\n[Note: Click 'Save Config' to apply changes]");
+    }
 }
 
 } // namespace scratchrobin

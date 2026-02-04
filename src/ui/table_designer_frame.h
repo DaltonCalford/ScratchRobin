@@ -53,6 +53,8 @@ private:
     void RefreshTables();
     void RefreshTableDetails(const std::string& table_name);
     void RefreshTableColumns(const std::string& table_name);
+    void ApplyTableFilter(const std::string& filter);
+    void ClearTableFilter();
     void RunCommand(const std::string& sql, const std::string& success_message);
 
     std::string GetSelectedTableName() const;
@@ -64,9 +66,12 @@ private:
     void OnDisconnect(wxCommandEvent& event);
     void OnRefresh(wxCommandEvent& event);
     void OnTableSelected(wxGridEvent& event);
+    void OnFilterChanged(wxCommandEvent& event);
+    void OnFilterClear(wxCommandEvent& event);
     void OnCreate(wxCommandEvent& event);
     void OnEdit(wxCommandEvent& event);
     void OnDrop(wxCommandEvent& event);
+    void OnPrivileges(wxCommandEvent& event);  // NEW: GRANT/REVOKE UI
     void OnNewSqlEditor(wxCommandEvent& event);
     void OnNewDiagram(wxCommandEvent& event);
     void OnOpenMonitoring(wxCommandEvent& event);
@@ -89,6 +94,7 @@ private:
     wxButton* create_button_ = nullptr;
     wxButton* edit_button_ = nullptr;
     wxButton* drop_button_ = nullptr;
+    wxButton* privileges_button_ = nullptr;  // NEW: GRANT/REVOKE button
     wxStaticText* status_text_ = nullptr;
     wxTextCtrl* message_text_ = nullptr;
     wxTextCtrl* details_text_ = nullptr;
@@ -97,10 +103,16 @@ private:
     wxGrid* columns_grid_ = nullptr;
     ResultGridTable* tables_table_ = nullptr;
     ResultGridTable* columns_table_ = nullptr;
+    
+    // Filter controls
+    wxTextCtrl* filter_ctrl_ = nullptr;
+    wxButton* filter_clear_button_ = nullptr;
+    std::string current_filter_;
 
     int active_profile_index_ = -1;
     int pending_queries_ = 0;
     QueryResult tables_result_;
+    QueryResult filtered_tables_result_;
     QueryResult table_details_result_;
     QueryResult columns_result_;
     std::string selected_table_;

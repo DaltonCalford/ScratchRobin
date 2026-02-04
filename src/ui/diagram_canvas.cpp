@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numeric>
 #include <vector>
 
 #include <wx/cursor.h>
@@ -100,8 +101,9 @@ void DrawArrow(wxDC& dc, const wxPoint& from, const wxPoint& to) {
     dc.DrawLine(to, p2);
 }
 
-void DrawCardinalityMarker(wxDC& dc, const wxPoint& end, const wxPoint2DDouble& direction,
-                           Cardinality card) {
+// Draw cardinality marker for Crow's Foot notation
+void DrawCrowsFootMarker(wxDC& dc, const wxPoint& end, const wxPoint2DDouble& direction,
+                          Cardinality card) {
     wxPoint2DDouble perp(-direction.m_y, direction.m_x);
     double offset = 10.0;
     wxPoint2DDouble base(end.x - direction.m_x * offset, end.y - direction.m_y * offset);
@@ -132,6 +134,83 @@ void DrawCardinalityMarker(wxDC& dc, const wxPoint& end, const wxPoint2DDouble& 
                            static_cast<int>(base.m_y - direction.m_y * 8.0 + perp.m_y * 6.0));
         dc.DrawLine(fork_base, fork_left);
         dc.DrawLine(fork_base, fork_right);
+    }
+}
+
+// Draw cardinality marker for IDEF1X notation
+void DrawIDEF1XMarker(wxDC& dc, const wxPoint& end, const wxPoint2DDouble& direction,
+                       Cardinality card) {
+    wxPoint2DDouble perp(-direction.m_y, direction.m_x);
+    
+    bool has_many = card == Cardinality::OneOrMany || card == Cardinality::ZeroOrMany;
+    
+    // IDEF1X uses 'P' for optional many, 'Z' for mandatory many
+    wxString symbol;
+    if (has_many) {
+        symbol = (card == Cardinality::ZeroOrMany) ? "P" : "Z";
+    } else if (card == Cardinality::ZeroOrOne) {
+        symbol = "O";
+    } else {
+        symbol = "|";
+    }
+    
+    wxPoint text_pos(static_cast<int>(end.x - direction.m_x * 15),
+                     static_cast<int>(end.y - direction.m_y * 15));
+    dc.DrawText(symbol, text_pos.x - 4, text_pos.y - 6);
+}
+
+// Draw cardinality marker for UML notation
+void DrawUMLMarker(wxDC& dc, const wxPoint& end, const wxPoint2DDouble& direction,
+                    Cardinality card) {
+    wxString symbol;
+    switch (card) {
+        case Cardinality::One:
+            symbol = "1";
+            break;
+        case Cardinality::ZeroOrOne:
+            symbol = "0..1";
+            break;
+        case Cardinality::OneOrMany:
+            symbol = "1..*";
+            break;
+        case Cardinality::ZeroOrMany:
+            symbol = "0..*";
+            break;
+    }
+    
+    wxPoint text_pos(static_cast<int>(end.x - direction.m_x * 20),
+                     static_cast<int>(end.y - direction.m_y * 20));
+    dc.DrawText(symbol, text_pos.x - 8, text_pos.y - 6);
+}
+
+// Draw cardinality marker for Chen notation
+void DrawChenMarker(wxDC& dc, const wxPoint& end, const wxPoint2DDouble& direction,
+                     Cardinality card) {
+    // Chen notation uses '1' or 'M' at the relationship diamond
+    wxString symbol = (card == Cardinality::One || card == Cardinality::ZeroOrOne) ? "1" : "M";
+    
+    wxPoint text_pos(static_cast<int>(end.x - direction.m_x * 25),
+                     static_cast<int>(end.y - direction.m_y * 25));
+    dc.DrawText(symbol, text_pos.x - 4, text_pos.y - 6);
+}
+
+// Main function that dispatches to notation-specific renderers
+void DrawCardinalityMarker(wxDC& dc, const wxPoint& end, const wxPoint2DDouble& direction,
+                           Cardinality card, ErdNotation notation) {
+    switch (notation) {
+        case ErdNotation::IDEF1X:
+            DrawIDEF1XMarker(dc, end, direction, card);
+            break;
+        case ErdNotation::UML:
+            DrawUMLMarker(dc, end, direction, card);
+            break;
+        case ErdNotation::Chen:
+            DrawChenMarker(dc, end, direction, card);
+            break;
+        case ErdNotation::CrowsFoot:
+        default:
+            DrawCrowsFootMarker(dc, end, direction, card);
+            break;
     }
 }
 
@@ -261,6 +340,39 @@ void DiagramCanvas::SetDiagramType(DiagramType type) {
     selected_index_.reset();
     selected_edge_index_.reset();
     dragging_index_.reset();
+    Refresh();
+}
+
+ErdNotation DiagramCanvas::notation() const {
+    return model_.notation();
+}
+
+void DiagramCanvas::SetNotation(ErdNotation notation) {
+    model_.set_notation(notation);
+    Refresh();
+}
+
+void DiagramCanvas::ApplyLayout(diagram::LayoutAlgorithm algorithm) {
+    diagram::LayoutOptions options;
+    options.algorithm = algorithm;
+    ApplyLayout(options);
+}
+
+void DiagramCanvas::ApplyLayout(const diagram::LayoutOptions& options) {
+    auto engine = diagram::LayoutEngine::Create(options.algorithm);
+    auto positions = engine->Layout(model_, options);
+    
+    // Apply positions using commands for undo support
+    for (const auto& pos : positions) {
+        auto& nodes = model_.nodes();
+        auto it = std::find_if(nodes.begin(), nodes.end(),
+                               [&pos](const DiagramNode& n) { return n.id == pos.node_id; });
+        if (it != nodes.end()) {
+            command_manager_.Execute(std::make_unique<MoveNodeCommand>(
+                &model_, pos.node_id, it->x, it->y, pos.x, pos.y));
+        }
+    }
+    
     Refresh();
 }
 
@@ -729,8 +841,28 @@ void DiagramCanvas::DrawEdges(wxDC& dc) {
                 end_dir.m_x /= end_len;
                 end_dir.m_y /= end_len;
             }
-            DrawCardinalityMarker(dc, path.front(), start_dir, edge.source_cardinality);
-            DrawCardinalityMarker(dc, path.back(), end_dir, edge.target_cardinality);
+            DrawCardinalityMarker(dc, path.front(), start_dir, edge.source_cardinality, model_.notation());
+            DrawCardinalityMarker(dc, path.back(), end_dir, edge.target_cardinality, model_.notation());
+            
+            // Chen notation: draw diamond for relationship
+            if (model_.notation() == ErdNotation::Chen) {
+                wxPoint mid((path.front().x + path.back().x) / 2,
+                           (path.front().y + path.back().y) / 2);
+                wxPoint diamond[4] = {
+                    wxPoint(mid.x, mid.y - 15),
+                    wxPoint(mid.x + 20, mid.y),
+                    wxPoint(mid.x, mid.y + 15),
+                    wxPoint(mid.x - 20, mid.y)
+                };
+                dc.SetBrush(wxBrush(wxColour(230, 230, 255)));
+                dc.DrawPolygon(4, diamond);
+                
+                // Draw relationship name in diamond
+                if (!edge.label.empty()) {
+                    wxSize text_size = dc.GetTextExtent(edge.label);
+                    dc.DrawText(edge.label, mid.x - text_size.x / 2, mid.y - text_size.y / 2);
+                }
+            }
         }
 
         if (selected_edge_index_.has_value() && *selected_edge_index_ == index) {
@@ -1130,6 +1262,266 @@ void DiagramCanvas::ApplyResize(const wxPoint2DDouble& world_point) {
     node.width = w;
     node.height = h;
     Refresh();
+}
+
+// ============================================================================
+// Copy/Paste (Phase 3.3.8)
+// ============================================================================
+
+static DiagramNode s_copiedNode;  // Simple single-node clipboard
+static bool s_hasClipboard = false;
+
+void DiagramCanvas::CopySelection() {
+    if (!selected_index_.has_value()) return;
+    
+    const auto& nodes = model_.nodes();
+    size_t idx = *selected_index_;
+    if (idx >= nodes.size()) return;
+    
+    s_copiedNode = nodes[idx];
+    // Clear ID so paste creates a new unique node
+    s_copiedNode.id.clear();
+    s_hasClipboard = true;
+}
+
+void DiagramCanvas::Paste() {
+    if (!s_hasClipboard) return;
+    
+    // Create a new node based on the copied one
+    DiagramNode newNode = s_copiedNode;
+    // Generate new ID
+    int idx = model_.NextNodeIndex();
+    newNode.id = "node_" + std::to_string(idx);
+    // Offset position slightly
+    newNode.x += 20;
+    newNode.y += 20;
+    
+    // Add to model
+    model_.AddNode(newNode);
+    
+    // Select the new node (it will be the last one)
+    selected_index_ = model_.nodes().size() - 1;
+    
+    Refresh();
+    
+    // Notify selection changed
+    wxCommandEvent evt(EVT_DIAGRAM_SELECTION_CHANGED);
+    evt.SetInt(static_cast<int>(*selected_index_));
+    wxPostEvent(this, evt);
+}
+
+bool DiagramCanvas::CanPaste() const {
+    return s_hasClipboard;
+}
+
+void DiagramCanvas::DeleteSelection() {
+    if (!selected_index_.has_value()) return;
+    
+    size_t idx = *selected_index_;
+    auto& nodes = model_.nodes();
+    if (idx >= nodes.size()) return;
+    
+    // Remove edges connected to this node
+    const std::string& nodeId = nodes[idx].id;
+    auto& edges = model_.edges();
+    edges.erase(std::remove_if(edges.begin(), edges.end(),
+        [&nodeId](const DiagramEdge& e) {
+            return e.source_id == nodeId || e.target_id == nodeId;
+        }), edges.end());
+    
+    // Remove the node
+    nodes.erase(nodes.begin() + idx);
+    
+    selected_index_.reset();
+    selected_edge_index_.reset();
+    Refresh();
+}
+
+// ============================================================================
+// Alignment Tools (Phase 3.3.9)
+// ============================================================================
+
+void DiagramCanvas::AlignLeft() {
+    if (!selected_index_.has_value()) return;
+    
+    // Find leftmost position among selected nodes (for multi-select, we'd use all selected)
+    double minX = model_.nodes()[*selected_index_].x;
+    
+    // Align all nodes to this position
+    auto& nodes = model_.nodes();
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        if (i == *selected_index_) continue;
+        // In multi-select mode, we'd check if node is selected
+        nodes[i].x = minX;
+    }
+    Refresh();
+}
+
+void DiagramCanvas::AlignRight() {
+    if (!selected_index_.has_value()) return;
+    
+    const auto& node = model_.nodes()[*selected_index_];
+    double rightEdge = node.x + node.width;
+    
+    auto& nodes = model_.nodes();
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        if (i == *selected_index_) continue;
+        nodes[i].x = rightEdge - nodes[i].width;
+    }
+    Refresh();
+}
+
+void DiagramCanvas::AlignTop() {
+    if (!selected_index_.has_value()) return;
+    
+    double minY = model_.nodes()[*selected_index_].y;
+    
+    auto& nodes = model_.nodes();
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        if (i == *selected_index_) continue;
+        nodes[i].y = minY;
+    }
+    Refresh();
+}
+
+void DiagramCanvas::AlignBottom() {
+    if (!selected_index_.has_value()) return;
+    
+    const auto& node = model_.nodes()[*selected_index_];
+    double bottomEdge = node.y + node.height;
+    
+    auto& nodes = model_.nodes();
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        if (i == *selected_index_) continue;
+        nodes[i].y = bottomEdge - nodes[i].height;
+    }
+    Refresh();
+}
+
+void DiagramCanvas::AlignCenterHorizontal() {
+    if (!selected_index_.has_value()) return;
+    
+    const auto& node = model_.nodes()[*selected_index_];
+    double centerX = node.x + node.width / 2;
+    
+    auto& nodes = model_.nodes();
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        if (i == *selected_index_) continue;
+        nodes[i].x = centerX - nodes[i].width / 2;
+    }
+    Refresh();
+}
+
+void DiagramCanvas::AlignCenterVertical() {
+    if (!selected_index_.has_value()) return;
+    
+    const auto& node = model_.nodes()[*selected_index_];
+    double centerY = node.y + node.height / 2;
+    
+    auto& nodes = model_.nodes();
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        if (i == *selected_index_) continue;
+        nodes[i].y = centerY - nodes[i].height / 2;
+    }
+    Refresh();
+}
+
+void DiagramCanvas::DistributeHorizontal() {
+    auto& nodes = model_.nodes();
+    if (nodes.size() < 3) return;
+    
+    // Sort by x position
+    std::vector<size_t> indices(nodes.size());
+    std::iota(indices.begin(), indices.end(), 0);
+    std::sort(indices.begin(), indices.end(), [&nodes](size_t a, size_t b) {
+        return nodes[a].x < nodes[b].x;
+    });
+    
+    double minX = nodes[indices.front()].x;
+    double maxX = nodes[indices.back()].x + nodes[indices.back()].width;
+    double totalWidth = maxX - minX;
+    double spacing = totalWidth / (nodes.size() - 1);
+    
+    for (size_t i = 1; i < indices.size() - 1; ++i) {
+        nodes[indices[i]].x = minX + spacing * i - nodes[indices[i]].width / 2;
+    }
+    Refresh();
+}
+
+void DiagramCanvas::DistributeVertical() {
+    auto& nodes = model_.nodes();
+    if (nodes.size() < 3) return;
+    
+    // Sort by y position
+    std::vector<size_t> indices(nodes.size());
+    std::iota(indices.begin(), indices.end(), 0);
+    std::sort(indices.begin(), indices.end(), [&nodes](size_t a, size_t b) {
+        return nodes[a].y < nodes[b].y;
+    });
+    
+    double minY = nodes[indices.front()].y;
+    double maxY = nodes[indices.back()].y + nodes[indices.back()].height;
+    double totalHeight = maxY - minY;
+    double spacing = totalHeight / (nodes.size() - 1);
+    
+    for (size_t i = 1; i < indices.size() - 1; ++i) {
+        nodes[indices[i]].y = minY + spacing * i - nodes[indices[i]].height / 2;
+    }
+    Refresh();
+}
+
+// ============================================================================
+// Pin/Unpin Nodes (Phase 3.4.6)
+// ============================================================================
+
+void DiagramCanvas::PinSelectedNode() {
+    if (!selected_index_.has_value()) return;
+    
+    auto& nodes = model_.nodes();
+    if (*selected_index_ < nodes.size()) {
+        nodes[*selected_index_].pinned = true;
+        Refresh();
+    }
+}
+
+void DiagramCanvas::UnpinSelectedNode() {
+    if (!selected_index_.has_value()) return;
+    
+    auto& nodes = model_.nodes();
+    if (*selected_index_ < nodes.size()) {
+        nodes[*selected_index_].pinned = false;
+        Refresh();
+    }
+}
+
+void DiagramCanvas::TogglePinSelectedNode() {
+    if (!selected_index_.has_value()) return;
+    
+    auto& nodes = model_.nodes();
+    if (*selected_index_ < nodes.size()) {
+        nodes[*selected_index_].pinned = !nodes[*selected_index_].pinned;
+        Refresh();
+    }
+}
+
+bool DiagramCanvas::IsSelectedNodePinned() const {
+    if (!selected_index_.has_value()) return false;
+    
+    const auto& nodes = model_.nodes();
+    if (*selected_index_ < nodes.size()) {
+        return nodes[*selected_index_].pinned;
+    }
+    return false;
+}
+
+std::vector<std::string> DiagramCanvas::GetPinnedNodeIds() const {
+    std::vector<std::string> pinnedIds;
+    for (const auto& node : model_.nodes()) {
+        if (node.pinned) {
+            pinnedIds.push_back(node.id);
+        }
+    }
+    return pinnedIds;
 }
 
 } // namespace scratchrobin

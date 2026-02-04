@@ -222,8 +222,22 @@ void IndexDesignerFrame::BuildLayout() {
     columnsSizer->Add(columns_grid_, 1, wxEXPAND | wxALL, 8);
     columnsTab->SetSizer(columnsSizer);
 
+    auto* usageTab = new wxPanel(notebook, wxID_ANY);
+    auto* usageSizer = new wxBoxSizer(wxVERTICAL);
+    auto* usageLabel = new wxStaticText(usageTab, wxID_ANY,
+        "Index usage statistics showing scan counts and last usage time.");
+    usageSizer->Add(usageLabel, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+    usage_grid_ = new wxGrid(usageTab, wxID_ANY);
+    usage_grid_->EnableEditing(false);
+    usage_grid_->SetRowLabelSize(40);
+    usage_table_ = new ResultGridTable();
+    usage_grid_->SetTable(usage_table_, true);
+    usageSizer->Add(usage_grid_, 1, wxEXPAND | wxALL, 8);
+    usageTab->SetSizer(usageSizer);
+
     notebook->AddPage(definitionTab, "Definition");
     notebook->AddPage(columnsTab, "Columns");
+    notebook->AddPage(usageTab, "Usage Statistics");
     detailSizer->Add(notebook, 1, wxEXPAND);
     detailPanel->SetSizer(detailSizer);
 
@@ -361,6 +375,8 @@ void IndexDesignerFrame::RefreshIndexes() {
                 if (indexes_table_) {
                     indexes_table_->Reset(indexes_result_.columns, indexes_result_.rows);
                 }
+                // Apply index type icons/labels after loading
+                ApplyIndexTypeIcons();
                 if (!ok) {
                     SetMessage(error.empty() ? "Failed to load indexes." : error);
                     UpdateStatus("Load failed");
@@ -422,6 +438,86 @@ void IndexDesignerFrame::RefreshIndexColumns(const std::string& table_name,
         });
 }
 
+void IndexDesignerFrame::RefreshIndexUsageStats(const std::string& table_name,
+                                                const std::string& index_name) {
+    if (!connection_manager_ || table_name.empty() || index_name.empty()) {
+        return;
+    }
+    const auto* profile = GetSelectedProfile();
+    if (!profile || !IsNativeProfile(*profile)) {
+        // Usage stats only available for native (ScratchBird) backend
+        QueryResult empty_result;
+        empty_result.columns.push_back({"metric", "string"});
+        empty_result.columns.push_back({"value", "string"});
+        std::vector<QueryValue> row;
+        row.push_back({false, "Usage statistics", {}});
+        row.push_back({false, "Not available for this backend", {}});
+        empty_result.rows.push_back(std::move(row));
+        usage_result_ = empty_result;
+        if (usage_table_) {
+            usage_table_->Reset(usage_result_.columns, usage_result_.rows);
+        }
+        return;
+    }
+
+    // Query usage statistics from system catalog
+    std::string sql =
+        "SELECT idx_scan AS scans, idx_tup_read AS tuples_read, idx_tup_fetch AS tuples_fetched, "
+        "last_idx_scan AS last_scan, pg_size_pretty(pg_relation_size(indexrelid)) AS size "
+        "FROM pg_stat_user_indexes "
+        "WHERE schemaname || '.' || indexrelname = '" + index_name + "' "
+        "OR indexrelname = '" + index_name + "'";
+    
+    pending_queries_++;
+    UpdateControls();
+    connection_manager_->ExecuteQueryAsync(
+        sql, [this](bool ok, QueryResult result, const std::string& error) {
+            CallAfter([this, ok, result = std::move(result), error]() mutable {
+                pending_queries_ = std::max(0, pending_queries_ - 1);
+                if (ok) {
+                    usage_result_ = std::move(result);
+                    if (usage_result_.rows.empty()) {
+                        // No stats available yet - create a placeholder
+                        usage_result_.columns.clear();
+                        usage_result_.columns.push_back({"metric", "string"});
+                        usage_result_.columns.push_back({"value", "string"});
+                        std::vector<QueryValue> row1;
+                        row1.push_back({false, "Status", {}});
+                        row1.push_back({false, "No usage statistics collected yet", {}});
+                        usage_result_.rows.push_back(std::move(row1));
+                        std::vector<QueryValue> row2;
+                        row2.push_back({false, "Note", {}});
+                        row2.push_back({false, "Statistics are updated by the database engine", {}});
+                        usage_result_.rows.push_back(std::move(row2));
+                    }
+                    if (usage_table_) {
+                        usage_table_->Reset(usage_result_.columns, usage_result_.rows);
+                    }
+                } else {
+                    // Query failed - show error or placeholder
+                    QueryResult error_result;
+                    error_result.columns.push_back({"metric", "string"});
+                    error_result.columns.push_back({"value", "string"});
+                    std::vector<QueryValue> row;
+                    row.push_back({false, "Status", {}});
+                    row.push_back({false, "Statistics unavailable", {}});
+                    error_result.rows.push_back(std::move(row));
+                    if (!error.empty()) {
+                        std::vector<QueryValue> error_row;
+                        error_row.push_back({false, "Error", {}});
+                        error_row.push_back({false, error, {}});
+                        error_result.rows.push_back(std::move(error_row));
+                    }
+                    usage_result_ = error_result;
+                    if (usage_table_) {
+                        usage_table_->Reset(usage_result_.columns, error_result.rows);
+                    }
+                }
+                UpdateControls();
+            });
+        });
+}
+
 void IndexDesignerFrame::RunCommand(const std::string& sql, const std::string& success_message) {
     if (!connection_manager_) {
         return;
@@ -445,6 +541,7 @@ void IndexDesignerFrame::RunCommand(const std::string& sql, const std::string& s
                 if (!selected_index_.empty()) {
                     RefreshIndexDetails(selected_index_);
                     RefreshIndexColumns(selected_table_, selected_index_);
+                    RefreshIndexUsageStats(selected_table_, selected_index_);
                 }
             });
         });
@@ -585,6 +682,7 @@ void IndexDesignerFrame::OnIndexSelected(wxGridEvent& event) {
     if (!selected_index_.empty()) {
         RefreshIndexDetails(selected_index_);
         RefreshIndexColumns(selected_table_, selected_index_);
+        RefreshIndexUsageStats(selected_table_, selected_index_);
     }
     UpdateControls();
     event.Skip();
@@ -713,6 +811,66 @@ void IndexDesignerFrame::OnClose(wxCloseEvent&) {
         window_manager_->UnregisterWindow(this);
     }
     Destroy();
+}
+
+void IndexDesignerFrame::ApplyIndexTypeIcons() {
+    if (!indexes_grid_ || indexes_result_.rows.empty()) {
+        return;
+    }
+    
+    // Find index_type and is_unique column indices
+    int typeCol = -1;
+    int uniqueCol = -1;
+    for (size_t i = 0; i < indexes_result_.columns.size(); ++i) {
+        std::string colName = ToLowerCopy(indexes_result_.columns[i].name);
+        if (colName == "index_type" || colName == "type") {
+            typeCol = static_cast<int>(i);
+        }
+        if (colName == "is_unique" || colName == "unique") {
+            uniqueCol = static_cast<int>(i);
+        }
+    }
+    
+    // Set row labels with icons based on index type
+    for (size_t row = 0; row < indexes_result_.rows.size(); ++row) {
+        std::string indexType;
+        bool isUnique = false;
+        
+        if (typeCol >= 0 && typeCol < static_cast<int>(indexes_result_.rows[row].size())) {
+            indexType = ToLowerCopy(indexes_result_.rows[row][typeCol].text);
+        }
+        
+        if (uniqueCol >= 0 && uniqueCol < static_cast<int>(indexes_result_.rows[row].size())) {
+            std::string uniqueVal = ToLowerCopy(indexes_result_.rows[row][uniqueCol].text);
+            isUnique = (uniqueVal == "true" || uniqueVal == "1" || uniqueVal == "yes");
+        }
+        
+        // Create icon/label based on index type
+        wxString label;
+        if (isUnique) {
+            label = "U";  // Unique index
+        } else if (indexType.find("btree") != std::string::npos || indexType.empty()) {
+            label = "B";  // B-Tree (default)
+        } else if (indexType.find("hash") != std::string::npos) {
+            label = "H";  // Hash
+        } else if (indexType.find("gin") != std::string::npos) {
+            label = "G";  // GIN
+        } else if (indexType.find("gist") != std::string::npos) {
+            label = "I";  // GiST
+        } else if (indexType.find("fulltext") != std::string::npos) {
+            label = "F";  // Full-text
+        } else if (indexType.find("spatial") != std::string::npos || indexType.find("rtree") != std::string::npos) {
+            label = "S";  // Spatial/R-Tree
+        } else {
+            label = "I";  // Generic Index
+        }
+        
+        // Set row label
+        indexes_grid_->SetRowLabelValue(static_cast<int>(row), label);
+    }
+    
+    // Refresh grid to show labels
+    indexes_grid_->Refresh();
 }
 
 } // namespace scratchrobin

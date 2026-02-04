@@ -20,6 +20,23 @@ enum class DiagramType {
     Silverston
 };
 
+// Supported ERD notations (Phase 3.2)
+enum class ErdNotation {
+    CrowsFoot,      // Crow's Foot / IE notation (most common)
+    IDEF1X,         // Integration DEFinition for Information Modeling  
+    UML,            // Unified Modeling Language class diagrams
+    Chen            // Chen notation (entities as rectangles, relationships as diamonds)
+};
+
+// Convert notation to string
+std::string ErdNotationToString(ErdNotation notation);
+
+// Parse notation from string  
+ErdNotation StringToErdNotation(const std::string& str);
+
+// Get notation display label
+std::string ErdNotationLabel(ErdNotation notation);
+
 enum class Cardinality {
     One,
     ZeroOrOne,
@@ -32,6 +49,7 @@ struct DiagramAttribute {
     std::string data_type;
     bool is_primary = false;
     bool is_foreign = false;
+    bool is_nullable = true;  // Default nullable for new attributes
 };
 
 struct DiagramNode {
@@ -44,6 +62,7 @@ struct DiagramNode {
     double height = 0.0;
     int stack_count = 1;
     bool ghosted = false;
+    bool pinned = false;  // Pinned nodes are excluded from auto-layout
     std::vector<DiagramAttribute> attributes;
 };
 
@@ -66,6 +85,10 @@ public:
     DiagramType type() const;
     void set_type(DiagramType type);
 
+    // ERD Notation (Phase 3.2)
+    ErdNotation notation() const;
+    void set_notation(ErdNotation notation);
+
     DiagramNode& AddNode(const DiagramNode& node);
     DiagramEdge& AddEdge(const DiagramEdge& edge);
 
@@ -80,6 +103,7 @@ public:
 
 private:
     DiagramType type_;
+    ErdNotation notation_ = ErdNotation::CrowsFoot;  // Default notation
     int next_node_index_ = 1;
     int next_edge_index_ = 1;
     std::vector<DiagramNode> nodes_;

@@ -51,6 +51,7 @@ private:
 
     void RefreshDomains();
     void RefreshDomainDetails(const std::string& domain_name);
+    void FetchDomainUsage(const std::string& domain_name);
     void RunCommand(const std::string& sql, const std::string& success_message);
 
     std::string GetSelectedDomainName() const;
@@ -93,11 +94,13 @@ private:
 
     wxGrid* domains_grid_ = nullptr;
     ResultGridTable* domains_table_ = nullptr;
+    wxStaticText* usage_label_ = nullptr;  // NEW: domain usage reference
 
     int active_profile_index_ = -1;
     int pending_queries_ = 0;
     QueryResult domains_result_;
     QueryResult domain_details_result_;
+    QueryResult domain_usage_result_;  // NEW
     std::string selected_domain_;
 
     wxDECLARE_EVENT_TABLE();

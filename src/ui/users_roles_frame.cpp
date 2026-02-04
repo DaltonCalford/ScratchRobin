@@ -17,10 +17,13 @@
 #include "menu_builder.h"
 #include "menu_ids.h"
 #include "monitoring_frame.h"
+#include "privilege_editor_dialog.h"
 #include "result_grid_table.h"
+#include "role_editor_dialog.h"
 #include "schema_manager_frame.h"
 #include "sql_editor_frame.h"
 #include "table_designer_frame.h"
+#include "user_editor_dialog.h"
 #include "window_manager.h"
 
 #include <algorithm>
@@ -30,11 +33,13 @@
 #include <wx/button.h>
 #include <wx/choice.h>
 #include <wx/grid.h>
+#include <wx/msgdlg.h>
 #include <wx/notebook.h>
 #include <wx/panel.h>
 #include <wx/sizer.h>
 #include <wx/stattext.h>
 #include <wx/textctrl.h>
+#include <wx/textdlg.h>
 
 namespace scratchrobin {
 
@@ -474,11 +479,14 @@ void UsersRolesFrame::BuildLayout() {
     auto* usersSizer = new wxBoxSizer(wxVERTICAL);
     auto* usersButtons = new wxBoxSizer(wxHORIZONTAL);
     create_user_button_ = new wxButton(usersPage, kCreateUserId, "Create User");
+    auto* alter_user_btn = new wxButton(usersPage, wxID_ANY, "Alter User");
     drop_user_button_ = new wxButton(usersPage, kDropUserId, "Drop User");
     usersButtons->Add(create_user_button_, 0, wxRIGHT, 6);
+    usersButtons->Add(alter_user_btn, 0, wxRIGHT, 6);
     usersButtons->Add(drop_user_button_, 0, wxRIGHT, 6);
     usersButtons->AddStretchSpacer(1);
     usersSizer->Add(usersButtons, 0, wxEXPAND | wxALL, 6);
+    alter_user_btn->Bind(wxEVT_BUTTON, &UsersRolesFrame::OnAlterUser, this);
 
     users_grid_ = new wxGrid(usersPage, wxID_ANY);
     users_table_ = new ResultGridTable();
@@ -492,15 +500,29 @@ void UsersRolesFrame::BuildLayout() {
     auto* rolesSizer = new wxBoxSizer(wxVERTICAL);
     auto* rolesButtons = new wxBoxSizer(wxHORIZONTAL);
     create_role_button_ = new wxButton(rolesPage, kCreateRoleId, "Create Role");
+    auto* alter_role_btn = new wxButton(rolesPage, wxID_ANY, "Alter Role");
     drop_role_button_ = new wxButton(rolesPage, kDropRoleId, "Drop Role");
     grant_role_button_ = new wxButton(rolesPage, kGrantRoleId, "Grant Role");
     revoke_role_button_ = new wxButton(rolesPage, kRevokeRoleId, "Revoke Role");
     rolesButtons->Add(create_role_button_, 0, wxRIGHT, 6);
+    rolesButtons->Add(alter_role_btn, 0, wxRIGHT, 6);
     rolesButtons->Add(drop_role_button_, 0, wxRIGHT, 6);
     rolesButtons->Add(grant_role_button_, 0, wxRIGHT, 6);
     rolesButtons->Add(revoke_role_button_, 0, wxRIGHT, 6);
     rolesButtons->AddStretchSpacer(1);
     rolesSizer->Add(rolesButtons, 0, wxEXPAND | wxALL, 6);
+    alter_role_btn->Bind(wxEVT_BUTTON, &UsersRolesFrame::OnAlterRole, this);
+    
+    // Privileges section
+    auto* privButtons = new wxBoxSizer(wxHORIZONTAL);
+    auto* grant_priv_btn = new wxButton(rolesPage, wxID_ANY, "Grant Privileges");
+    auto* revoke_priv_btn = new wxButton(rolesPage, wxID_ANY, "Revoke Privileges");
+    privButtons->Add(grant_priv_btn, 0, wxRIGHT, 6);
+    privButtons->Add(revoke_priv_btn, 0, wxRIGHT, 6);
+    privButtons->AddStretchSpacer(1);
+    rolesSizer->Add(privButtons, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 6);
+    grant_priv_btn->Bind(wxEVT_BUTTON, &UsersRolesFrame::OnGrantPrivileges, this);
+    revoke_priv_btn->Bind(wxEVT_BUTTON, &UsersRolesFrame::OnRevokePrivileges, this);
 
     roles_grid_ = new wxGrid(rolesPage, wxID_ANY);
     roles_table_ = new ResultGridTable();
@@ -858,41 +880,195 @@ void UsersRolesFrame::OpenSqlTemplate(const std::string& sql) {
 void UsersRolesFrame::OnCreateUser(wxCommandEvent&) {
     const auto* profile = GetSelectedProfile();
     std::string backend = profile ? NormalizeBackendName(profile->backend) : "native";
-    OpenSqlTemplate(BuildCreateUserTemplate(backend));
+    
+    UserEditorDialog dialog(this, UserEditorMode::Create);
+    if (dialog.ShowModal() != wxID_OK) {
+        return;
+    }
+    
+    std::string sql = dialog.BuildSql(backend);
+    if (!sql.empty()) {
+        OpenSqlTemplate(sql);
+    }
+}
+
+void UsersRolesFrame::OnAlterUser(wxCommandEvent&) {
+    std::string name = SelectedGridValue(users_grid_);
+    if (name.empty()) {
+        SetMessage("Select a user to alter.");
+        return;
+    }
+    
+    const auto* profile = GetSelectedProfile();
+    std::string backend = profile ? NormalizeBackendName(profile->backend) : "native";
+    
+    UserEditorDialog dialog(this, UserEditorMode::Alter);
+    dialog.SetUserName(name);
+    // TODO: Populate other fields from user details query
+    
+    if (dialog.ShowModal() != wxID_OK) {
+        return;
+    }
+    
+    std::string sql = dialog.BuildSql(backend);
+    if (!sql.empty()) {
+        OpenSqlTemplate(sql);
+    }
 }
 
 void UsersRolesFrame::OnDropUser(wxCommandEvent&) {
+    std::string name = SelectedGridValue(users_grid_);
+    if (name.empty()) {
+        SetMessage("Select a user to drop.");
+        return;
+    }
+    
+    wxString msg = wxString::Format("Are you sure you want to drop user '%s'?", name);
+    int result = wxMessageBox(msg, "Confirm Drop User", wxYES_NO | wxICON_QUESTION, this);
+    if (result != wxYES) {
+        return;
+    }
+    
     const auto* profile = GetSelectedProfile();
     std::string backend = profile ? NormalizeBackendName(profile->backend) : "native";
-    std::string name = SelectedGridValue(users_grid_);
-    OpenSqlTemplate(BuildDropUserTemplate(backend, name));
+    std::string sql = BuildDropUserTemplate(backend, name);
+    OpenSqlTemplate(sql);
 }
 
 void UsersRolesFrame::OnCreateRole(wxCommandEvent&) {
     const auto* profile = GetSelectedProfile();
     std::string backend = profile ? NormalizeBackendName(profile->backend) : "native";
-    OpenSqlTemplate(BuildCreateRoleTemplate(backend));
+    
+    RoleEditorDialog dialog(this, RoleEditorMode::Create);
+    if (dialog.ShowModal() != wxID_OK) {
+        return;
+    }
+    
+    std::string sql = dialog.BuildSql(backend);
+    if (!sql.empty()) {
+        OpenSqlTemplate(sql);
+    }
+}
+
+void UsersRolesFrame::OnAlterRole(wxCommandEvent&) {
+    std::string name = SelectedGridValue(roles_grid_);
+    if (name.empty()) {
+        SetMessage("Select a role to alter.");
+        return;
+    }
+    
+    const auto* profile = GetSelectedProfile();
+    std::string backend = profile ? NormalizeBackendName(profile->backend) : "native";
+    
+    RoleEditorDialog dialog(this, RoleEditorMode::Alter);
+    dialog.SetRoleName(name);
+    // TODO: Populate other fields from role details query
+    
+    if (dialog.ShowModal() != wxID_OK) {
+        return;
+    }
+    
+    std::string sql = dialog.BuildSql(backend);
+    if (!sql.empty()) {
+        OpenSqlTemplate(sql);
+    }
 }
 
 void UsersRolesFrame::OnDropRole(wxCommandEvent&) {
+    std::string name = SelectedGridValue(roles_grid_);
+    if (name.empty()) {
+        SetMessage("Select a role to drop.");
+        return;
+    }
+    
+    wxString msg = wxString::Format("Are you sure you want to drop role '%s'?", name);
+    int result = wxMessageBox(msg, "Confirm Drop Role", wxYES_NO | wxICON_QUESTION, this);
+    if (result != wxYES) {
+        return;
+    }
+    
     const auto* profile = GetSelectedProfile();
     std::string backend = profile ? NormalizeBackendName(profile->backend) : "native";
-    std::string name = SelectedGridValue(roles_grid_);
-    OpenSqlTemplate(BuildDropRoleTemplate(backend, name));
+    std::string sql = BuildDropRoleTemplate(backend, name);
+    OpenSqlTemplate(sql);
 }
 
 void UsersRolesFrame::OnGrantRole(wxCommandEvent&) {
+    std::string role = SelectedGridValue(roles_grid_);
+    if (role.empty()) {
+        SetMessage("Select a role to grant.");
+        return;
+    }
+    
     const auto* profile = GetSelectedProfile();
     std::string backend = profile ? NormalizeBackendName(profile->backend) : "native";
-    std::string role = SelectedGridValue(roles_grid_);
-    OpenSqlTemplate(BuildGrantRoleTemplate(backend, role));
+    
+    wxTextEntryDialog dialog(this, "Enter username to grant role to:", "Grant Role", "");
+    if (dialog.ShowModal() != wxID_OK) {
+        return;
+    }
+    
+    std::string user = dialog.GetValue().ToStdString();
+    if (user.empty()) {
+        SetMessage("Username is required.");
+        return;
+    }
+    
+    std::string sql = "GRANT " + role + " TO " + user + ";";
+    OpenSqlTemplate(sql);
 }
 
 void UsersRolesFrame::OnRevokeRole(wxCommandEvent&) {
+    std::string role = SelectedGridValue(roles_grid_);
+    if (role.empty()) {
+        SetMessage("Select a role to revoke.");
+        return;
+    }
+    
     const auto* profile = GetSelectedProfile();
     std::string backend = profile ? NormalizeBackendName(profile->backend) : "native";
-    std::string role = SelectedGridValue(roles_grid_);
-    OpenSqlTemplate(BuildRevokeRoleTemplate(backend, role));
+    
+    wxTextEntryDialog dialog(this, "Enter username to revoke role from:", "Revoke Role", "");
+    if (dialog.ShowModal() != wxID_OK) {
+        return;
+    }
+    
+    std::string user = dialog.GetValue().ToStdString();
+    if (user.empty()) {
+        SetMessage("Username is required.");
+        return;
+    }
+    
+    std::string sql = "REVOKE " + role + " FROM " + user + ";";
+    OpenSqlTemplate(sql);
+}
+
+void UsersRolesFrame::OnGrantPrivileges(wxCommandEvent&) {
+    PrivilegeEditorDialog dialog(this, PrivilegeOperation::Grant);
+    if (dialog.ShowModal() != wxID_OK) {
+        return;
+    }
+    
+    const auto* profile = GetSelectedProfile();
+    std::string backend = profile ? NormalizeBackendName(profile->backend) : "native";
+    std::string sql = dialog.BuildSql(backend);
+    if (!sql.empty()) {
+        OpenSqlTemplate(sql);
+    }
+}
+
+void UsersRolesFrame::OnRevokePrivileges(wxCommandEvent&) {
+    PrivilegeEditorDialog dialog(this, PrivilegeOperation::Revoke);
+    if (dialog.ShowModal() != wxID_OK) {
+        return;
+    }
+    
+    const auto* profile = GetSelectedProfile();
+    std::string backend = profile ? NormalizeBackendName(profile->backend) : "native";
+    std::string sql = dialog.BuildSql(backend);
+    if (!sql.empty()) {
+        OpenSqlTemplate(sql);
+    }
 }
 
 void UsersRolesFrame::OnGrantMembership(wxCommandEvent&) {

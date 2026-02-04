@@ -61,11 +61,15 @@ private:
     void OnConnectionChanged(wxCommandEvent& event);
     void OnTabChanged(wxBookCtrlEvent& event);
     void OnCreateUser(wxCommandEvent& event);
+    void OnAlterUser(wxCommandEvent& event);
     void OnDropUser(wxCommandEvent& event);
     void OnCreateRole(wxCommandEvent& event);
+    void OnAlterRole(wxCommandEvent& event);
     void OnDropRole(wxCommandEvent& event);
     void OnGrantRole(wxCommandEvent& event);
     void OnRevokeRole(wxCommandEvent& event);
+    void OnGrantPrivileges(wxCommandEvent& event);
+    void OnRevokePrivileges(wxCommandEvent& event);
     void OnGrantMembership(wxCommandEvent& event);
     void OnRevokeMembership(wxCommandEvent& event);
     void OnClose(wxCloseEvent& event);

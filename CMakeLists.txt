@@ -76,6 +76,8 @@ set(SCRATCHROBIN_CORE_SOURCES
     src/core/value_formatter.cpp
     src/core/result_exporter.cpp
     src/core/simple_json.cpp
+    src/core/error_handler.cpp
+    src/core/capability_detector.cpp
     src/core/postgres_backend.cpp
     src/core/mysql_backend.cpp
     src/core/firebird_backend.cpp
@@ -89,13 +91,20 @@ if(SCRATCHROBIN_BUILD_UI)
         src/main.cpp
         src/app/app.cpp
         src/ui/main_frame.cpp
+        src/ui/connection_editor_dialog.cpp
         src/ui/diagram_frame.cpp
         src/ui/diagram_model.cpp
         src/ui/diagram_canvas.cpp
         src/ui/diagram_page.cpp
         src/ui/diagram_template_dialog.cpp
+        src/diagram/command.cpp
+        src/diagram/layout_engine.cpp
+        src/diagram/reverse_engineer.cpp
+        src/diagram/forward_engineer.cpp
+        src/diagram/export_manager.cpp
         src/ui/domain_editor_dialog.cpp
         src/ui/domain_manager_frame.cpp
+        src/ui/error_dialog.cpp
         src/ui/index_designer_frame.cpp
         src/ui/index_editor_dialog.cpp
         src/ui/job_editor_dialog.cpp
@@ -107,6 +116,19 @@ if(SCRATCHROBIN_BUILD_UI)
         src/ui/monitoring_frame.cpp
         src/ui/sql_editor_frame.cpp
         src/ui/users_roles_frame.cpp
+        src/ui/user_editor_dialog.cpp
+        src/ui/role_editor_dialog.cpp
+        src/ui/privilege_editor_dialog.cpp
+        src/ui/ddl_preview_dialog.cpp
+        src/ui/export_options_dialog.cpp
+        src/ui/reverse_engineer_wizard.cpp
+        src/ui/ddl_execution_dialog.cpp
+        src/ui/layout_options_dialog.cpp
+        src/ui/diagram_minimap.cpp
+        src/ui/diagram_grouping.cpp
+        src/ui/incremental_refresh_dialog.cpp
+        src/ui/notation_test_dialog.cpp
+        src/ui/print_dialog.cpp
         src/ui/startup_frame.cpp
         src/ui/menu_builder.cpp
         src/ui/icon_bar.cpp

@@ -480,6 +480,22 @@ public:
         return true;
     }
 
+    bool StorePassword(const std::string&,
+                       const std::string& password,
+                       std::string*) override {
+        password_ = password;
+        return true;
+    }
+
+    bool DeletePassword(const std::string&, std::string*) override {
+        password_.clear();
+        return true;
+    }
+
+    bool HasPassword(const std::string&) override {
+        return !password_.empty();
+    }
+
 private:
     std::string password_;
 };

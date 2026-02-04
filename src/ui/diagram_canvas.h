@@ -10,6 +10,8 @@
 #ifndef SCRATCHROBIN_DIAGRAM_CANVAS_H
 #define SCRATCHROBIN_DIAGRAM_CANVAS_H
 
+#include "diagram/command.h"
+#include "diagram/layout_engine.h"
 #include "diagram_model.h"
 
 #include <optional>
@@ -46,6 +48,15 @@ public:
 
     DiagramType diagram_type() const;
     void SetDiagramType(DiagramType type);
+    
+    // ERD Notation support (Phase 3.2)
+    ErdNotation notation() const;
+    void SetNotation(ErdNotation notation);
+    
+    // Auto-layout (Phase 3.4)
+    void ApplyLayout(diagram::LayoutAlgorithm algorithm);
+    void ApplyLayout(const diagram::LayoutOptions& options);
+    
     void SetTemplateKey(const std::string& key);
     const std::string& template_key() const;
     void SetGridSize(int size);
@@ -59,6 +70,16 @@ public:
 
     DiagramModel& model();
     const DiagramModel& model() const;
+    
+    // Command manager for undo/redo
+    CommandManager& command_manager() { return command_manager_; }
+    const CommandManager& command_manager() const { return command_manager_; }
+    
+    // Undo/redo helpers
+    bool CanUndo() const { return command_manager_.CanUndo(); }
+    bool CanRedo() const { return command_manager_.CanRedo(); }
+    void Undo() { if (command_manager_.Undo()) Refresh(); }
+    void Redo() { if (command_manager_.Redo()) Refresh(); }
 
     const DiagramNode* GetSelectedNode() const;
     DiagramNode* GetSelectedNodeMutable();
@@ -69,6 +90,29 @@ public:
     void AddEdge(const std::string& source_id, const std::string& target_id, const std::string& label);
     void SelectNextNode();
     void SelectPreviousNode();
+    
+    // Copy/Paste (Phase 3.3.8)
+    void CopySelection();
+    void Paste();
+    bool CanPaste() const;
+    void DeleteSelection();
+    
+    // Alignment tools (Phase 3.3.9)
+    void AlignLeft();
+    void AlignRight();
+    void AlignTop();
+    void AlignBottom();
+    void AlignCenterHorizontal();
+    void AlignCenterVertical();
+    void DistributeHorizontal();
+    void DistributeVertical();
+    
+    // Pin/Unpin nodes (Phase 3.4.6)
+    void PinSelectedNode();
+    void UnpinSelectedNode();
+    void TogglePinSelectedNode();
+    bool IsSelectedNodePinned() const;
+    std::vector<std::string> GetPinnedNodeIds() const;
 
 private:
     void OnPaint(wxPaintEvent& event);
@@ -102,6 +146,7 @@ private:
     void ApplyResize(const wxPoint2DDouble& world_point);
 
     DiagramModel model_;
+    CommandManager command_manager_;
     std::string template_key_ = "default";
     std::string icon_set_ = "default";
     int border_width_ = 1;

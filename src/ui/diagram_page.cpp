@@ -144,6 +144,20 @@ void DiagramPage::BuildLayout() {
     diagram_type_choice_->Append("Silverston");
     diagram_type_choice_->SetSelection(static_cast<int>(diagram_type_));
     topBar->Add(diagram_type_choice_, 0, wxALIGN_CENTER_VERTICAL);
+    
+    // Notation selector (ERD only)
+    topBar->AddSpacer(12);
+    auto* notationLabel = new wxStaticText(canvasPanel, wxID_ANY, "Notation:");
+    notationLabel->SetForegroundColour(wxColour(200, 200, 200));
+    topBar->Add(notationLabel, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    notation_choice_ = new wxChoice(canvasPanel, wxID_ANY);
+    notation_choice_->Append("Crow's Foot");
+    notation_choice_->Append("IDEF1X");
+    notation_choice_->Append("UML");
+    notation_choice_->Append("Chen");
+    notation_choice_->SetSelection(0);
+    topBar->Add(notation_choice_, 0, wxALIGN_CENTER_VERTICAL);
+    
     topBar->AddStretchSpacer(1);
     mode_label_ = new wxStaticText(canvasPanel, wxID_ANY, "Mode: Select");
     mode_label_->SetForegroundColour(wxColour(200, 200, 200));
@@ -229,6 +243,7 @@ void DiagramPage::BuildLayout() {
     SetSizer(rootSizer);
 
     diagram_type_choice_->Bind(wxEVT_CHOICE, &DiagramPage::OnDiagramTypeChanged, this);
+    notation_choice_->Bind(wxEVT_CHOICE, &DiagramPage::OnNotationChanged, this);
     template_choice_->Bind(wxEVT_CHOICE, &DiagramPage::OnTemplateChanged, this);
     template_edit_button_->Bind(wxEVT_BUTTON, &DiagramPage::OnTemplateEdit, this);
     palette_add_button_->Bind(wxEVT_BUTTON, &DiagramPage::OnPaletteAdd, this);
@@ -333,6 +348,10 @@ void DiagramPage::OnDiagramTypeChanged(wxCommandEvent&) {
     int selection = diagram_type_choice_->GetSelection();
     diagram_type_ = selection == 1 ? DiagramType::Silverston : DiagramType::Erd;
     canvas_->SetDiagramType(diagram_type_);
+    
+    // Enable/disable notation selector based on diagram type
+    notation_choice_->Enable(diagram_type_ == DiagramType::Erd);
+    
     relationship_mode_ = false;
     relationship_source_id_.clear();
     relationship_kind_.clear();
@@ -340,6 +359,16 @@ void DiagramPage::OnDiagramTypeChanged(wxCommandEvent&) {
     PopulatePalette();
     PopulateTemplates();
     UpdateProperties();
+}
+
+void DiagramPage::OnNotationChanged(wxCommandEvent&) {
+    if (diagram_type_ != DiagramType::Erd) {
+        return;
+    }
+    
+    int selection = notation_choice_->GetSelection();
+    ErdNotation notation = static_cast<ErdNotation>(selection);
+    canvas_->SetNotation(notation);
 }
 
 void DiagramPage::OnCardinalityChanged(wxCommandEvent& event) {
@@ -382,6 +411,21 @@ void DiagramPage::OnLabelPositionChanged(wxCommandEvent&) {
 
 void DiagramPage::OnCanvasKey(wxKeyEvent& event) {
     int key = event.GetKeyCode();
+    
+    // Undo/Redo (Phase 3.3)
+    if (event.ControlDown() && (key == 'Z' || key == 'z')) {
+        if (event.ShiftDown()) {
+            canvas_->Redo();
+        } else {
+            canvas_->Undo();
+        }
+        return;
+    }
+    if (event.ControlDown() && (key == 'Y' || key == 'y')) {
+        canvas_->Redo();
+        return;
+    }
+    
     if (key == 'L' || key == 'l') {
         StartRelationshipMode();
         return;

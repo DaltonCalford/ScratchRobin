@@ -5,7 +5,7 @@
  * Licensed under the Initial Developer's Public License Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at:
- * https://www.firebirdsql.org/en/initial-developer-s-public-license-version-1-0/
+ * https://www.firebirdsql.org/en/initial-developers-public-license-version-1-0/
  */
 #include "credentials.h"
 
@@ -126,6 +126,131 @@ public:
         if (outError) {
             *outError = "No credential backend available for: " + credentialId;
         }
+        return false;
+#endif
+    }
+
+    bool StorePassword(const std::string& credentialId,
+                       const std::string& password,
+                       std::string* outError) override {
+        if (credentialId.empty()) {
+            if (outError) {
+                *outError = "Empty credential id";
+            }
+            return false;
+        }
+
+        // Don't store env: credentials in keychain
+        if (credentialId.rfind("env:", 0) == 0) {
+            return true;  // Env credentials are resolved at lookup time
+        }
+
+#ifdef SCRATCHROBIN_USE_LIBSECRET
+        GError* error = nullptr;
+        gboolean result = secret_password_store_sync(
+            &kScratchRobinSchema,
+            SECRET_COLLECTION_DEFAULT,
+            ("ScratchRobin: " + credentialId).c_str(),
+            password.c_str(),
+            nullptr,
+            &error,
+            "id",
+            credentialId.c_str(),
+            nullptr
+        );
+
+        if (!result) {
+            if (outError) {
+                if (error && error->message) {
+                    *outError = error->message;
+                } else {
+                    *outError = "Failed to store credential: " + credentialId;
+                }
+            }
+            if (error) {
+                g_error_free(error);
+            }
+            return false;
+        }
+
+        if (error) {
+            g_error_free(error);
+        }
+        return true;
+#else
+        if (outError) {
+            *outError = "No credential backend available";
+        }
+        return false;
+#endif
+    }
+
+    bool DeletePassword(const std::string& credentialId,
+                        std::string* outError) override {
+        if (credentialId.empty()) {
+            return true;
+        }
+
+#ifdef SCRATCHROBIN_USE_LIBSECRET
+        GError* error = nullptr;
+        gboolean result = secret_password_clear_sync(
+            &kScratchRobinSchema,
+            nullptr,
+            &error,
+            "id",
+            credentialId.c_str(),
+            nullptr
+        );
+
+        if (!result && error) {
+            if (outError) {
+                *outError = error->message;
+            }
+            g_error_free(error);
+            return false;
+        }
+
+        if (error) {
+            g_error_free(error);
+        }
+        return true;
+#else
+        return true;  // Nothing to delete without backend
+#endif
+    }
+
+    bool HasPassword(const std::string& credentialId) override {
+        if (credentialId.empty()) {
+            return false;
+        }
+
+        // Check for env: credentials
+        if (credentialId.rfind("env:", 0) == 0) {
+            std::string var = credentialId.substr(4);
+            return std::getenv(var.c_str()) != nullptr;
+        }
+
+#ifdef SCRATCHROBIN_USE_LIBSECRET
+        GError* error = nullptr;
+        gchar* password = secret_password_lookup_sync(
+            &kScratchRobinSchema,
+            nullptr,
+            &error,
+            "id",
+            credentialId.c_str(),
+            nullptr
+        );
+
+        bool has_password = (password != nullptr);
+        
+        if (password) {
+            secret_password_free(password);
+        }
+        if (error) {
+            g_error_free(error);
+        }
+        return has_password;
+#else
         return false;
 #endif
     }

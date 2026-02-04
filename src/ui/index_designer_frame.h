@@ -53,6 +53,8 @@ private:
     void RefreshIndexes();
     void RefreshIndexDetails(const std::string& index_name);
     void RefreshIndexColumns(const std::string& table_name, const std::string& index_name);
+    void RefreshIndexUsageStats(const std::string& table_name, const std::string& index_name);
+    void ApplyIndexTypeIcons();
     void RunCommand(const std::string& sql, const std::string& success_message);
 
     std::string GetSelectedIndexName() const;
@@ -97,14 +99,18 @@ private:
 
     wxGrid* indexes_grid_ = nullptr;
     wxGrid* columns_grid_ = nullptr;
+    wxGrid* usage_grid_ = nullptr;
     ResultGridTable* indexes_table_ = nullptr;
     ResultGridTable* columns_table_ = nullptr;
+    ResultGridTable* usage_table_ = nullptr;
 
     int active_profile_index_ = -1;
     int pending_queries_ = 0;
     QueryResult indexes_result_;
+    QueryResult filtered_indexes_result_;
     QueryResult index_details_result_;
     QueryResult columns_result_;
+    QueryResult usage_result_;
     std::string selected_index_;
     std::string selected_table_;
 

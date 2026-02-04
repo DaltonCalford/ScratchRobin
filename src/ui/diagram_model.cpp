@@ -22,6 +22,14 @@ void DiagramModel::set_type(DiagramType type) {
     type_ = type;
 }
 
+ErdNotation DiagramModel::notation() const {
+    return notation_;
+}
+
+void DiagramModel::set_notation(ErdNotation notation) {
+    notation_ = notation;
+}
+
 DiagramNode& DiagramModel::AddNode(const DiagramNode& node) {
     nodes_.push_back(node);
     return nodes_.back();
@@ -90,6 +98,44 @@ std::string CardinalityLabel(Cardinality value) {
             return "0..N";
         default:
             return "?";
+    }
+}
+
+// ERD Notation support (Phase 3.2)
+std::string ErdNotationToString(ErdNotation notation) {
+    switch (notation) {
+        case ErdNotation::CrowsFoot:
+            return "crowsfoot";
+        case ErdNotation::IDEF1X:
+            return "idef1x";
+        case ErdNotation::UML:
+            return "uml";
+        case ErdNotation::Chen:
+            return "chen";
+        default:
+            return "crowsfoot";
+    }
+}
+
+ErdNotation StringToErdNotation(const std::string& str) {
+    if (str == "idef1x") return ErdNotation::IDEF1X;
+    if (str == "uml") return ErdNotation::UML;
+    if (str == "chen") return ErdNotation::Chen;
+    return ErdNotation::CrowsFoot;
+}
+
+std::string ErdNotationLabel(ErdNotation notation) {
+    switch (notation) {
+        case ErdNotation::CrowsFoot:
+            return "Crow's Foot";
+        case ErdNotation::IDEF1X:
+            return "IDEF1X";
+        case ErdNotation::UML:
+            return "UML Class";
+        case ErdNotation::Chen:
+            return "Chen";
+        default:
+            return "Unknown";
     }
 }
 
