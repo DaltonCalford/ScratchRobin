@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <iomanip>
 #include <numeric>
 #include <sstream>
@@ -415,6 +416,246 @@ void TestRunner::SetProgressCallback(ProgressCallback callback) {
     progress_callback_ = callback;
 }
 
+// Test type specific runners
+TestResult TestRunner::RunUnitTest(const TestCase& test) {
+    TestResult result(test);
+    result.status = TestStatus::RUNNING;
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    try {
+        // Run all assertions in the test
+        for (const auto& step : test.setup_steps) {
+            auto assertion = AssertQuerySuccess(step.sql);
+            if (!assertion.passed) {
+                result.status = TestStatus::ERROR;
+                result.error_message = "Setup failed: " + assertion.message;
+                return result;
+            }
+        }
+        
+        for (const auto& step : test.test_steps) {
+            AssertionResult assertion;
+            if (step.expected_result == "success") {
+                assertion = AssertQuerySuccess(step.sql);
+            } else if (step.expected_result == "fail") {
+                assertion = AssertQueryFails(step.sql);
+            } else {
+                assertion = AssertQueryResult(step.sql, step.expected_result);
+            }
+            result.assertions.push_back(assertion);
+            if (assertion.passed) {
+                result.assertions_passed++;
+            } else {
+                result.assertions_failed++;
+            }
+        }
+        
+        for (const auto& step : test.teardown_steps) {
+            AssertQuerySuccess(step.sql);  // Don't fail on cleanup issues
+        }
+        
+        result.status = (result.assertions_failed == 0) ? TestStatus::PASSED : TestStatus::FAILED;
+    } catch (const std::exception& e) {
+        result.status = TestStatus::ERROR;
+        result.error_message = e.what();
+    }
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    result.execution_time = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    
+    return result;
+}
+
+TestResult TestRunner::RunIntegrationTest(const TestCase& test) {
+    // Integration tests run the full workflow with transactions
+    return RunUnitTest(test);  // Similar for now
+}
+
+TestResult TestRunner::RunPerformanceTest(const TestCase& test) {
+    TestResult result(test);
+    result.status = TestStatus::RUNNING;
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    try {
+        // Run performance benchmark
+        for (const auto& step : test.test_steps) {
+            auto bench = BenchmarkQuery(step.sql, test.perf_config.iterations);
+            
+            // Check against thresholds
+            bool passed = (bench.avg_time_ms <= test.perf_config.max_avg_time_ms) &&
+                         (bench.p95_time_ms <= test.perf_config.max_p95_time_ms);
+            
+            AssertionResult assertion;
+            assertion.passed = passed;
+            assertion.message = passed ? "Performance within thresholds" :
+                "Performance exceeded thresholds: avg=" + std::to_string(bench.avg_time_ms) + 
+                "ms, p95=" + std::to_string(bench.p95_time_ms) + "ms";
+            result.assertions.push_back(assertion);
+            
+            if (passed) {
+                result.assertions_passed++;
+            } else {
+                result.assertions_failed++;
+            }
+        }
+        
+        result.status = (result.assertions_failed == 0) ? TestStatus::PASSED : TestStatus::FAILED;
+    } catch (const std::exception& e) {
+        result.status = TestStatus::ERROR;
+        result.error_message = e.what();
+    }
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    result.execution_time = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    
+    return result;
+}
+
+TestResult TestRunner::RunDataQualityTest(const TestCase& test) {
+    TestResult result(test);
+    result.status = TestStatus::RUNNING;
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    try {
+        for (const auto& check : test.quality_checks) {
+            AssertionResult assertion;
+            
+            if (check.metric == "null_percentage") {
+                assertion = AssertNullPercentage(check.table, check.column, check.threshold);
+            } else if (check.metric == "uniqueness") {
+                assertion = AssertUniqueness(check.table, check.column);
+            } else if (check.metric == "referential_integrity") {
+                // Would need additional config for FK validation
+                assertion.passed = true;
+                assertion.message = "Referential integrity check stub";
+            } else {
+                assertion.passed = false;
+                assertion.message = "Unknown metric: " + check.metric;
+            }
+            
+            result.assertions.push_back(assertion);
+            if (assertion.passed) {
+                result.assertions_passed++;
+            } else {
+                result.assertions_failed++;
+            }
+        }
+        
+        result.status = (result.assertions_failed == 0) ? TestStatus::PASSED : TestStatus::FAILED;
+    } catch (const std::exception& e) {
+        result.status = TestStatus::ERROR;
+        result.error_message = e.what();
+    }
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    result.execution_time = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    
+    return result;
+}
+
+TestResult TestRunner::RunSecurityTest(const TestCase& test) {
+    TestResult result(test);
+    result.status = TestStatus::RUNNING;
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    try {
+        // Security tests check for vulnerabilities
+        for (const auto& step : test.test_steps) {
+            // Check for SQL injection patterns in queries
+            std::string sql_lower = step.sql;
+            std::transform(sql_lower.begin(), sql_lower.end(), sql_lower.begin(), ::tolower);
+            
+            bool has_injection_risk = (sql_lower.find("' or '") != std::string::npos) ||
+                                      (sql_lower.find("'=") != std::string::npos) ||
+                                      (sql_lower.find("; drop ") != std::string::npos);
+            
+            AssertionResult assertion;
+            assertion.passed = !has_injection_risk;
+            assertion.message = has_injection_risk ? "Potential SQL injection vulnerability detected" :
+                                                   "No obvious SQL injection patterns found";
+            
+            result.assertions.push_back(assertion);
+            if (assertion.passed) {
+                result.assertions_passed++;
+            } else {
+                result.assertions_failed++;
+            }
+        }
+        
+        result.status = (result.assertions_failed == 0) ? TestStatus::PASSED : TestStatus::FAILED;
+    } catch (const std::exception& e) {
+        result.status = TestStatus::ERROR;
+        result.error_message = e.what();
+    }
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    result.execution_time = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    
+    return result;
+}
+
+std::string TestRunner::GenerateReport(const std::vector<TestResult>& results, 
+                                       ReportFormat format) {
+    std::ostringstream oss;
+    
+    switch (format) {
+        case ReportFormat::TEXT:
+            for (const auto& result : results) {
+                oss << result.ToString() << "\n";
+            }
+            break;
+            
+        case ReportFormat::JSON:
+            oss << "[\n";
+            for (size_t i = 0; i < results.size(); ++i) {
+                if (i > 0) oss << ",\n";
+                results[i].ToJson(oss);
+            }
+            oss << "\n]\n";
+            break;
+            
+        case ReportFormat::HTML:
+            oss << "<!DOCTYPE html>\n<html><head><title>Test Report</title></head><body>\n";
+            oss << "<h1>Test Report</h1><table border='1'>\n";
+            oss << "<tr><th>Test</th><th>Status</th><th>Time</th></tr>\n";
+            for (const auto& result : results) {
+                oss << "<tr><td>" << result.test_name << "</td>"
+                    << "<td>" << TestStatusToString(result.status) << "</td>"
+                    << "<td>" << result.execution_time.count() << "us</td></tr>\n";
+            }
+            oss << "</table></body></html>\n";
+            break;
+            
+        case ReportFormat::JUNIT:
+            oss << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+            oss << "<testsuites>\n";
+            for (const auto& result : results) {
+                result.ToJUnitXml(oss);
+            }
+            oss << "</testsuites>\n";
+            break;
+            
+        case ReportFormat::MARKDOWN:
+            oss << "# Test Report\n\n";
+            oss << "| Test | Status | Time |\n";
+            oss << "|------|--------|------|\n";
+            for (const auto& result : results) {
+                const char* status_icon = (result.status == TestStatus::PASSED) ? "PASS" :
+                                         (result.status == TestStatus::FAILED) ? "FAIL" : "SKIP";
+                oss << "| " << result.test_name << " | " << status_icon << " "
+                    << TestStatusToString(result.status) << " | "
+                    << result.execution_time.count() << "us |\n";
+            }
+            break;
+    }
+    
+    return oss.str();
+}
+
 bool TestRunner::ExecuteSql(const std::string& sql, std::string* error) {
     // Would execute actual SQL against connection
     // Stub implementation
@@ -458,6 +699,17 @@ void TestResult::ToJson(std::ostream& out) const {
     out << "  \"assertions_failed\": " << assertions_failed << ",\n";
     out << "  \"execution_time_us\": " << execution_time.count() << "\n";
     out << "}";
+}
+
+void TestResult::ToJUnitXml(std::ostream& out) const {
+    out << "  <testcase name=\"" << test_name << "\" classname=\"" << test_id << "\" time=\""
+        << execution_time.count() / 1000000.0 << "\">\n";
+    if (status == TestStatus::FAILED) {
+        out << "    <failure message=\"Test failed\">" << error_message << "</failure>\n";
+    } else if (status == TestStatus::SKIPPED) {
+        out << "    <skipped/>\n";
+    }
+    out << "  </testcase>\n";
 }
 
 // ============================================================================

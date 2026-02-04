@@ -11,8 +11,11 @@
 #define SCRATCHROBIN_DOCKER_MANAGER_PANEL_H
 
 #include <wx/panel.h>
+#include <wx/dialog.h>
 #include <wx/listctrl.h>
+#include <wx/stattext.h>
 #include <wx/timer.h>
+#include <wx/wizard.h>
 
 #include "core/docker_config.h"
 
@@ -43,6 +46,7 @@ private:
     void BuildLayout();
     void BuildToolbar();
     void BuildStatusPanel();
+    void BuildDetailsPanel(wxSizer* parent);
     void BuildLogsPanel();
     void BuildConfigurationPanel();
     
@@ -62,6 +66,7 @@ private:
     void OnPortChange(wxSpinEvent& event);
     void OnTimer(wxTimerEvent& event);
     void OnContainerSelect(wxListEvent& event);
+    void OnButton(wxCommandEvent& event);
     
     // Actions
     void StartContainer();
@@ -81,6 +86,7 @@ private:
     bool is_monitoring_ = false;
     
     // UI Components - Toolbar
+    wxPanel* toolbar_ = nullptr;
     wxButton* start_button_ = nullptr;
     wxButton* stop_button_ = nullptr;
     wxButton* restart_button_ = nullptr;

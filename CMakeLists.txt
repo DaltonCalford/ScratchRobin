@@ -98,6 +98,9 @@ set(SCRATCHROBIN_CORE_SOURCES
     src/core/project.cpp
     src/core/testing_framework.cpp
     src/core/docker_config.cpp
+    src/core/migration_generator.cpp
+    src/core/deployment_plan.cpp
+    src/core/collaboration.cpp
 )
 
 add_library(scratchrobin_core ${SCRATCHROBIN_CORE_SOURCES})
@@ -223,6 +226,10 @@ if(SCRATCHROBIN_BUILD_UI)
         src/ui/replication_manager_frame.cpp
         src/ui/etl_manager_frame.cpp
         src/ui/git_integration_frame.cpp
+        # New UI components
+        src/ui/docker_manager_panel.cpp
+        src/ui/test_runner_panel.cpp
+        src/ui/whiteboard_canvas.cpp
     )
 
     target_include_directories(scratchrobin PRIVATE src)

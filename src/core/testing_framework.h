@@ -25,6 +25,15 @@ class TestCase;
 class TestRunner;
 class TestResult;
 
+// Report formats
+enum class ReportFormat {
+    TEXT,
+    JSON,
+    HTML,
+    JUNIT,
+    MARKDOWN
+};
+
 // ============================================================================
 // Test Types
 // ============================================================================
@@ -211,6 +220,15 @@ public:
     TestResult ExecuteTest(TestCase& test);
     std::vector<TestResult> ExecuteTests(const std::vector<TestCase*>& tests);
     
+    // Specific test type runners
+    TestResult RunUnitTest(const TestCase& test);
+    TestResult RunIntegrationTest(const TestCase& test);
+    TestResult RunPerformanceTest(const TestCase& test);
+    TestResult RunDataQualityTest(const TestCase& test);
+    TestResult RunSecurityTest(const TestCase& test);
+    
+    std::string GenerateReport(const std::vector<TestResult>& results, ReportFormat format);
+    
     // Assertions
     AssertionResult AssertTrue(bool condition, const std::string& message);
     AssertionResult AssertFalse(bool condition, const std::string& message);
@@ -266,6 +284,44 @@ private:
 };
 
 // ============================================================================
+// Test Runner Configuration
+// ============================================================================
+struct TestRunnerConfig {
+    std::string connection_string;
+    bool parallel_execution = false;
+    int max_workers = 4;
+    bool fail_fast = false;
+    std::chrono::seconds timeout{300};
+    std::string environment = "test";
+};
+
+// ============================================================================
+// Data Quality Rule
+// ============================================================================
+struct DataQualityRule {
+    std::string id;
+    std::string name;
+    std::string description;
+    std::string table;
+    std::string column;
+    std::string rule_type;  // "null_check", "uniqueness", "range", etc.
+    std::string condition;
+    double threshold = 0.0;
+    bool enabled = true;
+};
+
+// ============================================================================
+// Security Test Configuration
+// ============================================================================
+struct SecurityTestConfig {
+    bool check_sql_injection = true;
+    bool check_privilege_escalation = true;
+    bool check_weak_passwords = true;
+    bool check_exposed_data = true;
+    std::vector<std::string> additional_checks;
+};
+
+// ============================================================================
 // Test Result
 // ============================================================================
 class TestResult {
@@ -283,6 +339,7 @@ public:
     // Summary
     int assertions_passed = 0;
     int assertions_failed = 0;
+    bool skipped = false;
     
     // Metadata
     std::string executed_by;

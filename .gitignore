@@ -37,3 +37,7 @@ Thumbs.db
 !cmake/
 !cmake/toolchains/
 !cmake/toolchains/*.cmake
+build*/
+*.AppImage
+linuxdeploy*.AppImage
+.DS_Store
