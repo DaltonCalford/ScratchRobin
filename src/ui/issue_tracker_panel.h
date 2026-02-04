@@ -134,12 +134,32 @@ private:
     void OnRemoveTracker(wxCommandEvent& event);
     void OnTestConnection(wxCommandEvent& event);
     void OnSave(wxCommandEvent& event);
+    void RefreshTrackerList();
+    std::string GetLinksFilePath();
     
     wxListCtrl* trackers_list_;
     wxButton* add_button_;
     wxButton* remove_button_;
     wxButton* test_button_;
-    std::vector<IssueReference> search_results_;  // Reuse from LinkIssueDialog
+};
+
+// Add Tracker Dialog
+class AddTrackerDialog : public wxDialog {
+public:
+    AddTrackerDialog(wxWindow* parent);
+    
+    TrackerConfig GetConfig();
+    
+private:
+    void CreateControls();
+    void OnProviderChanged(wxCommandEvent& event);
+    
+    wxChoice* provider_choice_;
+    wxTextCtrl* name_ctrl_;
+    wxTextCtrl* url_ctrl_;
+    wxTextCtrl* project_ctrl_;
+    wxTextCtrl* token_ctrl_;
+    wxTextCtrl* email_ctrl_;
 };
 
 } // namespace scratchrobin

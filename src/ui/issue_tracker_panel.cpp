@@ -22,6 +22,8 @@
 #include <wx/choice.h>
 #include <wx/checkbox.h>
 #include <wx/msgdlg.h>
+#include <wx/stdpaths.h>
+#include <wx/filename.h>
 
 #include <sstream>
 
@@ -631,19 +633,237 @@ void IssueTrackerSettingsDialog::CreateControls() {
 }
 
 void IssueTrackerSettingsDialog::OnAddTracker(wxCommandEvent& /*event*/) {
-    // TODO: Show add tracker dialog
+    // Show add tracker dialog
+    AddTrackerDialog dlg(this);
+    if (dlg.ShowModal() == wxID_OK) {
+        TrackerConfig config = dlg.GetConfig();
+        
+        auto& manager = IssueLinkManager::Instance();
+        if (manager.AddTracker(config)) {
+            // Refresh the list
+            RefreshTrackerList();
+            wxMessageBox("Tracker added successfully", "Success", wxOK | wxICON_INFORMATION, this);
+        } else {
+            wxMessageBox("Failed to add tracker. Check configuration.", "Error", wxOK | wxICON_ERROR, this);
+        }
+    }
 }
 
 void IssueTrackerSettingsDialog::OnRemoveTracker(wxCommandEvent& /*event*/) {
-    // TODO: Remove selected tracker
+    long idx = trackers_list_->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+    if (idx < 0) {
+        wxMessageBox("Please select a tracker to remove", "Error", wxOK | wxICON_ERROR, this);
+        return;
+    }
+    
+    wxString name = trackers_list_->GetItemText(idx);
+    
+    int result = wxMessageBox("Remove tracker '" + name + "'?", "Confirm", 
+                               wxYES_NO | wxICON_QUESTION, this);
+    if (result != wxYES) {
+        return;
+    }
+    
+    auto& manager = IssueLinkManager::Instance();
+    if (manager.RemoveTracker(name.ToStdString())) {
+        trackers_list_->DeleteItem(idx);
+        wxMessageBox("Tracker removed", "Success", wxOK | wxICON_INFORMATION, this);
+    } else {
+        wxMessageBox("Failed to remove tracker", "Error", wxOK | wxICON_ERROR, this);
+    }
 }
 
 void IssueTrackerSettingsDialog::OnTestConnection(wxCommandEvent& /*event*/) {
-    // TODO: Test connection to selected tracker
+    long idx = trackers_list_->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+    if (idx < 0) {
+        wxMessageBox("Please select a tracker to test", "Error", wxOK | wxICON_ERROR, this);
+        return;
+    }
+    
+    wxString name = trackers_list_->GetItemText(idx);
+    
+    test_button_->Disable();
+    test_button_->SetLabel("Testing...");
+    
+    auto& manager = IssueLinkManager::Instance();
+    auto* tracker = manager.GetTracker(name.ToStdString());
+    
+    if (!tracker) {
+        wxMessageBox("Tracker not found", "Error", wxOK | wxICON_ERROR, this);
+        test_button_->Enable();
+        test_button_->SetLabel("Test Connection");
+        return;
+    }
+    
+    // Test connection by getting recent issues
+    auto recent = tracker->GetRecentIssues(1);
+    bool success = !recent.empty() || tracker->TestConnection();
+    
+    test_button_->Enable();
+    test_button_->SetLabel("Test Connection");
+    
+    if (success) {
+        wxMessageBox("Connection successful!", "Success", wxOK | wxICON_INFORMATION, this);
+    } else {
+        wxMessageBox("Connection failed. Check your settings and network.", 
+                     "Error", wxOK | wxICON_ERROR, this);
+    }
 }
 
 void IssueTrackerSettingsDialog::OnSave(wxCommandEvent& /*event*/) {
+    // Save tracker configurations to file
+    auto& manager = IssueLinkManager::Instance();
+    manager.SaveLinks(GetLinksFilePath());
+    
     EndModal(wxID_OK);
+}
+
+void IssueTrackerSettingsDialog::RefreshTrackerList() {
+    trackers_list_->DeleteAllItems();
+    
+    auto& manager = IssueLinkManager::Instance();
+    auto names = manager.GetTrackerNames();
+    
+    for (size_t i = 0; i < names.size(); ++i) {
+        auto* tracker = manager.GetTracker(names[i]);
+        if (!tracker) continue;
+        
+        long idx = trackers_list_->InsertItem(i, names[i]);
+        trackers_list_->SetItem(idx, 1, tracker->GetProviderName());
+        trackers_list_->SetItem(idx, 2, "Configured");
+        trackers_list_->SetItem(idx, 3, "-");
+    }
+}
+
+std::string IssueTrackerSettingsDialog::GetLinksFilePath() {
+    wxFileName config_dir(wxStandardPaths::Get().GetUserDataDir(), "");
+    config_dir.AppendDir("config");
+    if (!config_dir.DirExists()) {
+        config_dir.Mkdir(wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
+    }
+    config_dir.SetFullName("issue_links.json");
+    return config_dir.GetFullPath().ToStdString();
+}
+
+// ============================================================================
+// Add Tracker Dialog
+// ============================================================================
+AddTrackerDialog::AddTrackerDialog(wxWindow* parent)
+    : wxDialog(parent, wxID_ANY, "Add Issue Tracker", wxDefaultPosition, wxSize(450, 400)) {
+    CreateControls();
+}
+
+void AddTrackerDialog::CreateControls() {
+    auto* main_sizer = new wxBoxSizer(wxVERTICAL);
+    
+    // Provider selection
+    auto* provider_row = new wxBoxSizer(wxHORIZONTAL);
+    provider_row->Add(new wxStaticText(this, wxID_ANY, "Provider:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    provider_choice_ = new wxChoice(this, wxID_ANY);
+    provider_choice_->Append("Jira");
+    provider_choice_->Append("GitHub");
+    provider_choice_->Append("GitLab");
+    provider_choice_->SetSelection(0);
+    provider_row->Add(provider_choice_, 1);
+    main_sizer->Add(provider_row, 0, wxEXPAND | wxALL, 10);
+    
+    // Name
+    auto* name_row = new wxBoxSizer(wxHORIZONTAL);
+    name_row->Add(new wxStaticText(this, wxID_ANY, "Name:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    name_ctrl_ = new wxTextCtrl(this, wxID_ANY);
+    name_row->Add(name_ctrl_, 1);
+    main_sizer->Add(name_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
+    
+    // Base URL
+    auto* url_row = new wxBoxSizer(wxHORIZONTAL);
+    url_row->Add(new wxStaticText(this, wxID_ANY, "Base URL:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    url_ctrl_ = new wxTextCtrl(this, wxID_ANY);
+    url_ctrl_->SetValue("https://");
+    url_row->Add(url_ctrl_, 1);
+    main_sizer->Add(url_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
+    
+    // Project Key
+    auto* project_row = new wxBoxSizer(wxHORIZONTAL);
+    project_row->Add(new wxStaticText(this, wxID_ANY, "Project:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    project_ctrl_ = new wxTextCtrl(this, wxID_ANY);
+    project_row->Add(project_ctrl_, 1);
+    main_sizer->Add(project_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
+    
+    // API Token
+    auto* token_row = new wxBoxSizer(wxHORIZONTAL);
+    token_row->Add(new wxStaticText(this, wxID_ANY, "API Token:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    token_ctrl_ = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_PASSWORD);
+    token_row->Add(token_ctrl_, 1);
+    main_sizer->Add(token_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
+    
+    // Email (for Jira)
+    auto* email_row = new wxBoxSizer(wxHORIZONTAL);
+    email_row->Add(new wxStaticText(this, wxID_ANY, "Email:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    email_ctrl_ = new wxTextCtrl(this, wxID_ANY);
+    email_row->Add(email_ctrl_, 1);
+    main_sizer->Add(email_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
+    
+    // Buttons
+    auto* button_sizer = new wxBoxSizer(wxHORIZONTAL);
+    button_sizer->AddStretchSpacer(1);
+    button_sizer->Add(new wxButton(this, wxID_CANCEL, "Cancel"), 0, wxRIGHT, 5);
+    auto* add_btn = new wxButton(this, wxID_OK, "Add");
+    add_btn->SetDefault();
+    button_sizer->Add(add_btn, 0);
+    main_sizer->Add(button_sizer, 0, wxEXPAND | wxALL, 10);
+    
+    SetSizer(main_sizer);
+    
+    // Update UI based on provider
+    provider_choice_->Bind(wxEVT_CHOICE, &AddTrackerDialog::OnProviderChanged, this);
+    OnProviderChanged(wxCommandEvent());
+}
+
+void AddTrackerDialog::OnProviderChanged(wxCommandEvent& /*event*/) {
+    int selection = provider_choice_->GetSelection();
+    
+    // Show/hide email field based on provider
+    if (selection == 0) {  // Jira
+        email_ctrl_->GetParent()->Show(true);
+    } else {
+        email_ctrl_->GetParent()->Show(false);
+    }
+    
+    // Update default URLs
+    if (selection == 1) {  // GitHub
+        if (url_ctrl_->GetValue() == "https://" || url_ctrl_->IsEmpty()) {
+            url_ctrl_->SetValue("https://api.github.com");
+        }
+    } else if (selection == 2) {  // GitLab
+        if (url_ctrl_->GetValue() == "https://" || url_ctrl_->IsEmpty()) {
+            url_ctrl_->SetValue("https://gitlab.com/api/v4");
+        }
+    }
+    
+    Layout();
+}
+
+TrackerConfig AddTrackerDialog::GetConfig() {
+    TrackerConfig config;
+    
+    int selection = provider_choice_->GetSelection();
+    switch (selection) {
+        case 0: config.provider = JiraAdapter::PROVIDER_NAME; break;
+        case 1: config.provider = GitHubAdapter::PROVIDER_NAME; break;
+        case 2: config.provider = GitLabAdapter::PROVIDER_NAME; break;
+        default: config.provider = JiraAdapter::PROVIDER_NAME;
+    }
+    
+    config.name = name_ctrl_->GetValue().ToStdString();
+    config.base_url = url_ctrl_->GetValue().ToStdString();
+    config.project_key = project_ctrl_->GetValue().ToStdString();
+    
+    // Auth
+    config.auth.type = (selection == 0) ? "api_token" : "personal_token";
+    config.auth.token = token_ctrl_->GetValue().ToStdString();
+    config.auth.email = email_ctrl_->GetValue().ToStdString();
+    
+    return config;
 }
 
 } // namespace scratchrobin

@@ -152,6 +152,8 @@ public:
     bool IsRunning() const;
     
     void SetSecret(const std::string& secret);  // For signature verification
+    void RegisterHandler(const std::string& path, 
+                         std::function<void(const WebhookEvent&)> handler);
     
 private:
     WebhookServer() = default;
@@ -159,6 +161,9 @@ private:
     
     void ServerLoop();
     void HandleRequest(int client_socket);
+    void SendResponse(int client_socket, int status_code, 
+                      const std::string& status_text,
+                      const std::string& body = "");
     bool VerifySignature(const std::string& payload, const std::string& signature,
                          const std::string& provider);
     
@@ -167,6 +172,8 @@ private:
     std::string secret_;
     bool running_ = false;
     std::unique_ptr<std::thread> server_thread_;
+    mutable std::mutex mutex_;
+    std::map<std::string, std::function<void(const WebhookEvent&)>> handlers_;
 };
 
 } // namespace scratchrobin
