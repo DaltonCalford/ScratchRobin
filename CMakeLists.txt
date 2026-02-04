@@ -102,6 +102,8 @@ if(SCRATCHROBIN_BUILD_UI)
         src/diagram/reverse_engineer.cpp
         src/diagram/forward_engineer.cpp
         src/diagram/export_manager.cpp
+        src/diagram/graphviz_layout.cpp
+        src/diagram/migration_generator.cpp
         src/ui/domain_editor_dialog.cpp
         src/ui/domain_manager_frame.cpp
         src/ui/error_dialog.cpp
@@ -129,6 +131,7 @@ if(SCRATCHROBIN_BUILD_UI)
         src/ui/incremental_refresh_dialog.cpp
         src/ui/notation_test_dialog.cpp
         src/ui/print_dialog.cpp
+        src/ui/migration_dialog.cpp
         src/ui/startup_frame.cpp
         src/ui/menu_builder.cpp
         src/ui/icon_bar.cpp

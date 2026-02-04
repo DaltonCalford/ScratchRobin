@@ -279,7 +279,7 @@ src/diagram/
 | 3.4.4 | Implement orthogonal layout | ✅ | P2 | 4d | 3.4.1 | Right-angle routing |
 | 3.4.5 | Add layout options dialog | ✅ | P1 | 1d | 3.4.2 | LayoutOptionsDialog with algorithm, direction, spacing settings |
 | 3.4.6 | Add pin/unpin for nodes | ✅ | P2 | 0.5d | 3.4.2 | DiagramCanvas Pin/Unpin/Toggle methods with pinned field in DiagramNode |
-| 3.4.7 | Integrate Graphviz as optional engine | ⏸️ | P3 | 3d | 3.4.2 | Use dot layout via subprocess (deferred) |
+| 3.4.7 | Integrate Graphviz as optional engine | ✅ | P3 | 3d | 3.4.2 | GraphvizLayoutEngine with dot subprocess integration |
 
 ### 3.5 Reverse Engineering (Database → Diagram) ✅
 
@@ -290,7 +290,7 @@ src/diagram/
 | 3.5.3 | Create relationships from FKs | ✅ | P0 | 2d | 3.5.1 | Convert foreign keys to relationships |
 | 3.5.4 | Add reverse engineer wizard | ✅ | P0 | 2d | 3.5.2-3.5.3 | ReverseEngineerWizard with schema/table selection and progress dialog |
 | 3.5.5 | Add incremental refresh | ✅ | P1 | 2d | 3.5.4 | IncrementalRefreshDialog with schema comparison and selective apply |
-| 3.5.6 | Handle schema changes (diff) | ⏸️ | P2 | 3d | 3.5.5 | Show added/removed/changed objects (deferred) |
+| 3.5.6 | Handle schema changes (diff) | ✅ | P2 | 3d | 3.5.5 | IncrementalRefreshDialog shows schema changes with apply/reject |
 | 3.5.7 | Support external backends | ✅ | P1 | 2d | 3.5.1 | PG/MySQL/FB reverse engineering |
 
 ### 3.6 Forward Engineering (Diagram → DDL) ✅
@@ -305,7 +305,7 @@ src/diagram/
 | 3.6.6 | Implement Firebird DDL generator | ✅ | P1 | 2d | 3.6.2 | Firebird-compatible DDL |
 | 3.6.7 | Add DDL preview dialog | ✅ | P0 | 1d | 3.6.3 | DdlPreviewDialog with copy/save/execute options |
 | 3.6.8 | Add DDL execution | ✅ | P0 | 1d | 3.6.7 | DdlExecutionDialog with progress and error reporting |
-| 3.6.9 | Add migration script generation | ⏸️ | P2 | 2d | 3.6.3 | Alter vs Create based on diff (deferred) |
+| 3.6.9 | Add migration script generation | ✅ | P2 | 2d | 3.6.3 | MigrationGenerator and MigrationDialog for upgrade/downgrade scripts |
 
 ### 3.7 Diagram Export/Import ✅
 
