@@ -24,10 +24,15 @@ DockerContainerConfig::DockerContainerConfig() {
 }
 
 void DockerContainerConfig::SetDefaultPorts() {
-    native_service.port = 3050;
+    // Standard database ports:
+    // - ScratchBird Native: 3092 (SBWP v1.1 protocol)
+    // - Firebird: 3050 (classic Firebird port)
+    // - PostgreSQL: 5432 (standard PG port)
+    // - MySQL: 3306 (standard MySQL port)
+    native_service.port = 3092;
     postgres_service.port = 5432;
     mysql_service.port = 3306;
-    firebird_service.port = 3051;
+    firebird_service.port = 3050;
     
     native_service.enabled = true;
     postgres_service.enabled = true;

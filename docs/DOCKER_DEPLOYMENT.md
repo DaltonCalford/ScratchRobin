@@ -26,9 +26,10 @@ docker pull scratchbird:latest
 # Run with default settings
 docker run -d \
   --name scratchbird-server \
-  -p 3050:3050 \
-  -p 5432:5432 \
-  -p 3306:3306 \
+  -p 3092:3092 \\      # ScratchBird Native (SBWP v1.1)
+  -p 5432:5432 \\      # PostgreSQL
+  -p 3306:3306 \\      # MySQL
+  -p 3050:3050 \\      # Firebird
   -v $(pwd)/data:/var/lib/scratchbird/data \
   scratchbird:latest
 
@@ -130,12 +131,12 @@ networks:
 
 ### Service Ports
 
-| Variable | Default | Service |
-|----------|---------|---------|
-| `SB_NATIVE_PORT` | 3050 | ScratchBird Native |
-| `SB_POSTGRES_PORT` | 5432 | PostgreSQL |
-| `SB_MYSQL_PORT` | 3306 | MySQL |
-| `SB_FIREBIRD_PORT` | 3051 | Firebird |
+| Variable | Default | Service | Protocol |
+|----------|---------|---------|----------|
+| `SB_NATIVE_PORT` | 3092 | ScratchBird Native | SBWP v1.1 |
+| `SB_POSTGRES_PORT` | 5432 | PostgreSQL | PostgreSQL wire |
+| `SB_MYSQL_PORT` | 3306 | MySQL | MySQL wire |
+| `SB_FIREBIRD_PORT` | 3050 | Firebird | Firebird wire |
 
 ### Service Enablement
 
