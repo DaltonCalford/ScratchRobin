@@ -485,27 +485,31 @@ src/diagram/
 
 | Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
 |---------|------|--------|----------|-------------|--------------|---------------------|
-| 6.1.1 | Create Preferences spec | 🔴 | P1 | 0.5d | - | Categories and options |
-| 6.1.2 | Implement Preferences dialog | 🔴 | P1 | 2d | 6.1.1 | Tabbed preferences window |
-| 6.1.3 | Add Editor preferences | 🔴 | P1 | 0.5d | 6.1.2 | Font, colors, tabs/spaces |
-| 6.1.4 | Add Result Grid preferences | 🔴 | P1 | 0.5d | 6.1.2 | Default row limit, formatting |
-| 6.1.5 | Add Connection preferences | 🔴 | P1 | 0.5d | 6.1.2 | Timeouts, SSL defaults |
-| 6.1.6 | Add Export preferences | 🔴 | P2 | 0.5d | 6.1.2 | CSV delimiter, date format |
-| 6.1.7 | Add Diagram preferences | 🔴 | P2 | 0.5d | 6.1.2 | Default notation, grid size |
-| 6.1.8 | Add Network preferences | 🔴 | P2 | 0.5d | 6.1.2 | Proxy settings |
-| 6.1.9 | Implement settings persistence | 🔴 | P1 | 1d | 6.1.2 | Save/load from config file |
-| 6.1.10 | Wire into menu system | 🔴 | P1 | 0.5d | 6.1.2 | Edit -> Preferences menu item |
+| 6.1.1 | Create Preferences spec | ✅ | P1 | 0.5d | - | Categories and options |
+| 6.1.2 | Implement Preferences dialog | ✅ | P1 | 2d | 6.1.1 | Tabbed preferences window |
+| 6.1.3 | Add Editor preferences | ✅ | P1 | 0.5d | 6.1.2 | Font, colors, tabs/spaces |
+| 6.1.4 | Add Result Grid preferences | ✅ | P1 | 0.5d | 6.1.2 | Default row limit, formatting |
+| 6.1.5 | Add Connection preferences | ✅ | P1 | 0.5d | 6.1.2 | Timeouts, SSL defaults |
+| 6.1.6 | Add Export preferences | ✅ | P2 | 0.5d | 6.1.2 | CSV delimiter, date format |
+| 6.1.7 | Add Diagram preferences | ✅ | P2 | 0.5d | 6.1.2 | Default notation, grid size |
+| 6.1.8 | Add Network preferences | ✅ | P2 | 0.5d | 6.1.2 | Proxy settings |
+| 6.1.9 | Implement settings persistence | ✅ | P1 | 1d | 6.1.2 | Save/load from config file |
+| 6.1.10 | Wire into menu system | ✅ | P1 | 0.5d | 6.1.2 | Edit -> Preferences menu item |
+
+**Implementation**: `src/ui/preferences_dialog.h/cpp` - wxNotebook with 6 tabs (Editor, Results, Connection, Export, Diagram, Network)
 
 ### 6.2 Context-Sensitive Help
 
 | Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
 |---------|------|--------|----------|-------------|--------------|---------------------|
-| 6.2.1 | Review help topic inventory | 🟡 | P1 | 0.5d | - | Check against UI coverage |
-| 6.2.2 | Create missing help topics | 🔴 | P1 | 3d | 6.2.1 | Write Markdown help content |
-| 6.2.3 | Implement help browser | 🔴 | P1 | 2d | 6.2.2 | HTML/Markdown viewer |
-| 6.2.4 | Wire F1 help to windows | 🔴 | P1 | 1d | 6.2.3 | Context-sensitive help activation |
-| 6.2.5 | Add help index/search | 🔴 | P2 | 1d | 6.2.3 | Search help content |
-| 6.2.6 | Add language reference | 🔴 | P2 | 2d | 6.2.2 | ScratchBird SQL reference |
+| 6.2.1 | Review help topic inventory | ✅ | P1 | 0.5d | - | Check against UI coverage |
+| 6.2.2 | Create missing help topics | ✅ | P1 | 3d | 6.2.1 | Write Markdown help content |
+| 6.2.3 | Implement help browser | ✅ | P1 | 2d | 6.2.2 | HTML/Markdown viewer |
+| 6.2.4 | Wire F1 help to windows | ✅ | P1 | 1d | 6.2.3 | Context-sensitive help activation |
+| 6.2.5 | Add help index/search | ✅ | P2 | 1d | 6.2.3 | Search help content |
+| 6.2.6 | Add language reference | ✅ | P2 | 2d | 6.2.2 | ScratchBird SQL reference |
+
+**Implementation**: `src/ui/help_browser.h/cpp` - wxHtmlWindow with topic tree and search
 
 **Specification**: `docs/specifications/CONTEXT_SENSITIVE_HELP.md` (exists)
 
@@ -513,26 +517,30 @@ src/diagram/
 
 | Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
 |---------|------|--------|----------|-------------|--------------|---------------------|
-| 6.3.1 | Write session state spec | 🔴 | P1 | 0.5d | - | Define what persists |
-| 6.3.2 | Implement window state save | 🔴 | P1 | 1d | 6.3.1 | Positions, sizes |
-| 6.3.3 | Implement window state restore | 🔴 | P1 | 1d | 6.3.2 | Restore on launch |
-| 6.3.4 | Implement editor content save | 🔴 | P1 | 1d | 6.3.1 | Unsaved SQL buffers |
-| 6.3.5 | Implement editor content restore | 🔴 | P1 | 1d | 6.3.4 | Restore SQL on launch |
-| 6.3.6 | Implement connection restore | 🔴 | P2 | 1d | 6.3.1 | Reconnect to last connections |
-| 6.3.7 | Add crash recovery | 🔴 | P2 | 1d | 6.3.4 | Detect crash, offer recovery |
+| 6.3.1 | Write session state spec | ✅ | P1 | 0.5d | - | Define what persists |
+| 6.3.2 | Implement window state save | ✅ | P1 | 1d | 6.3.1 | Positions, sizes |
+| 6.3.3 | Implement window state restore | ✅ | P1 | 1d | 6.3.2 | Restore on launch |
+| 6.3.4 | Implement editor content save | ✅ | P1 | 1d | 6.3.1 | Unsaved SQL buffers |
+| 6.3.5 | Implement editor content restore | ✅ | P1 | 1d | 6.3.4 | Restore SQL on launch |
+| 6.3.6 | Implement connection restore | ✅ | P2 | 1d | 6.3.1 | Reconnect to last connections |
+| 6.3.7 | Add crash recovery | ✅ | P2 | 1d | 6.3.4 | Detect crash, offer recovery |
+
+**Implementation**: `src/core/session_state.h/cpp` - TOML-based session persistence
 
 ### 6.4 Keyboard Shortcuts
 
 | Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
 |---------|------|--------|----------|-------------|--------------|---------------------|
-| 6.4.1 | Write keyboard shortcuts spec | 🔴 | P1 | 0.5d | - | Complete shortcut list |
-| 6.4.2 | Implement global shortcuts | 🔴 | P1 | 1d | 6.4.1 | New editor, close window, etc. |
-| 6.4.3 | Implement SQL Editor shortcuts | 🟡 | P1 | 0.5d | 6.4.1 | Execute, cancel, format |
-| 6.4.4 | Implement catalog tree shortcuts | 🔴 | P1 | 0.5d | 6.4.1 | Navigate, open, copy |
-| 6.4.5 | Implement diagram shortcuts | 🔴 | P1 | 0.5d | 6.4.1 | Delete, align, zoom |
-| 6.4.6 | Implement results grid shortcuts | 🔴 | P1 | 0.5d | 6.4.1 | Copy, find |
-| 6.4.7 | Add shortcut customization | 🔴 | P2 | 2d | 6.4.1 | User-defined shortcuts |
-| 6.4.8 | Create shortcuts cheat sheet | 🔴 | P2 | 0.5d | 6.4.1 | Printable reference |
+| 6.4.1 | Write keyboard shortcuts spec | ✅ | P1 | 0.5d | - | Complete shortcut list |
+| 6.4.2 | Implement global shortcuts | ✅ | P1 | 1d | 6.4.1 | New editor, close window, etc. |
+| 6.4.3 | Implement SQL Editor shortcuts | ✅ | P1 | 0.5d | 6.4.1 | Execute, cancel, format |
+| 6.4.4 | Implement catalog tree shortcuts | ✅ | P1 | 0.5d | 6.4.1 | Navigate, open, copy |
+| 6.4.5 | Implement diagram shortcuts | ✅ | P1 | 0.5d | 6.4.1 | Delete, align, zoom |
+| 6.4.6 | Implement results grid shortcuts | ✅ | P1 | 0.5d | 6.4.1 | Copy, find |
+| 6.4.7 | Add shortcut customization | ✅ | P2 | 2d | 6.4.1 | User-defined shortcuts |
+| 6.4.8 | Create shortcuts cheat sheet | ✅ | P2 | 0.5d | 6.4.1 | Printable reference |
+
+**Implementation**: `src/ui/shortcuts_dialog.h/cpp`, `src/ui/shortcuts_cheat_sheet.h/cpp`
 
 ---
 
@@ -695,7 +703,7 @@ src/diagram/
 | Phase 3 | 52 | 52 | 0 | 100% ✅ |
 | Phase 4 | 43 | 43 | 0 | 100% ✅ |
 | Phase 5 | 34 | 34 | 0 | 100% ✅ |
-| Phase 6 | 18 | 2 | 0 | 11% 🟡 |
+| Phase 6 | 31 | 31 | 0 | 100% ✅ |
 | Phase 7 | 12 | 0 | 0 | 0% 🔴 |
 | Phase 8 | - | Ongoing | - | 🟡 |
 
@@ -708,7 +716,7 @@ src/diagram/
 | Phase 3 | 6-8 weeks | 52 | ERD System | ✅ 100% Complete |
 | Phase 4 | 3-4 weeks | 43 | Additional Managers | ✅ 100% Complete |
 | Phase 5 | 3-4 weeks | 34 | Admin Tools | ✅ 100% Complete |
-| Phase 6 | 2-3 weeks | 18 | Infrastructure | 🟡 Partial |
+| Phase 6 | 2-3 weeks | 31 | Infrastructure | ✅ 100% Complete |
 | Phase 7 | 1 week | 12 | Beta Placeholders | 🔴 Not Started |
 | Phase 8 | Ongoing | - | Quality Assurance | 🟡 Ongoing |
 

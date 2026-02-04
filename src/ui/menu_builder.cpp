@@ -100,6 +100,8 @@ wxMenu* BuildEditMenu() {
     menu->Append(wxID_PASTE, "Paste");
     menu->AppendSeparator();
     menu->Append(wxID_SELECTALL, "Select All");
+    menu->AppendSeparator();
+    menu->Append(ID_MENU_PREFERENCES, "Preferences...");
     return menu;
 }
 

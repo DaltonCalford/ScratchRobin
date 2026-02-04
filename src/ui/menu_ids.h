@@ -34,9 +34,12 @@ constexpr int ID_MENU_BACKUP = wxID_HIGHEST + 516;
 constexpr int ID_MENU_RESTORE = wxID_HIGHEST + 517;
 constexpr int ID_MENU_BACKUP_HISTORY = wxID_HIGHEST + 518;
 constexpr int ID_MENU_BACKUP_SCHEDULE = wxID_HIGHEST + 519;
-constexpr int ID_MENU_HELP_WINDOW = wxID_HIGHEST + 520;
-constexpr int ID_MENU_HELP_COMMAND = wxID_HIGHEST + 510;
-constexpr int ID_MENU_HELP_LANGUAGE = wxID_HIGHEST + 511;
+constexpr int ID_MENU_PREFERENCES = wxID_HIGHEST + 520;
+constexpr int ID_MENU_SHORTCUTS = wxID_HIGHEST + 521;
+constexpr int ID_MENU_CHEAT_SHEET = wxID_HIGHEST + 522;
+constexpr int ID_MENU_HELP_WINDOW = wxID_HIGHEST + 530;
+constexpr int ID_MENU_HELP_COMMAND = wxID_HIGHEST + 531;
+constexpr int ID_MENU_HELP_LANGUAGE = wxID_HIGHEST + 532;
 
 constexpr int ID_SQL_RUN = wxID_HIGHEST + 520;
 constexpr int ID_SQL_CANCEL = wxID_HIGHEST + 521;

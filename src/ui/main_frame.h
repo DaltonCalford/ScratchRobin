@@ -17,6 +17,7 @@
 #include "connection_editor_dialog.h"
 #include "core/config.h"
 #include "core/metadata_model.h"
+#include "preferences_dialog.h"
 
 class wxTextCtrl;
 class wxButton;
@@ -66,6 +67,11 @@ private:
     void OnRestore(wxCommandEvent& event);
     void OnBackupHistory(wxCommandEvent& event);
     void OnBackupSchedule(wxCommandEvent& event);
+    void OnPreferences(wxCommandEvent& event);
+    void OnShortcuts(wxCommandEvent& event);
+    void OnShortcutsCheatSheet(wxCommandEvent& event);
+    void OnHelp(wxCommandEvent& event);
+    void OnHelpLanguage(wxCommandEvent& event);
     void OnTreeCopyName(wxCommandEvent& event);
     void OnTreeCopyDdl(wxCommandEvent& event);
     void OnTreeShowDependencies(wxCommandEvent& event);
@@ -83,6 +89,7 @@ private:
     ConnectionManager* connection_manager_ = nullptr;
     std::vector<ConnectionProfile>* connections_ = nullptr;
     const AppConfig* app_config_ = nullptr;
+    ApplicationPreferences preferences_;
     wxTreeCtrl* tree_ = nullptr;
     wxTextCtrl* filter_ctrl_ = nullptr;
     wxButton* filter_clear_button_ = nullptr;

@@ -13,7 +13,7 @@ option(SCRATCHROBIN_USE_MYSQL "Enable MySQL/MariaDB backend support" ON)
 option(SCRATCHROBIN_USE_FIREBIRD "Enable Firebird backend support" ON)
 
 if(SCRATCHROBIN_BUILD_UI)
-    set(SCRATCHROBIN_WX_COMPONENTS core base
+    set(SCRATCHROBIN_WX_COMPONENTS core base html
         CACHE STRING "wxWidgets components to use")
     set(SCRATCHROBIN_WX_LIBRARIES "")
 
@@ -81,6 +81,7 @@ set(SCRATCHROBIN_CORE_SOURCES
     src/core/postgres_backend.cpp
     src/core/mysql_backend.cpp
     src/core/firebird_backend.cpp
+    src/core/session_state.cpp
 )
 
 add_library(scratchrobin_core ${SCRATCHROBIN_CORE_SOURCES})
@@ -117,6 +118,10 @@ if(SCRATCHROBIN_BUILD_UI)
         src/ui/routine_editor_dialog.cpp
         src/ui/package_manager_frame.cpp
         src/ui/package_editor_dialog.cpp
+        src/ui/preferences_dialog.cpp
+        src/ui/help_browser.cpp
+        src/ui/shortcuts_dialog.cpp
+        src/ui/shortcuts_cheat_sheet.cpp
         src/ui/backup_dialog.cpp
         src/ui/restore_dialog.cpp
         src/ui/backup_history_dialog.cpp

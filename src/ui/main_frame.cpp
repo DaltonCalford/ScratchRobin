@@ -15,6 +15,7 @@
 #include "database_manager_frame.h"
 #include "diagram_frame.h"
 #include "domain_manager_frame.h"
+#include "help_browser.h"
 #include "icon_bar.h"
 #include "index_designer_frame.h"
 #include "job_scheduler_frame.h"
@@ -22,10 +23,13 @@
 #include "menu_ids.h"
 #include "monitoring_frame.h"
 #include "package_manager_frame.h"
+#include "preferences_dialog.h"
 #include "procedure_manager_frame.h"
 #include "restore_dialog.h"
 #include "schema_manager_frame.h"
 #include "sequence_manager_frame.h"
+#include "shortcuts_cheat_sheet.h"
+#include "shortcuts_dialog.h"
 #include "sql_editor_frame.h"
 #include "storage_manager_frame.h"
 #include "table_designer_frame.h"
@@ -33,6 +37,8 @@
 #include "users_roles_frame.h"
 #include "view_manager_frame.h"
 #include "window_manager.h"
+
+#include "core/session_state.h"
 
 #include <algorithm>
 #include <cctype>
@@ -104,6 +110,12 @@ wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
     EVT_MENU(ID_MENU_RESTORE, MainFrame::OnRestore)
     EVT_MENU(ID_MENU_BACKUP_HISTORY, MainFrame::OnBackupHistory)
     EVT_MENU(ID_MENU_BACKUP_SCHEDULE, MainFrame::OnBackupSchedule)
+    EVT_MENU(ID_MENU_PREFERENCES, MainFrame::OnPreferences)
+    EVT_MENU(ID_MENU_SHORTCUTS, MainFrame::OnShortcuts)
+    EVT_MENU(ID_MENU_CHEAT_SHEET, MainFrame::OnShortcutsCheatSheet)
+    EVT_MENU(ID_MENU_HELP_WINDOW, MainFrame::OnHelp)
+    EVT_MENU(ID_MENU_HELP_COMMAND, MainFrame::OnHelp)
+    EVT_MENU(ID_MENU_HELP_LANGUAGE, MainFrame::OnHelpLanguage)
     EVT_MENU(ID_CONN_MANAGE, MainFrame::OnManageConnections)
     EVT_MENU(wxID_EXIT, MainFrame::OnQuit)
     EVT_CLOSE(MainFrame::OnClose)
@@ -599,6 +611,29 @@ void MainFrame::OnBackupHistory(wxCommandEvent&) {
 void MainFrame::OnBackupSchedule(wxCommandEvent&) {
     BackupScheduleDialog dialog(this, connections_);
     dialog.ShowModal();
+}
+
+void MainFrame::OnPreferences(wxCommandEvent&) {
+    PreferencesDialog dialog(this, preferences_);
+    if (dialog.ShowModal() == wxID_OK) {
+        PreferencesDialog::SavePreferences(preferences_);
+    }
+}
+
+void MainFrame::OnShortcuts(wxCommandEvent&) {
+    ShowShortcutsDialog(this);
+}
+
+void MainFrame::OnShortcutsCheatSheet(wxCommandEvent&) {
+    ShowShortcutsCheatSheet(this);
+}
+
+void MainFrame::OnHelp(wxCommandEvent&) {
+    HelpBrowser::ShowHelp(HelpTopicId::GettingStarted);
+}
+
+void MainFrame::OnHelpLanguage(wxCommandEvent&) {
+    HelpBrowser::ShowHelp(HelpTopicId::Functions);
 }
 
 void MainFrame::OnTreeCopyName(wxCommandEvent&) {
