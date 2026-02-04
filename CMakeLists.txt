@@ -117,6 +117,19 @@ if(SCRATCHROBIN_BUILD_UI)
         src/ui/routine_editor_dialog.cpp
         src/ui/package_manager_frame.cpp
         src/ui/package_editor_dialog.cpp
+        src/ui/backup_dialog.cpp
+        src/ui/restore_dialog.cpp
+        src/ui/backup_history_dialog.cpp
+        src/ui/backup_schedule_dialog.cpp
+        src/ui/storage_manager_frame.cpp
+        src/ui/tablespace_editor_dialog.cpp
+        src/ui/sessions_panel.cpp
+        src/ui/locks_panel.cpp
+        src/ui/statements_panel.cpp
+        src/ui/table_statistics_panel.cpp
+        src/ui/io_statistics_panel.cpp
+        src/ui/database_manager_frame.cpp
+        src/ui/database_editor_dialog.cpp
         src/ui/index_designer_frame.cpp
         src/ui/index_editor_dialog.cpp
         src/ui/job_editor_dialog.cpp

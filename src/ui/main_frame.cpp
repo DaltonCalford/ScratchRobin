@@ -8,7 +8,11 @@
  * https://www.firebirdsql.org/en/initial-developer-s-public-license-version-1-0/
  */
 #include "main_frame.h"
+#include "backup_dialog.h"
+#include "backup_history_dialog.h"
+#include "backup_schedule_dialog.h"
 #include "connection_editor_dialog.h"
+#include "database_manager_frame.h"
 #include "diagram_frame.h"
 #include "domain_manager_frame.h"
 #include "icon_bar.h"
@@ -19,9 +23,11 @@
 #include "monitoring_frame.h"
 #include "package_manager_frame.h"
 #include "procedure_manager_frame.h"
+#include "restore_dialog.h"
 #include "schema_manager_frame.h"
 #include "sequence_manager_frame.h"
 #include "sql_editor_frame.h"
+#include "storage_manager_frame.h"
 #include "table_designer_frame.h"
 #include "trigger_manager_frame.h"
 #include "users_roles_frame.h"
@@ -92,6 +98,12 @@ wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
     EVT_MENU(ID_MENU_TRIGGER_MANAGER, MainFrame::OnOpenTriggerManager)
     EVT_MENU(ID_MENU_PROCEDURE_MANAGER, MainFrame::OnOpenProcedureManager)
     EVT_MENU(ID_MENU_PACKAGE_MANAGER, MainFrame::OnOpenPackageManager)
+    EVT_MENU(ID_MENU_STORAGE_MANAGER, MainFrame::OnOpenStorageManager)
+    EVT_MENU(ID_MENU_DATABASE_MANAGER, MainFrame::OnOpenDatabaseManager)
+    EVT_MENU(ID_MENU_BACKUP, MainFrame::OnBackup)
+    EVT_MENU(ID_MENU_RESTORE, MainFrame::OnRestore)
+    EVT_MENU(ID_MENU_BACKUP_HISTORY, MainFrame::OnBackupHistory)
+    EVT_MENU(ID_MENU_BACKUP_SCHEDULE, MainFrame::OnBackupSchedule)
     EVT_MENU(ID_CONN_MANAGE, MainFrame::OnManageConnections)
     EVT_MENU(wxID_EXIT, MainFrame::OnQuit)
     EVT_CLOSE(MainFrame::OnClose)
@@ -557,6 +569,36 @@ void MainFrame::OnOpenProcedureManager(wxCommandEvent&) {
 void MainFrame::OnOpenPackageManager(wxCommandEvent&) {
     auto* frame = new PackageManagerFrame(window_manager_, connection_manager_, connections_, app_config_);
     frame->Show(true);
+}
+
+void MainFrame::OnOpenStorageManager(wxCommandEvent&) {
+    auto* frame = new StorageManagerFrame(window_manager_, connection_manager_, connections_, app_config_);
+    frame->Show(true);
+}
+
+void MainFrame::OnOpenDatabaseManager(wxCommandEvent&) {
+    auto* frame = new DatabaseManagerFrame(window_manager_, connection_manager_, connections_, app_config_);
+    frame->Show(true);
+}
+
+void MainFrame::OnBackup(wxCommandEvent&) {
+    BackupDialog dialog(this, connections_, "");
+    dialog.ShowModal();
+}
+
+void MainFrame::OnRestore(wxCommandEvent&) {
+    RestoreDialog dialog(this, connections_);
+    dialog.ShowModal();
+}
+
+void MainFrame::OnBackupHistory(wxCommandEvent&) {
+    BackupHistoryDialog dialog(this, connection_manager_, connections_);
+    dialog.ShowModal();
+}
+
+void MainFrame::OnBackupSchedule(wxCommandEvent&) {
+    BackupScheduleDialog dialog(this, connections_);
+    dialog.ShowModal();
 }
 
 void MainFrame::OnTreeCopyName(wxCommandEvent&) {

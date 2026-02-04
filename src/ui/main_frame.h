@@ -60,6 +60,12 @@ private:
     void OnOpenTriggerManager(wxCommandEvent& event);
     void OnOpenProcedureManager(wxCommandEvent& event);
     void OnOpenPackageManager(wxCommandEvent& event);
+    void OnOpenStorageManager(wxCommandEvent& event);
+    void OnOpenDatabaseManager(wxCommandEvent& event);
+    void OnBackup(wxCommandEvent& event);
+    void OnRestore(wxCommandEvent& event);
+    void OnBackupHistory(wxCommandEvent& event);
+    void OnBackupSchedule(wxCommandEvent& event);
     void OnTreeCopyName(wxCommandEvent& event);
     void OnTreeCopyDdl(wxCommandEvent& event);
     void OnTreeShowDependencies(wxCommandEvent& event);

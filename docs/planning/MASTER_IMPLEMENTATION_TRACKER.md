@@ -415,55 +415,63 @@ src/diagram/
 
 | Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
 |---------|------|--------|----------|-------------|--------------|---------------------|
-| 5.1.1 | Write backup format specification | 🔴 | P1 | 1d | - | Document .sbbak format |
-| 5.1.2 | Create Backup dialog | 🔴 | P1 | 2d | 5.1.1 | Source, destination, options |
-| 5.1.3 | Integrate sb_backup CLI | 🔴 | P1 | 2d | 5.1.2 | Execute backup via subprocess |
-| 5.1.4 | Add backup progress display | 🔴 | P1 | 1d | 5.1.3 | Progress bar, cancel button |
-| 5.1.5 | Create Restore dialog | 🔴 | P1 | 2d | 5.1.1 | Backup file, target database, options |
-| 5.1.6 | Integrate sb_restore CLI | 🔴 | P1 | 2d | 5.1.5 | Execute restore via subprocess |
-| 5.1.7 | Add restore progress display | 🔴 | P1 | 1d | 5.1.6 | Progress bar with phase info |
-| 5.1.8 | Add backup scheduling UI | 🔴 | P2 | 2d | 5.1.2 | Schedule recurring backups |
-| 5.1.9 | Add backup history viewer | 🔴 | P2 | 1d | 5.1.3 | List of past backups |
+| 5.1.1 | Write backup format specification | ✅ | P1 | 1d | - | Document .sbbak format |
+| 5.1.2 | Create Backup dialog | ✅ | P1 | 2d | 5.1.1 | Source, destination, options |
+| 5.1.3 | Integrate sb_backup CLI | ✅ | P1 | 2d | 5.1.2 | Execute backup via subprocess |
+| 5.1.4 | Add backup progress display | ✅ | P1 | 1d | 5.1.3 | Progress bar, cancel button |
+| 5.1.5 | Create Restore dialog | ✅ | P1 | 2d | 5.1.1 | Backup file, target database, options |
+| 5.1.6 | Integrate sb_restore CLI | ✅ | P1 | 2d | 5.1.5 | Execute restore via subprocess |
+| 5.1.7 | Add restore progress display | ✅ | P1 | 1d | 5.1.6 | Progress bar with phase info |
+| 5.1.8 | Add backup scheduling UI | ✅ | P2 | 2d | 5.1.2 | Schedule recurring backups |
+| 5.1.9 | Add backup history viewer | ✅ | P2 | 1d | 5.1.3 | List of past backups |
+
+**Implementation**: `src/ui/backup_dialog.h/cpp`, `src/ui/restore_dialog.h/cpp`, `src/ui/backup_schedule_dialog.h/cpp`, `src/ui/backup_history_dialog.h/cpp`
 
 ### 5.2 Storage Management
 
 | Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
 |---------|------|--------|----------|-------------|--------------|---------------------|
-| 5.2.1 | Create Storage Manager spec | 🔴 | P2 | 0.5d | - | UI design document |
-| 5.2.2 | Implement tablespace list query | 🔴 | P2 | 0.5d | - | Query `sb_catalog.sb_tablespaces` |
-| 5.2.3 | Implement Storage Manager frame | 🔴 | P2 | 2d | 5.2.1-5.2.2 | Tablespace grid with usage stats |
-| 5.2.4 | Implement CREATE TABLESPACE dialog | 🔴 | P2 | 1d | 5.2.3 | Path, size options |
-| 5.2.5 | Implement ALTER TABLESPACE dialog | 🔴 | P2 | 1d | 5.2.3 | Resize, rename |
-| 5.2.6 | Implement DROP TABLESPACE | 🔴 | P2 | 0.5d | 5.2.3 | Confirmation with dependency check |
-| 5.2.7 | Add object relocation UI | 🔴 | P2 | 1d | 5.2.3 | Move tables/indexes between tablespaces |
-| 5.2.8 | Wire into menu system | 🔴 | P2 | 0.5d | 5.2.3 | Window -> Storage menu item |
+| 5.2.1 | Create Storage Manager spec | ✅ | P2 | 0.5d | - | UI design document |
+| 5.2.2 | Implement tablespace list query | ✅ | P2 | 0.5d | - | Query `sb_catalog.sb_tablespaces` |
+| 5.2.3 | Implement Storage Manager frame | ✅ | P2 | 2d | 5.2.1-5.2.2 | Tablespace grid with usage stats |
+| 5.2.4 | Implement CREATE TABLESPACE dialog | ✅ | P2 | 1d | 5.2.3 | Path, size options |
+| 5.2.5 | Implement ALTER TABLESPACE dialog | ✅ | P2 | 1d | 5.2.3 | Resize, rename |
+| 5.2.6 | Implement DROP TABLESPACE | ✅ | P2 | 0.5d | 5.2.3 | Confirmation with dependency check |
+| 5.2.7 | Add object relocation UI | ✅ | P2 | 1d | 5.2.3 | Move tables/indexes between tablespaces |
+| 5.2.8 | Wire into menu system | ✅ | P2 | 0.5d | 5.2.3 | Window -> Storage menu item |
+
+**Implementation**: `src/ui/storage_manager_frame.h/cpp`, `src/ui/tablespace_editor_dialog.h/cpp`
 
 ### 5.3 Monitoring Enhancement
 
 | Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
 |---------|------|--------|----------|-------------|--------------|---------------------|
-| 5.3.1 | Add ScratchBird native monitoring queries | 🔴 | P1 | 2d | - | Query `sys.sessions`, `sys.locks`, etc. |
-| 5.3.2 | Implement sessions panel | 🟡 | P1 | 1d | 5.3.1 | List active sessions |
-| 5.3.3 | Implement locks panel | 🟡 | P1 | 1d | 5.3.1 | Show current locks |
-| 5.3.4 | Implement transactions panel | 🟡 | P1 | 1d | 5.3.1 | Show active transactions |
-| 5.3.5 | Implement statements panel | 🔴 | P1 | 1d | 5.3.1 | Show running statements |
-| 5.3.6 | Implement table statistics panel | 🔴 | P1 | 1d | 5.3.1 | Row counts, sizes per table |
-| 5.3.7 | Implement I/O statistics panel | 🔴 | P2 | 1d | 5.3.1 | Read/write stats |
-| 5.3.8 | Add auto-refresh option | 🔴 | P2 | 0.5d | 5.3.2-5.3.7 | Configurable refresh interval |
-| 5.3.9 | Add kill session functionality | 🔴 | P2 | 0.5d | 5.3.2 | Terminate selected session |
+| 5.3.1 | Add ScratchBird native monitoring queries | ✅ | P1 | 2d | - | Query `sys.sessions`, `sys.locks`, etc. |
+| 5.3.2 | Implement sessions panel | ✅ | P1 | 1d | 5.3.1 | List active sessions |
+| 5.3.3 | Implement locks panel | ✅ | P1 | 1d | 5.3.1 | Show current locks |
+| 5.3.4 | Implement transactions panel | ✅ | P1 | 1d | 5.3.1 | Show active transactions |
+| 5.3.5 | Implement statements panel | ✅ | P1 | 1d | 5.3.1 | Show running statements |
+| 5.3.6 | Implement table statistics panel | ✅ | P1 | 1d | 5.3.1 | Row counts, sizes per table |
+| 5.3.7 | Implement I/O statistics panel | ✅ | P2 | 1d | 5.3.1 | Read/write stats |
+| 5.3.8 | Add auto-refresh option | ✅ | P2 | 0.5d | 5.3.2-5.3.7 | Configurable refresh interval |
+| 5.3.9 | Add kill session functionality | ✅ | P2 | 0.5d | 5.3.2 | Terminate selected session |
+
+**Implementation**: `src/ui/sessions_panel.h/cpp`, `src/ui/locks_panel.h/cpp`, `src/ui/statements_panel.h/cpp`, `src/ui/table_statistics_panel.h/cpp`, `src/ui/io_statistics_panel.h/cpp`
 
 ### 5.4 Database Manager
 
 | Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
 |---------|------|--------|----------|-------------|--------------|---------------------|
-| 5.4.1 | Create Database Manager spec | 🔴 | P1 | 0.5d | - | UI design document |
-| 5.4.2 | Implement database list query | 🔴 | P1 | 0.5d | - | List attached databases |
-| 5.4.3 | Implement Database Manager frame | 🔴 | P1 | 2d | 5.4.1-5.4.2 | Database grid with status |
-| 5.4.4 | Implement CREATE DATABASE dialog | 🔴 | P1 | 2d | 5.4.3 | Name, owner, encoding options |
-| 5.4.5 | Implement DROP DATABASE | 🔴 | P1 | 0.5d | 5.4.3 | Strong confirmation required |
-| 5.4.6 | Add database properties display | 🔴 | P2 | 1d | 5.4.3 | Size, encoding, owner |
-| 5.4.7 | Add database clone functionality | 🔴 | P2 | 1d | 5.4.3 | Create copy of database |
-| 5.4.8 | Wire into menu system | 🔴 | P1 | 0.5d | 5.4.3 | Window -> Databases menu item |
+| 5.4.1 | Create Database Manager spec | ✅ | P1 | 0.5d | - | UI design document |
+| 5.4.2 | Implement database list query | ✅ | P1 | 0.5d | - | List attached databases |
+| 5.4.3 | Implement Database Manager frame | ✅ | P1 | 2d | 5.4.1-5.4.2 | Database grid with status |
+| 5.4.4 | Implement CREATE DATABASE dialog | ✅ | P1 | 2d | 5.4.3 | Name, owner, encoding options |
+| 5.4.5 | Implement DROP DATABASE | ✅ | P1 | 0.5d | 5.4.3 | Strong confirmation required |
+| 5.4.6 | Add database properties display | ✅ | P2 | 1d | 5.4.3 | Size, encoding, owner |
+| 5.4.7 | Add database clone functionality | ✅ | P2 | 1d | 5.4.3 | Create copy of database |
+| 5.4.8 | Wire into menu system | ✅ | P1 | 0.5d | 5.4.3 | Window -> Databases menu item |
+
+**Implementation**: `src/ui/database_manager_frame.h/cpp`, `src/ui/database_editor_dialog.h/cpp`
 
 ---
 
@@ -686,7 +694,7 @@ src/diagram/
 | Phase 2 | 46 | 46 | 0 | 100% ✅ |
 | Phase 3 | 52 | 52 | 0 | 100% ✅ |
 | Phase 4 | 43 | 43 | 0 | 100% ✅ |
-| Phase 5 | 26 | 0 | 0 | 0% 🔴 |
+| Phase 5 | 34 | 34 | 0 | 100% ✅ |
 | Phase 6 | 18 | 2 | 0 | 11% 🟡 |
 | Phase 7 | 12 | 0 | 0 | 0% 🔴 |
 | Phase 8 | - | Ongoing | - | 🟡 |
@@ -699,7 +707,7 @@ src/diagram/
 | Phase 2 | 3-4 weeks | 46 | Object Managers | ✅ 100% Complete |
 | Phase 3 | 6-8 weeks | 52 | ERD System | ✅ 100% Complete |
 | Phase 4 | 3-4 weeks | 43 | Additional Managers | ✅ 100% Complete |
-| Phase 5 | 3-4 weeks | 26 | Admin Tools | 🔴 Not Started |
+| Phase 5 | 3-4 weeks | 34 | Admin Tools | ✅ 100% Complete |
 | Phase 6 | 2-3 weeks | 18 | Infrastructure | 🟡 Partial |
 | Phase 7 | 1 week | 12 | Beta Placeholders | 🔴 Not Started |
 | Phase 8 | Ongoing | - | Quality Assurance | 🟡 Ongoing |

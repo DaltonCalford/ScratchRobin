@@ -120,6 +120,24 @@ wxMenu* BuildObjectsMenu() {
     return menu;
 }
 
+wxMenu* BuildAdminMenu() {
+    auto* menu = new wxMenu();
+    
+    // Backup & Restore submenu
+    auto* backup_menu = new wxMenu();
+    backup_menu->Append(ID_MENU_BACKUP, "Backup Database...");
+    backup_menu->Append(ID_MENU_RESTORE, "Restore Database...");
+    backup_menu->AppendSeparator();
+    backup_menu->Append(ID_MENU_BACKUP_HISTORY, "Backup History...");
+    backup_menu->Append(ID_MENU_BACKUP_SCHEDULE, "Backup Schedule...");
+    menu->AppendSubMenu(backup_menu, "Backup & Restore");
+    
+    menu->AppendSeparator();
+    menu->Append(ID_MENU_STORAGE_MANAGER, "Storage Management...");
+    menu->Append(ID_MENU_DATABASE_MANAGER, "Database Management...");
+    return menu;
+}
+
 wxMenu* BuildViewMenu() {
     auto* menu = new wxMenu();
     AppendItem(menu, wxID_ANY, "Toggle Panels", false);
@@ -215,6 +233,9 @@ wxMenuBar* BuildMenuBar(const MenuBuildOptions& options,
     }
     if (options.includeView) {
         menu_bar->Append(BuildViewMenu(), "View");
+    }
+    if (options.includeAdmin) {
+        menu_bar->Append(BuildAdminMenu(), "Admin");
     }
     if (options.includeWindow) {
         auto* window_menu = BuildWindowMenu(window_manager, current_frame);

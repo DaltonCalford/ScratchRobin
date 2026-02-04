@@ -21,6 +21,7 @@ struct MenuBuildOptions {
     bool includeObjects = true;
     bool includeEdit = true;
     bool includeView = true;
+    bool includeAdmin = true;
     bool includeWindow = true;
     bool includeHelp = true;
 };
