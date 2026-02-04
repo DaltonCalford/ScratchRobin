@@ -64,6 +64,15 @@ ScratchRobin is a comprehensive database design, modeling, and deployment tool t
 - **[DATABASE_GIT_PROTOCOL.md](DATABASE_GIT_PROTOCOL.md)** - ScratchBird Git protocol details
 - **[GIT_WORKFLOW_EXAMPLES.md](GIT_WORKFLOW_EXAMPLES.md)** - Practical Git workflow examples
 
+### Additional Features
+- **[ADDITIONAL_FEATURES.md](ADDITIONAL_FEATURES.md)** - Extended features including:
+  - OLAP Cube Design for data warehousing
+  - Comprehensive Testing Framework
+  - Data Lineage Tracking
+  - Data Masking & Anonymization
+  - API Generation from database
+  - Event Streaming / CDC
+
 **Dual-Repo Model:**
 ```
 Project Repo (Git)          Database Repo (ScratchBird Git)

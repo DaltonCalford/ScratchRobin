@@ -107,6 +107,13 @@ ICONS=(
     "audit"
     "tag"
     "bookmark"
+    # Additional Features (125-130)
+    "cube"
+    "test"
+    "lineage"
+    "mask"
+    "api"
+    "stream"
 )
 
 echo "Generating PNG icons from SVG sources..."
