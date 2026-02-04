@@ -302,13 +302,94 @@ IssueReference IssueLinkManager::AutoCreateIssue(const AutoIssueContext& context
 }
 
 void IssueLinkManager::SaveLinks(const std::string& file_path) {
-    // TODO: Serialize links to JSON
-    (void)file_path;
+    std::ofstream file(file_path);
+    if (!file.is_open()) {
+        return;
+    }
+    
+    file << "{\n";
+    file << "  \"version\": 1,\n";
+    file << "  \"links\": [\n";
+    
+    bool first = true;
+    for (const auto& [link_id, link] : links_) {
+        if (!first) file << ",\n";
+        first = false;
+        
+        file << "    {\n";
+        file << "      \"link_id\": \"" << link.link_id << "\",\n";
+        file << "      \"created_at\": " << link.created_at << ",\n";
+        file << "      \"provider\": \"" << link.issue.provider << "\",\n";
+        file << "      \"issue_id\": \"" << link.issue.issue_id << "\",\n";
+        file << "      \"issue_key\": \"" << link.issue.display_key << "\",\n";
+        file << "      \"issue_title\": \"" << link.issue.title << "\",\n";
+        file << "      \"object_type\": " << static_cast<int>(link.object.type) << ",\n";
+        file << "      \"object_schema\": \"" << link.object.schema << "\",\n";
+        file << "      \"object_name\": \"" << link.object.name << "\",\n";
+        file << "      \"object_database\": \"" << link.object.database << "\"\n";
+        file << "    }";
+    }
+    
+    file << "\n  ]\n";
+    file << "}\n";
 }
 
 void IssueLinkManager::LoadLinks(const std::string& file_path) {
-    // TODO: Deserialize links from JSON
-    (void)file_path;
+    std::ifstream file(file_path);
+    if (!file.is_open()) {
+        return;
+    }
+    
+    // Clear existing links
+    links_.clear();
+    
+    // Simple JSON parsing - in production would use proper JSON parser
+    std::string content((std::istreambuf_iterator<char>(file)),
+                         std::istreambuf_iterator<char>());
+    
+    // Find links array
+    size_t links_start = content.find("\"links\":");
+    if (links_start == std::string::npos) return;
+    
+    size_t arr_start = content.find("[", links_start);
+    if (arr_start == std::string::npos) return;
+    
+    // Parse each link object (simplified)
+    size_t pos = arr_start + 1;
+    while ((pos = content.find("{", pos)) != std::string::npos) {
+        size_t obj_end = content.find("}", pos);
+        if (obj_end == std::string::npos) break;
+        
+        std::string obj_str = content.substr(pos, obj_end - pos + 1);
+        
+        IssueLink link;
+        
+        // Extract fields
+        auto extract_string = [&obj_str](const std::string& key) -> std::string {
+            std::string search = "\"" + key + "\": \"";
+            size_t start = obj_str.find(search);
+            if (start == std::string::npos) return "";
+            start += search.length();
+            size_t end = obj_str.find("\"", start);
+            if (end == std::string::npos) return "";
+            return obj_str.substr(start, end - start);
+        };
+        
+        link.link_id = extract_string("link_id");
+        link.issue.provider = extract_string("provider");
+        link.issue.issue_id = extract_string("issue_id");
+        link.issue.display_key = extract_string("issue_key");
+        link.issue.title = extract_string("issue_title");
+        link.object.schema = extract_string("object_schema");
+        link.object.name = extract_string("object_name");
+        link.object.database = extract_string("object_database");
+        
+        if (!link.link_id.empty()) {
+            links_[link.link_id] = link;
+        }
+        
+        pos = obj_end + 1;
+    }
 }
 
 std::string IssueLinkManager::GenerateLinkId() {

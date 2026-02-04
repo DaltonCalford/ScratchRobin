@@ -27,6 +27,12 @@ public:
     virtual bool DeletePassword(const std::string& credentialId,
                                 std::string* outError) = 0;
     virtual bool HasPassword(const std::string& credentialId) = 0;
+    
+    // API Key storage for AI providers
+    virtual bool StoreApiKey(const std::string& provider,
+                             const std::string& api_key) = 0;
+    virtual std::string GetApiKey(const std::string& provider) = 0;
+    virtual bool DeleteApiKey(const std::string& provider) = 0;
 };
 
 std::unique_ptr<CredentialStore> CreateDefaultCredentialStore();

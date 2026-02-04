@@ -37,6 +37,21 @@ struct StartupConfig {
     bool showProgress = true;
 };
 
+// AI Provider Configuration
+struct AiConfig {
+    std::string provider = "openai";  // openai, anthropic, ollama, gemini
+    std::string api_key;
+    std::string api_endpoint;
+    std::string model_name;
+    float temperature = 0.3f;
+    int max_tokens = 4096;
+    int timeout_seconds = 60;
+    bool enable_schema_design = true;
+    bool enable_query_optimization = true;
+    bool enable_code_generation = true;
+    bool enable_documentation = true;
+};
+
 struct AppConfig {
     std::string theme = "system";
     std::string fontFamily = "default";
@@ -47,12 +62,18 @@ struct AppConfig {
     UiChromeConfig chrome;
     StartupConfig startup;
     NetworkOptions network;
+    AiConfig ai;
 };
 
 class ConfigStore {
 public:
     bool LoadAppConfig(const std::string& path, AppConfig* outConfig);
+    bool SaveAppConfig(const std::string& path, const AppConfig& config);
     bool LoadConnections(const std::string& path, std::vector<ConnectionProfile>* outConnections);
+    
+    // AI Configuration helpers
+    bool LoadAiConfig(const std::string& path, AiConfig* outConfig);
+    bool SaveAiConfig(const std::string& path, const AiConfig& config);
 };
 
 } // namespace scratchrobin

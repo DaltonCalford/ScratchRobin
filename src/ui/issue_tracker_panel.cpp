@@ -333,8 +333,83 @@ void CreateIssueDialog::CreateControls() {
 }
 
 void CreateIssueDialog::OnCreate(wxCommandEvent& /*event*/) {
-    // TODO: Actually create the issue via the appropriate adapter
-    // For now, just close the dialog
+    // Get the issue tracker manager
+    auto& manager = IssueLinkManager::Instance();
+    
+    // Get selected provider
+    int provider_idx = provider_choice_->GetSelection();
+    std::string provider;
+    switch (provider_idx) {
+        case 0: provider = JiraAdapter::PROVIDER_NAME; break;
+        case 1: provider = GitHubAdapter::PROVIDER_NAME; break;
+        case 2: provider = GitLabAdapter::PROVIDER_NAME; break;
+        default: provider = JiraAdapter::PROVIDER_NAME;
+    }
+    
+    // Find the adapter
+    auto* adapter = manager.GetAdapter(provider);
+    if (!adapter) {
+        wxMessageBox("Provider not configured", "Error", wxOK | wxICON_ERROR, this);
+        return;
+    }
+    
+    // Build the create request
+    IssueCreateRequest request;
+    request.title = title_ctrl_->GetValue().ToStdString();
+    request.description = description_ctrl_->GetValue().ToStdString();
+    
+    // Add object context if available
+    if (!object_.database.empty()) {
+        request.description += "\n\n---\n**Object Context:**\n";
+        request.description += "- Database: " + object_.database + "\n";
+        request.description += "- Schema: " + object_.schema + "\n";
+        request.description += "- Object: " + object_.name + "\n";
+        request.description += "- Type: " + std::to_string(static_cast<int>(object_.type)) + "\n";
+    }
+    
+    // Get issue type
+    wxString type_str = type_choice_->GetStringSelection();
+    if (type_str == "Bug") {
+        request.issue_type = IssueType::BUG;
+    } else if (type_str == "Enhancement") {
+        request.issue_type = IssueType::ENHANCEMENT;
+    } else if (type_str == "Task") {
+        request.issue_type = IssueType::TASK;
+    } else {
+        request.issue_type = IssueType::OTHER;
+    }
+    
+    // Set priority
+    int priority_idx = priority_choice_->GetSelection();
+    switch (priority_idx) {
+        case 0: request.priority = IssuePriority::HIGHEST; break;
+        case 1: request.priority = IssuePriority::HIGH; break;
+        case 2: request.priority = IssuePriority::MEDIUM; break;
+        case 3: request.priority = IssuePriority::LOW; break;
+        case 4: request.priority = IssuePriority::LOWEST; break;
+        default: request.priority = IssuePriority::MEDIUM;
+    }
+    
+    // Create the issue
+    IssueReference issue = adapter->CreateIssue(request);
+    
+    if (issue.issue_id.empty()) {
+        wxMessageBox("Failed to create issue. Check your connection and settings.", 
+                     "Error", wxOK | wxICON_ERROR, this);
+        return;
+    }
+    
+    // Create link to the object
+    if (!object_.name.empty()) {
+        manager.CreateLink(object_, issue);
+    }
+    
+    // Store the created issue
+    created_issue_ = issue;
+    
+    wxMessageBox("Issue created successfully: " + issue.display_key, 
+                 "Success", wxOK | wxICON_INFORMATION, this);
+    
     EndModal(wxID_OK);
 }
 
@@ -402,18 +477,101 @@ void LinkIssueDialog::CreateControls() {
 }
 
 void LinkIssueDialog::OnSearch(wxCommandEvent& /*event*/) {
-    // TODO: Search for issues
+    auto& manager = IssueLinkManager::Instance();
+    
+    // Get selected provider
+    int provider_idx = provider_choice_->GetSelection();
+    std::string provider;
+    switch (provider_idx) {
+        case 0: provider = JiraAdapter::PROVIDER_NAME; break;
+        case 1: provider = GitHubAdapter::PROVIDER_NAME; break;
+        case 2: provider = GitLabAdapter::PROVIDER_NAME; break;
+        default: provider = JiraAdapter::PROVIDER_NAME;
+    }
+    
+    auto* adapter = manager.GetAdapter(provider);
+    if (!adapter) {
+        wxMessageBox("Provider not configured", "Error", wxOK | wxICON_ERROR, this);
+        return;
+    }
+    
+    // Clear existing results
     results_list_->DeleteAllItems();
+    search_results_.clear();
+    
+    // Build search query
+    SearchQuery query;
+    query.text = search_ctrl_->GetValue().ToStdString();
+    query.limit = 20;
+    
+    // Execute search
+    auto results = adapter->SearchIssues(query);
+    
+    // Populate list
+    for (size_t i = 0; i < results.size(); ++i) {
+        const auto& issue = results[i];
+        long idx = results_list_->InsertItem(i, issue.display_key);
+        results_list_->SetItem(idx, 1, issue.title);
+        results_list_->SetItem(idx, 2, IssueStatusToString(issue.status));
+        search_results_.push_back(issue);
+    }
 }
 
 void LinkIssueDialog::OnLink(wxCommandEvent& /*event*/) {
-    // TODO: Create the link
+    long idx = results_list_->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+    if (idx < 0 || static_cast<size_t>(idx) >= search_results_.size()) {
+        wxMessageBox("Please select an issue to link", "Error", wxOK | wxICON_ERROR, this);
+        return;
+    }
+    
+    auto& manager = IssueLinkManager::Instance();
+    
+    // Create the link
+    bool success = manager.CreateLink(object_, search_results_[idx]);
+    
+    if (!success) {
+        wxMessageBox("Failed to create link", "Error", wxOK | wxICON_ERROR, this);
+        return;
+    }
+    
+    wxMessageBox("Issue linked successfully", "Success", wxOK | wxICON_INFORMATION, this);
     EndModal(wxID_OK);
 }
 
 void LinkIssueDialog::LoadRecentIssues(wxCommandEvent& /*event*/) {
-    // TODO: Load recent issues from the selected provider
+    auto& manager = IssueLinkManager::Instance();
+    
+    // Get selected provider
+    int provider_idx = provider_choice_->GetSelection();
+    std::string provider;
+    switch (provider_idx) {
+        case 0: provider = JiraAdapter::PROVIDER_NAME; break;
+        case 1: provider = GitHubAdapter::PROVIDER_NAME; break;
+        case 2: provider = GitLabAdapter::PROVIDER_NAME; break;
+        default: provider = JiraAdapter::PROVIDER_NAME;
+    }
+    
+    auto* adapter = manager.GetAdapter(provider);
+    if (!adapter) {
+        wxMessageBox("Provider not configured", "Error", wxOK | wxICON_ERROR, this);
+        return;
+    }
+    
+    // Clear existing results
     results_list_->DeleteAllItems();
+    search_results_.clear();
+    
+    // Get recent issues
+    auto results = adapter->GetRecentIssues(20);
+    
+    // Populate list
+    for (size_t i = 0; i < results.size(); ++i) {
+        const auto& issue = results[i];
+        long idx = results_list_->InsertItem(i, issue.display_key);
+        results_list_->SetItem(idx, 1, issue.title);
+        results_list_->SetItem(idx, 2, IssueStatusToString(issue.status));
+        search_results_.push_back(issue);
+    }
 }
 
 std::string LinkIssueDialog::GetSelectedIssueId() {

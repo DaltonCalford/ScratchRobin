@@ -254,6 +254,43 @@ public:
         return false;
 #endif
     }
+    
+    // API Key storage using a separate schema attribute
+    bool StoreApiKey(const std::string& provider,
+                     const std::string& api_key) override {
+        if (provider.empty() || api_key.empty()) {
+            return false;
+        }
+        
+        std::string credentialId = "ai_api_key_" + provider;
+        std::string error;
+        return StorePassword(credentialId, api_key, &error);
+    }
+    
+    std::string GetApiKey(const std::string& provider) override {
+        if (provider.empty()) {
+            return "";
+        }
+        
+        std::string credentialId = "ai_api_key_" + provider;
+        std::string api_key;
+        std::string error;
+        
+        if (ResolvePassword(credentialId, &api_key, &error)) {
+            return api_key;
+        }
+        return "";
+    }
+    
+    bool DeleteApiKey(const std::string& provider) override {
+        if (provider.empty()) {
+            return false;
+        }
+        
+        std::string credentialId = "ai_api_key_" + provider;
+        std::string error;
+        return DeletePassword(credentialId, &error);
+    }
 };
 
 } // namespace

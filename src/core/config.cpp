@@ -220,9 +220,144 @@ bool ConfigStore::LoadAppConfig(const std::string& path, AppConfig* outConfig) {
             } else if (key == "write_timeout_ms") {
                 ParseInt(value, &outConfig->network.writeTimeoutMs);
             }
+        } else if (section == "ai") {
+            if (key == "provider") {
+                ParseString(value, &outConfig->ai.provider);
+            } else if (key == "api_endpoint") {
+                ParseString(value, &outConfig->ai.api_endpoint);
+            } else if (key == "model_name") {
+                ParseString(value, &outConfig->ai.model_name);
+            } else if (key == "temperature") {
+                float temp;
+                // Parse float value
+                try {
+                    temp = std::stof(value);
+                    outConfig->ai.temperature = temp;
+                } catch (...) {}
+            } else if (key == "max_tokens") {
+                ParseInt(value, &outConfig->ai.max_tokens);
+            } else if (key == "timeout_seconds") {
+                ParseInt(value, &outConfig->ai.timeout_seconds);
+            } else if (key == "enable_schema_design") {
+                ParseBool(value, &outConfig->ai.enable_schema_design);
+            } else if (key == "enable_query_optimization") {
+                ParseBool(value, &outConfig->ai.enable_query_optimization);
+            } else if (key == "enable_code_generation") {
+                ParseBool(value, &outConfig->ai.enable_code_generation);
+            } else if (key == "enable_documentation") {
+                ParseBool(value, &outConfig->ai.enable_documentation);
+            }
         }
     }
 
+    return true;
+}
+
+bool ConfigStore::SaveAppConfig(const std::string& path, const AppConfig& config) {
+    std::ofstream out(path);
+    if (!out.is_open()) {
+        return false;
+    }
+    
+    out << "# ScratchRobin Configuration\n\n";
+    
+    // UI section
+    out << "[ui]\n";
+    out << "theme = \"" << config.theme << "\"\n";
+    out << "font_family = \"" << config.fontFamily << "\"\n";
+    out << "font_size = " << config.fontSize << "\n\n";
+    
+    // Editor section
+    out << "[editor]\n";
+    out << "history_max_items = " << config.historyMaxItems << "\n";
+    out << "row_limit = " << config.rowLimit << "\n";
+    out << "enable_suggestions = " << (config.enableSuggestions ? "true" : "false") << "\n\n";
+    
+    // AI section
+    out << "[ai]\n";
+    out << "provider = \"" << config.ai.provider << "\"\n";
+    out << "api_endpoint = \"" << config.ai.api_endpoint << "\"\n";
+    out << "model_name = \"" << config.ai.model_name << "\"\n";
+    out << "temperature = " << config.ai.temperature << "\n";
+    out << "max_tokens = " << config.ai.max_tokens << "\n";
+    out << "timeout_seconds = " << config.ai.timeout_seconds << "\n";
+    out << "enable_schema_design = " << (config.ai.enable_schema_design ? "true" : "false") << "\n";
+    out << "enable_query_optimization = " << (config.ai.enable_query_optimization ? "true" : "false") << "\n";
+    out << "enable_code_generation = " << (config.ai.enable_code_generation ? "true" : "false") << "\n";
+    out << "enable_documentation = " << (config.ai.enable_documentation ? "true" : "false") << "\n\n";
+    
+    return true;
+}
+
+bool ConfigStore::LoadAiConfig(const std::string& path, AiConfig* outConfig) {
+    if (!outConfig) {
+        return false;
+    }
+    *outConfig = AiConfig{};
+    
+    std::ifstream input(path);
+    if (!input.is_open()) {
+        return false;
+    }
+    
+    std::string line;
+    while (std::getline(input, line)) {
+        line = Trim(StripComment(line));
+        if (line.empty()) continue;
+        
+        std::string key;
+        std::string value;
+        if (!SplitKeyValue(line, &key, &value)) continue;
+        
+        if (key == "provider") {
+            ParseString(value, &outConfig->provider);
+        } else if (key == "api_key") {
+            ParseString(value, &outConfig->api_key);
+        } else if (key == "api_endpoint") {
+            ParseString(value, &outConfig->api_endpoint);
+        } else if (key == "model_name") {
+            ParseString(value, &outConfig->model_name);
+        } else if (key == "temperature") {
+            try {
+                outConfig->temperature = std::stof(value);
+            } catch (...) {}
+        } else if (key == "max_tokens") {
+            ParseInt(value, &outConfig->max_tokens);
+        } else if (key == "timeout_seconds") {
+            ParseInt(value, &outConfig->timeout_seconds);
+        } else if (key == "enable_schema_design") {
+            ParseBool(value, &outConfig->enable_schema_design);
+        } else if (key == "enable_query_optimization") {
+            ParseBool(value, &outConfig->enable_query_optimization);
+        } else if (key == "enable_code_generation") {
+            ParseBool(value, &outConfig->enable_code_generation);
+        } else if (key == "enable_documentation") {
+            ParseBool(value, &outConfig->enable_documentation);
+        }
+    }
+    
+    return true;
+}
+
+bool ConfigStore::SaveAiConfig(const std::string& path, const AiConfig& config) {
+    std::ofstream out(path);
+    if (!out.is_open()) {
+        return false;
+    }
+    
+    out << "# AI Provider Configuration\n\n";
+    out << "provider = \"" << config.provider << "\"\n";
+    out << "api_key = \"" << config.api_key << "\"\n";
+    out << "api_endpoint = \"" << config.api_endpoint << "\"\n";
+    out << "model_name = \"" << config.model_name << "\"\n";
+    out << "temperature = " << config.temperature << "\n";
+    out << "max_tokens = " << config.max_tokens << "\n";
+    out << "timeout_seconds = " << config.timeout_seconds << "\n";
+    out << "enable_schema_design = " << (config.enable_schema_design ? "true" : "false") << "\n";
+    out << "enable_query_optimization = " << (config.enable_query_optimization ? "true" : "false") << "\n";
+    out << "enable_code_generation = " << (config.enable_code_generation ? "true" : "false") << "\n";
+    out << "enable_documentation = " << (config.enable_documentation ? "true" : "false") << "\n";
+    
     return true;
 }
 

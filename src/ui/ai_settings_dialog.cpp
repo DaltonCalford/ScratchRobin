@@ -11,6 +11,8 @@
 
 #include "../core/ai_assistant.h"
 #include "../core/ai_providers.h"
+#include "../core/config.h"
+#include "../core/credentials.h"
 
 #include <wx/sizer.h>
 #include <wx/button.h>
@@ -21,8 +23,21 @@
 #include <wx/stattext.h>
 #include <wx/textctrl.h>
 #include <wx/hyperlink.h>
+#include <wx/stdpaths.h>
 
 namespace scratchrobin {
+
+namespace {
+    std::string GetConfigPath() {
+        wxFileName config_dir(wxStandardPaths::Get().GetUserDataDir(), "");
+        config_dir.AppendDir("config");
+        if (!config_dir.DirExists()) {
+            config_dir.Mkdir(wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
+        }
+        config_dir.SetFullName("ai.conf");
+        return config_dir.GetFullPath().ToStdString();
+    }
+}
 
 AiSettingsDialog::AiSettingsDialog(wxWindow* parent)
     : wxDialog(parent, wxID_ANY, "AI Provider Settings", 
@@ -196,22 +211,57 @@ void AiSettingsDialog::BindEvents() {
 }
 
 void AiSettingsDialog::LoadSettings() {
-    // TODO: Load from configuration store when available
-    // For now, set defaults
+    // Load from configuration store
+    ConfigStore store;
+    AiConfig config;
     
-    provider_choice_->SetSelection(0);
-    api_key_ctrl_->SetValue("");
-    api_endpoint_ctrl_->SetValue("");
-    model_name_ctrl_->SetValue("");
-    temperature_slider_->SetValue(30);
-    temperature_label_->SetLabel("0.30");
-    max_tokens_ctrl_->SetValue(4096);
-    timeout_ctrl_->SetValue(60);
+    // Try to load from app config directory
+    std::string config_path = GetConfigPath();
+    bool loaded = store.LoadAiConfig(config_path, &config);
     
-    enable_schema_design_->SetValue(true);
-    enable_query_optimization_->SetValue(true);
-    enable_code_generation_->SetValue(true);
-    enable_documentation_->SetValue(true);
+    // If not found, try app config section
+    if (!loaded) {
+        AppConfig app_config;
+        if (store.LoadAppConfig(config_path, &app_config)) {
+            config = app_config.ai;
+            loaded = true;
+        }
+    }
+    
+    // Set provider selection
+    int provider_idx = 0;
+    if (config.provider == "anthropic") provider_idx = 1;
+    else if (config.provider == "ollama") provider_idx = 2;
+    else if (config.provider == "gemini") provider_idx = 3;
+    provider_choice_->SetSelection(provider_idx);
+    
+    // Load API key from secure storage if available
+    CredentialStore cred_store;
+    std::string secure_key = cred_store.GetApiKey(config.provider);
+    if (!secure_key.empty()) {
+        api_key_ctrl_->SetValue(secure_key);
+        // Mask the key for display
+        api_key_ctrl_->SetWindowStyle(wxTE_PASSWORD);
+    } else if (!config.api_key.empty()) {
+        api_key_ctrl_->SetValue(config.api_key);
+    } else {
+        api_key_ctrl_->SetValue("");
+    }
+    
+    api_endpoint_ctrl_->SetValue(config.api_endpoint);
+    model_name_ctrl_->SetValue(config.model_name);
+    
+    int temp_val = static_cast<int>(config.temperature * 100);
+    temperature_slider_->SetValue(temp_val);
+    temperature_label_->SetLabel(wxString::Format("%.2f", config.temperature));
+    
+    max_tokens_ctrl_->SetValue(config.max_tokens);
+    timeout_ctrl_->SetValue(config.timeout_seconds);
+    
+    enable_schema_design_->SetValue(config.enable_schema_design);
+    enable_query_optimization_->SetValue(config.enable_query_optimization);
+    enable_code_generation_->SetValue(config.enable_code_generation);
+    enable_documentation_->SetValue(config.enable_documentation);
     
     UpdateProviderUI();
     
@@ -222,8 +272,6 @@ void AiSettingsDialog::LoadSettings() {
 }
 
 void AiSettingsDialog::SaveSettings() {
-    // TODO: Save to configuration store when available
-    
     // Get selected provider
     int selection = provider_choice_->GetSelection();
     std::string provider;
@@ -235,8 +283,9 @@ void AiSettingsDialog::SaveSettings() {
         default: provider = OpenAiProvider::NAME; break;
     }
     
-    // Build config
-    AiProviderConfig ai_config;
+    // Build AI config
+    AiConfig ai_config;
+    ai_config.provider = provider;
     ai_config.api_key = api_key_ctrl_->GetValue().ToStdString();
     ai_config.api_endpoint = api_endpoint_ctrl_->GetValue().ToStdString();
     ai_config.model_name = model_name_ctrl_->GetValue().ToStdString();
@@ -248,10 +297,35 @@ void AiSettingsDialog::SaveSettings() {
     ai_config.enable_code_generation = enable_code_generation_->GetValue();
     ai_config.enable_documentation = enable_documentation_->GetValue();
     
+    // Save API key to secure credential store
+    if (!ai_config.api_key.empty()) {
+        CredentialStore cred_store;
+        cred_store.StoreApiKey(provider, ai_config.api_key);
+        // Clear from plain config for security
+        ai_config.api_key.clear();
+    }
+    
+    // Save config to file
+    ConfigStore store;
+    store.SaveAiConfig(GetConfigPath(), ai_config);
+    
+    // Also update in-memory config for AI assistant
+    AiProviderConfig provider_config;
+    provider_config.api_key = api_key_ctrl_->GetValue().ToStdString();  // Use actual key from UI
+    provider_config.api_endpoint = ai_config.api_endpoint;
+    provider_config.model_name = ai_config.model_name;
+    provider_config.temperature = ai_config.temperature;
+    provider_config.max_tokens = ai_config.max_tokens;
+    provider_config.timeout_seconds = ai_config.timeout_seconds;
+    provider_config.enable_schema_design = ai_config.enable_schema_design;
+    provider_config.enable_query_optimization = ai_config.enable_query_optimization;
+    provider_config.enable_code_generation = ai_config.enable_code_generation;
+    provider_config.enable_documentation = ai_config.enable_documentation;
+    
     // Initialize the AI assistant with new settings
     auto& manager = AiAssistantManager::Instance();
     manager.SetActiveProvider(provider);
-    manager.SetConfig(ai_config);
+    manager.SetConfig(provider_config);
 }
 
 void AiSettingsDialog::UpdateProviderUI() {
