@@ -108,6 +108,12 @@ set(SCRATCHROBIN_CORE_SOURCES
     src/core/cdc_streaming.cpp
     src/core/ai_assistant.cpp
     src/core/ai_providers.cpp
+    # Issue Tracker Integration
+    src/core/issue_tracker.cpp
+    src/core/issue_tracker_jira.cpp
+    src/core/issue_tracker_github.cpp
+    src/core/issue_tracker_gitlab.cpp
+    src/core/sync_scheduler.cpp
 )
 
 add_library(scratchrobin_core ${SCRATCHROBIN_CORE_SOURCES})
@@ -240,6 +246,8 @@ if(SCRATCHROBIN_BUILD_UI)
         # Phase 5: Advanced Features UI
         src/ui/ai_assistant_panel.cpp
         src/ui/ai_settings_dialog.cpp
+        # Issue Tracker UI
+        src/ui/issue_tracker_panel.cpp
     )
 
     target_include_directories(scratchrobin PRIVATE src)

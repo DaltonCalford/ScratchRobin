@@ -653,13 +653,75 @@ Supported Targets:
 
 ---
 
+## 7. AI Integration ✅ IMPLEMENTED
+
+### Overview
+Multi-provider AI assistance for database development with secure credential management.
+
+### Supported Providers
+- **OpenAI** - GPT-4, GPT-4o, GPT-3.5, O1 series
+- **Anthropic** - Claude 3.5 Sonnet, Haiku, Opus
+- **Ollama** - Local model hosting (Llama, Mistral, CodeLlama)
+- **Google Gemini** - Gemini Pro, Flash, Ultra
+
+### Features
+- **SQL Assistant Panel** - Natural language to SQL conversion
+- **Query Explanation** - Understand complex queries in plain English
+- **Query Optimization** - AI-powered performance suggestions
+- **Schema-Aware Context** - AI knows your database structure
+- **Secure Credential Storage** - API keys stored in system keyring
+
+### Usage
+```sql
+-- Ask AI to write a query
+"Find all customers who made purchases in the last 30 days"
+
+-- Get query explanation
+EXPLAIN: SELECT * FROM orders WHERE created_at > NOW() - INTERVAL '30 days'
+
+-- Get optimization suggestions
+OPTIMIZE: SELECT * FROM large_table WHERE unindexed_column = 'value'
+```
+
+---
+
+## 8. Issue Tracker Integration ✅ IMPLEMENTED
+
+### Overview
+Link database objects to external issue tracking systems for seamless workflow integration.
+
+### Supported Platforms
+- **Jira** - Jira Cloud and Server (REST API v3)
+- **GitHub** - GitHub Issues (REST API v4)
+- **GitLab** - GitLab Issues (REST API v4)
+
+### Features
+- **Object-Issue Linking** - Link tables, columns, views, procedures to issues
+- **Bi-Directional Sync** - Real-time updates via webhooks
+- **Issue Templates** - Auto-create issues for bugs, enhancements, refactoring
+- **Context Generation** - Automatic context extraction from database objects
+- **Sync Scheduler** - Background sync with configurable intervals
+
+### Usage Example
+```
+1. Right-click on table → "Create Issue"
+2. Select issue type (Bug, Enhancement, Task)
+3. Issue is created in connected tracker with schema context
+4. Issue appears in Issue Tracker panel
+5. Status syncs automatically via webhook
+```
+
+---
+
 ## Implementation Priority
 
-| Feature | Priority | Effort | Impact |
-|---------|----------|--------|--------|
-| Testing Framework | P1 | Medium | High |
-| Data Lineage | P1 | High | High |
-| Cube Design | P2 | High | Medium |
-| Data Masking | P2 | Medium | Medium |
-| API Generation | P3 | Medium | Medium |
-| CDC/Streaming | P3 | High | Medium |
+| Feature | Priority | Effort | Impact | Status |
+|---------|----------|--------|--------|--------|
+| AI Integration | P1 | Medium | High | ✅ Complete |
+| Issue Tracker | P1 | Medium | High | ✅ Complete |
+| Testing Framework | P1 | Medium | High | 🟡 Planned |
+| Data Lineage | P1 | High | High | 🟡 Planned |
+| Cube Design | P2 | High | Medium | 🟡 Planned |
+| Data Masking | P2 | Medium | Medium | 🟡 Planned |
+| API Generation | P3 | Medium | Medium | 🟡 Planned |
+| CDC/Streaming | P3 | High | Medium | 🟡 Planned |

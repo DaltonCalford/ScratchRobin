@@ -11,8 +11,10 @@
 #define SCRATCHROBIN_ISSUE_TRACKER_H
 
 #include <ctime>
+#include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>

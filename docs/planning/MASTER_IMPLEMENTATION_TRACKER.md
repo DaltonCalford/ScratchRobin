@@ -2,7 +2,7 @@
 
 **Status**: Active Planning Document  
 **Created**: 2026-02-03  
-**Last Updated**: 2026-02-03 (PHASES 1-7 COMPLETE, PHASE 8 93% - 259+/261 tasks, 99%)  
+**Last Updated**: 2026-02-03 (PHASES 1-7 COMPLETE, PHASE 8 93%, PHASE 9-10 COMPLETE)  
 **Scope**: Full ScratchRobin GUI implementation to manage ScratchBird database
 
 ---
@@ -19,11 +19,13 @@ This document provides a comprehensive, prioritized implementation plan for expa
 | SQL Editor | ✅ Complete | Async execution, results grid, export |
 | Main Window | ✅ Complete | Catalog tree, inspector panels |
 | Object Managers | ✅ Complete | All managers wired to backend |
-| ERD/Diagramming | ✅ Complete | 4 notations, auto-layout, forward/reverse engineering |
+| ERD/Diagramming | ✅ Complete | 5 notations, auto-layout, forward/reverse engineering |
 | Connection Editor | ✅ Complete | Full editor with test connection, SSL, all backends |
 | Beta Placeholders | ✅ Complete | Cluster, Replication, ETL, Git stub UIs |
-| Unit Tests | ✅ Complete | 16 test suites, Google Test framework |
-| Integration Tests | ✅ Complete | PostgreSQL, MySQL, Firebird backend tests |
+| Unit Tests | ✅ Complete | 16+ test suites, Google Test framework |
+| Integration Tests | ✅ Complete | PostgreSQL, MySQL, Firebird, ScratchBird backend tests |
+| **AI Integration** | ✅ **Complete** | **Multi-provider AI assistance (OpenAI, Anthropic, Ollama, Gemini)** |
+| **Issue Tracker** | ✅ **Complete** | **Jira, GitHub, GitLab integration with sync scheduler** |
 
 ### Legend
 
@@ -587,6 +589,111 @@ src/diagram/
 
 ---
 
+## Phase 9: AI Integration (P1 - New)
+
+**Goal**: Integrate AI-powered assistance for database development.  
+**Timeline**: 1 week  
+**Dependencies**: Phase 1 complete  
+**Status**: ✅ COMPLETE  
+**Completed**: 2026-02-03
+
+### 9.1 AI Provider Framework
+
+| Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
+|---------|------|--------|----------|-------------|--------------|---------------------|
+| 9.1.1 | Design AI provider interface | ✅ | P0 | 1d | - | Generic adapter pattern for AI providers |
+| 9.1.2 | Implement HTTP client for AI APIs | ✅ | P0 | 2d | 9.1.1 | libcurl-based HTTP with JSON handling |
+| 9.1.3 | Implement OpenAI provider | ✅ | P0 | 2d | 9.1.2 | GPT-4, GPT-3.5, O1 support |
+| 9.1.4 | Implement Anthropic provider | ✅ | P0 | 2d | 9.1.2 | Claude 3.5 Sonnet, Haiku support |
+| 9.1.5 | Implement Ollama provider | ✅ | P1 | 2d | 9.1.2 | Local model support |
+| 9.1.6 | Implement Google Gemini provider | ✅ | P1 | 2d | 9.1.2 | Gemini Pro, Flash support |
+| 9.1.7 | Add secure API key storage | ✅ | P0 | 1d | 9.1.1 | System keyring integration |
+
+### 9.2 AI Settings Dialog
+
+| Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
+|---------|------|--------|----------|-------------|--------------|---------------------|
+| 9.2.1 | Create AI settings dialog UI | ✅ | P0 | 2d | 9.1.1 | Provider selection, API key input |
+| 9.2.2 | Add model configuration | ✅ | P0 | 1d | 9.2.1 | Model selection, temperature, max tokens |
+| 9.2.3 | Add endpoint configuration | ✅ | P1 | 1d | 9.2.1 | Custom endpoint URL support |
+| 9.2.4 | Implement settings persistence | ✅ | P0 | 1d | 9.2.1 | Save/load AI configuration |
+| 9.2.5 | Add connection testing | ✅ | P0 | 1d | 9.2.1 | Test API key and endpoint |
+
+### 9.3 SQL Assistant Panel
+
+| Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
+|---------|------|--------|----------|-------------|--------------|---------------------|
+| 9.3.1 | Create SQL Assistant panel UI | ✅ | P0 | 2d | 9.1.1 | Chat interface in SQL editor |
+| 9.3.2 | Implement natural language to SQL | ✅ | P0 | 2d | 9.3.1 | Convert descriptions to queries |
+| 9.3.3 | Implement query explanation | ✅ | P0 | 1d | 9.3.1 | Explain what a query does |
+| 9.3.4 | Implement query optimization | ✅ | P0 | 2d | 9.3.1 | Suggest index and query improvements |
+| 9.3.5 | Add schema-aware context | ✅ | P0 | 1d | 9.3.1 | Include catalog in prompts |
+| 9.3.6 | Add response streaming | ✅ | P1 | 2d | 9.3.1 | Real-time response display |
+
+**Implementation**: `src/ai/`, `src/ui/ai_settings_dialog.h/cpp`, `src/ui/sql_assistant_panel.h/cpp`
+
+---
+
+## Phase 10: Issue Tracker Integration (P1 - New)
+
+**Goal**: Link database objects to external issue tracking systems.  
+**Timeline**: 1 week  
+**Dependencies**: Phase 1 complete  
+**Status**: ✅ COMPLETE  
+**Completed**: 2026-02-03
+
+### 10.1 Issue Tracker Adapter Framework
+
+| Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
+|---------|------|--------|----------|-------------|--------------|---------------------|
+| 10.1.1 | Design issue tracker interface | ✅ | P0 | 1d | - | Generic adapter pattern for issue providers |
+| 10.1.2 | Implement Jira adapter | ✅ | P0 | 2d | 10.1.1 | Jira Cloud REST API v3 |
+| 10.1.3 | Implement GitHub adapter | ✅ | P0 | 2d | 10.1.1 | GitHub REST API v4 |
+| 10.1.4 | Implement GitLab adapter | ✅ | P0 | 2d | 10.1.1 | GitLab REST API v4 |
+| 10.1.5 | Add credential management | ✅ | P0 | 1d | 10.1.1 | Secure API token storage |
+| 10.1.6 | Add connection testing | ✅ | P0 | 1d | 10.1.1 | Test tracker connectivity |
+
+### 10.2 Issue Link Manager
+
+| Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
+|---------|------|--------|----------|-------------|--------------|---------------------|
+| 10.2.1 | Design link data model | ✅ | P0 | 1d | - | ObjectReference, IssueReference, IssueLink |
+| 10.2.2 | Implement IssueLinkManager | ✅ | P0 | 2d | 10.2.1 | Central registry with CRUD operations |
+| 10.2.3 | Add persistence layer | ✅ | P0 | 1d | 10.2.2 | JSON-based storage |
+| 10.2.4 | Add link search/indexing | ✅ | P1 | 1d | 10.2.2 | Query links by object or issue |
+
+### 10.3 Sync Scheduler
+
+| Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
+|---------|------|--------|----------|-------------|--------------|---------------------|
+| 10.3.1 | Design sync task framework | ✅ | P0 | 1d | - | Task scheduling with intervals |
+| 10.3.2 | Implement SyncScheduler | ✅ | P0 | 2d | 10.3.1 | Singleton scheduler with task registry |
+| 10.3.3 | Add webhook handler interface | ✅ | P0 | 1d | 10.3.1 | Provider-specific webhook processing |
+| 10.3.4 | Implement issue sync task | ✅ | P0 | 1d | 10.3.2 | Periodic issue status sync |
+| 10.3.5 | Implement drift detection | ✅ | P1 | 1d | 10.3.2 | Detect out-of-sync issues |
+
+### 10.4 Issue Tracker UI
+
+| Task ID | Task | Status | Priority | Est. Effort | Dependencies | Acceptance Criteria |
+|---------|------|--------|----------|-------------|--------------|---------------------|
+| 10.4.1 | Create IssueTrackerPanel | ✅ | P0 | 2d | 10.2.1 | Panel showing linked issues |
+| 10.4.2 | Create CreateIssueDialog | ✅ | P0 | 2d | 10.4.1 | Dialog for creating new issues |
+| 10.4.3 | Create LinkIssueDialog | ✅ | P0 | 2d | 10.4.1 | Dialog for linking existing issues |
+| 10.4.4 | Create IssueTrackerSettingsDialog | ✅ | P0 | 2d | 10.1.1 | Configuration for tracker connections |
+| 10.4.5 | Add issue templates | ✅ | P1 | 1d | 10.4.2 | Templates for bug/enhancement/refactor |
+| 10.4.6 | Add context generation | ✅ | P1 | 1d | 10.4.2 | Auto-extract context from objects |
+| 10.4.7 | Wire into object manager context menus | ✅ | P0 | 1d | 10.4.1 | Right-click menu integration |
+
+**Implementation**: 
+- `src/core/issue_tracker*.h/cpp` - Core data models and manager
+- `src/core/issue_tracker_jira.h/cpp` - Jira adapter
+- `src/core/issue_tracker_github.h/cpp` - GitHub adapter
+- `src/core/issue_tracker_gitlab.h/cpp` - GitLab adapter
+- `src/core/sync_scheduler.h/cpp` - Sync scheduler
+- `src/ui/issue_tracker_panel.h/cpp` - UI panels and dialogs
+
+---
+
 ## Phase 8: Testing and Quality Assurance (P0 - Ongoing)
 
 **Goal**: Ensure application stability and correctness.  
@@ -702,12 +809,12 @@ src/diagram/
 
 | Metric | Count |
 |--------|-------|
-| Total Tasks | 200+ |
-| P0 (Critical) Tasks | ~80 |
-| P1 (Important) Tasks | ~90 |
-| P2 (Nice-to-have) Tasks | ~40 |
-| Estimated Total Effort | 26-32 weeks (1 developer) |
-| Parallelizable Phases | 4, 5, 6 (after Phase 2) |
+| Total Tasks | 270+ |
+| P0 (Critical) Tasks | ~100 |
+| P1 (Important) Tasks | ~120 |
+| P2 (Nice-to-have) Tasks | ~50 |
+| Estimated Total Effort | 28-34 weeks (1 developer) |
+| Parallelizable Phases | 4, 5, 6, 9, 10 (after Phase 2) |
 
 ### Completion Statistics
 
@@ -721,6 +828,8 @@ src/diagram/
 | Phase 6 | 31 | 31 | 0 | 100% ✅ |
 | Phase 7 | 12 | 12 | 0 | 100% ✅ |
 | Phase 8 | 28 | 26 | 0 | 93% 🟡 |
+| Phase 9 | 15 | 15 | 0 | 100% ✅ |
+| Phase 10 | 19 | 19 | 0 | 100% ✅ |
 
 ### Phase Effort Summary
 
@@ -734,6 +843,8 @@ src/diagram/
 | Phase 6 | 2-3 weeks | 31 | Infrastructure | ✅ 100% Complete |
 | Phase 7 | 1 week | 12 | Beta Placeholders | ✅ 100% Complete |
 | Phase 8 | Ongoing | - | Quality Assurance | 🟡 93% Complete |
+| Phase 9 | 1 week | 15 | AI Integration | ✅ 100% Complete |
+| Phase 10 | 1 week | 19 | Issue Tracker | ✅ 100% Complete |
 
 ---
 

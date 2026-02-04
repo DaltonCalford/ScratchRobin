@@ -2,7 +2,7 @@
 
 [![License: IDPL](https://img.shields.io/badge/License-IDPL-blue.svg)](https://www.firebirdsql.org/en/initial-developers-public-license-version-1-0/)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha-orange.svg)]()
+[![Version](https://img.shields.io/badge/version-0.2.0--alpha-orange.svg)]()
 
 **The Database Design & Deployment Tool for Modern Development Workflows**
 
@@ -11,8 +11,39 @@ ScratchRobin brings software engineering best practices (version control, testin
 **Release Targets:** `docs/planning/RELEASE_TARGETS.md`
 
 ---
+###**Note To New Users**
 
+ScratchBird is in early alpha release. No binaries have been officially released at this time. The code is ready to be built and tested if you want to setup your own test environment.
+
+If you are curious, clone the directories and have your friendly local AI analyse the code base (documentation is out of date except for specifications) - tell it to find out the capabilities of the project from the implemented source code, not the comments or documentation. This will give you a good understanding of what is done and what is going to be done.
+
+The drivers and management interface (ScratchBird-drivers and ScratchRobin) are getting heavy testing and updating. They are getting multiple commits per day on average.
+
+The initial preview will be a docker containing the database engine and an app-image or standalone executable so that you can test the project without any problems of getting rid of it afterward.
+
+This project has become my answer to the constant "Damn I wish I had the ability to...." issues I have encountered over 35 years of database use.
+
+I have been seeing multiple clones of my project(s) via the tracker but I have not received any feedback yet - don't be afraid, I need feedback and I don't bite.
+
+I am sure there are things others have encountered over the years and wish they had a tool to cover it.
+
+Thanks for your interest in the project.
+
+---
 ## 🌟 Key Features
+
+### AI-Powered Database Assistance
+- **Multi-Provider Support** - OpenAI, Anthropic, Ollama, Google Gemini
+- **SQL Assistant** - Natural language to SQL, query explanation, optimization suggestions
+- **Schema Design Help** - AI-assisted table design and index recommendations
+- **Secure API Key Storage** - Credentials stored in system keyring
+
+### Issue Tracker Integration
+- **Multi-Platform Support** - Jira, GitHub, GitLab integration
+- **Object-Issue Linking** - Link database objects (tables, columns, procedures) to issues
+- **Bi-Directional Sync** - Real-time updates via webhooks and scheduled sync
+- **Issue Templates** - Auto-create issues for bugs, enhancements, or refactoring
+- **Context Generation** - Automatic context extraction for issue creation
 
 ### Project-Centric Design Workflow
 - **Design in isolation** - Make changes safely away from production
@@ -91,7 +122,17 @@ Deploy → Create Plan → Execute
 
 ## 📊 Project Status
 
-**Current Version:** 0.1.0-alpha
+**Current Version:** 0.2.0-alpha  
+**Last Updated:** 2026-02-03
+
+### Recently Completed 🎉
+- **AI Integration Framework** - Complete implementation with multi-provider support
+- **Issue Tracker System** - Full Jira/GitHub/GitLab integration with sync scheduler
+- **SQL Editor AI Assistant** - Context-aware query help and optimization
+- **All Core Object Managers** - Tables, Indexes, Views, Triggers, Procedures, Sequences, Packages
+- **Complete ERD System** - 5 notations, auto-layout, forward/reverse engineering
+
+**Current Version:** 0.2.0-alpha
 
 ### Implemented ✅
 - [x] Core project system with state management
@@ -108,13 +149,17 @@ Deploy → Create Plan → Execute
 - [ ] Test execution UI
 - [ ] Migration generation
 
+### Newly Implemented (2026-02) 🎉
+- [x] **AI Integration** - Multi-provider AI assistance (OpenAI, Anthropic, Ollama, Google Gemini)
+- [x] **Issue Tracker Integration** - Jira, GitHub, GitLab issue linking and sync
+- [x] **SQL Assistant** - AI-powered query help, optimization, and explanation
+
 ### Planned 📋
 - [ ] Deployment plans and management
 - [ ] Data lineage tracking
 - [ ] Data masking
 - [ ] API generation
 - [ ] CDC/Event streaming
-- [ ] AI-assisted design
 
 ---
 
@@ -166,6 +211,12 @@ Deploy → Create Plan → Execute
 - [WORKFLOW_GUIDE.md](docs/WORKFLOW_GUIDE.md) - Step-by-step workflow guide
 - [SPECIFICATIONS.md](docs/SPECIFICATIONS.md) - Complete technical specifications
 
+### AI Integration
+- [AI_INTEGRATION_SPEC.md](docs/AI_INTEGRATION_SPEC.md) - AI provider setup and usage
+
+### Issue Tracking
+- [ISSUE_TRACKER_SPECIFICATION.md](docs/ISSUE_TRACKER_SPECIFICATION.md) - Issue tracker configuration
+
 ### Git Integration
 - [GIT_INTEGRATION.md](docs/GIT_INTEGRATION.md) - Dual-repo Git model
 - [DATABASE_GIT_PROTOCOL.md](docs/DATABASE_GIT_PROTOCOL.md) - Database Git protocol
@@ -209,6 +260,7 @@ ScratchRobin brings modern development practices to databases:
 - C++17 compiler (GCC 9+, Clang 10+, MSVC 2019+)
 - CMake 3.20+
 - wxWidgets 3.2+
+- libcurl (for AI and Issue Tracker features)
 - (Optional) PostgreSQL, MySQL, Firebird client libraries
 
 ### Build Options
@@ -222,6 +274,11 @@ cmake --build build
 cmake -B build -DSCRATCHROBIN_USE_LIBPQ=ON \
                -DSCRATCHROBIN_USE_MYSQL=ON \
                -DSCRATCHROBIN_USE_FIREBIRD=ON
+cmake --build build
+
+# With AI and Issue Tracker support (requires libcurl)
+cmake -B build -DSCRATCHROBIN_ENABLE_AI=ON \
+               -DSCRATCHROBIN_ENABLE_ISSUE_TRACKERS=ON
 cmake --build build
 
 # Debug build with sanitizers

@@ -6,6 +6,18 @@ ScratchRobin is a comprehensive database design, modeling, and deployment tool t
 
 ## Key Capabilities
 
+### 🤖 **AI-Powered Database Assistance** ✅ NEW
+- **Multi-Provider Support** - OpenAI, Anthropic, Ollama, Google Gemini
+- **SQL Assistant** - Natural language to SQL, query explanation, optimization
+- **Schema-Aware AI** - AI understands your database structure
+- **Secure Credential Storage** - API keys stored in system keyring
+
+### 🔗 **Issue Tracker Integration** ✅ NEW
+- **Multi-Platform** - Jira, GitHub, GitLab integration
+- **Object-Issue Linking** - Link database objects to external issues
+- **Bi-Directional Sync** - Real-time updates via webhooks
+- **Issue Templates** - Auto-create issues with context
+
 ### 🗂️ **Project-Centric Workflow**
 - Extract database schemas into design projects
 - Make changes in isolation from production
@@ -58,6 +70,12 @@ ScratchRobin is a comprehensive database design, modeling, and deployment tool t
 - **[SPECIFICATIONS.md](SPECIFICATIONS.md)** - Complete technical specifications for all features
 - **[WORKFLOW_GUIDE.md](WORKFLOW_GUIDE.md)** - Step-by-step workflow guide with visual diagrams
 - **[IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md)** - 12-month phased implementation plan
+
+### AI Integration
+- **[AI_INTEGRATION_SPEC.md](AI_INTEGRATION_SPEC.md)** - AI provider setup and configuration
+
+### Issue Tracking
+- **[ISSUE_TRACKER_SPECIFICATION.md](ISSUE_TRACKER_SPECIFICATION.md)** - Issue tracker integration guide
 
 ### Git Integration
 - **[GIT_INTEGRATION.md](GIT_INTEGRATION.md)** - Dual-repo Git system specifications
@@ -155,6 +173,8 @@ Baseline   Modify      Review      Validate  Execute    Verify
 | Project Infrastructure | ✅ Complete | 1 |
 | Design State Management | ✅ Complete | 2 |
 | ERD Diagramming | ✅ Complete | 3 |
+| AI Assistance | ✅ Complete | 9 |
+| Issue Tracker Integration | ✅ Complete | 10 |
 | Whiteboard | 🔄 In Progress | 3 |
 | Mind Maps | 🔄 In Progress | 3 |
 | Real-time Collaboration | 📋 Planned | 4 |
@@ -163,8 +183,7 @@ Baseline   Modify      Review      Validate  Execute    Verify
 | Deployment System | 📋 Planned | 6 |
 | Time Tracking | 📋 Planned | 7 |
 | Documentation System | 📋 Planned | 8 |
-| Git Integration | 📋 Planned | 9 |
-| AI Assistance | 📋 Future | 10 |
+| Git Integration | 📋 Planned | 11 |
 
 ## System Architecture
 
@@ -236,4 +255,4 @@ ScratchRobin is licensed under the Initial Developer's Public License Version 1.
 
 ---
 
-*Last updated: 2024-02-04*
+*Last updated: 2026-02-03*
