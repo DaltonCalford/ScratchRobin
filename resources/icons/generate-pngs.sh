@@ -23,6 +23,7 @@ SIZES=(16 24 32 48 64 128 256)
 
 # Icons to process
 ICONS=(
+    # Application & Navigation (0-9)
     "scratchrobin"
     "connect"
     "disconnect"
@@ -30,12 +31,82 @@ ICONS=(
     "stop"
     "commit"
     "rollback"
+    "settings"
+    # Database Objects (10-24)
     "table"
     "view"
-    "diagram"
     "index"
+    "column"
+    "sequence"
+    "trigger"
+    "procedure"
+    "function"
+    "package"
+    "constraint"
+    "domain"
+    "collation"
+    "tablespace"
+    # Schema Organization (25-29)
+    "schema"
+    "folder"
+    "database"
+    "catalog"
+    # Security & Admin (30-34)
     "users"
-    "settings"
+    # Project Objects (35-44)
+    "sql"
+    "note"
+    "diagram"
+    "project"
+    "timeline"
+    "job"
+    # Version Control (45-49)
+    "git"
+    "branch"
+    # Maintenance (50-54)
+    "backup"
+    "restore"
+    # Infrastructure (60-69)
+    "server"
+    "client"
+    "filespace"
+    "network"
+    "cluster"
+    "instance"
+    "replica"
+    "shard"
+    # Design & Planning (70-79)
+    "whiteboard"
+    "mindmap"
+    "design"
+    "draft"
+    "template"
+    "blueprint"
+    "concept"
+    "plan"
+    # Design States (80-89)
+    "implemented"
+    "pending"
+    "modified"
+    "deleted"
+    "newitem"
+    # Synchronization (90-99)
+    "sync"
+    "diff"
+    "compare"
+    "migrate"
+    "deploy"
+    # Collaboration (100-109)
+    "shared"
+    "collaboration"
+    "team"
+    # Security & Audit (110-119)
+    "lock"
+    "unlock"
+    "history"
+    "audit"
+    "tag"
+    "bookmark"
 )
 
 echo "Generating PNG icons from SVG sources..."

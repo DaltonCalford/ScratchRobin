@@ -95,6 +95,7 @@ set(SCRATCHROBIN_CORE_SOURCES
     src/core/mysql_backend.cpp
     src/core/firebird_backend.cpp
     src/core/session_state.cpp
+    src/core/project.cpp
 )
 
 add_library(scratchrobin_core ${SCRATCHROBIN_CORE_SOURCES})
@@ -141,6 +142,7 @@ if(SCRATCHROBIN_BUILD_UI)
         src/main.cpp
         src/app/app.cpp
         src/ui/main_frame.cpp
+        src/ui/project_panel.cpp
         src/ui/connection_editor_dialog.cpp
         src/ui/diagram_frame.cpp
         src/ui/diagram_model.cpp

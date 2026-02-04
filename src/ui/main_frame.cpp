@@ -57,6 +57,8 @@
 #include <wx/splitter.h>
 #include <wx/stattext.h>
 #include <wx/textctrl.h>
+#include <wx/artprov.h>
+#include <wx/filename.h>
 
 namespace scratchrobin {
 
@@ -204,6 +206,8 @@ void MainFrame::BuildLayout() {
                            wxTR_HAS_BUTTONS | wxTR_LINES_AT_ROOT | wxTR_DEFAULT_STYLE);
     treeSizer->Add(tree_, 1, wxEXPAND | wxALL, 8);
     treePanel->SetSizer(treeSizer);
+    
+    InitializeTreeIcons();
 
     auto* detailsPanel = new wxPanel(splitter, wxID_ANY);
     auto* detailsSizer = new wxBoxSizer(wxVERTICAL);
@@ -303,6 +307,306 @@ void MainFrame::OnTreeSelection(wxTreeEvent& event) {
     UpdateInspector(context_node_);
 }
 
+void MainFrame::InitializeTreeIcons() {
+    if (!tree_) {
+        return;
+    }
+    
+    // Create image list for 16x16 icons
+    tree_images_ = new wxImageList(16, 16);
+    
+    // Helper lambda to load icon from resources
+    auto loadIcon = [&](const wxString& name, const char* fallbackArtId) -> int {
+        wxString iconPath = wxString::Format("resources/icons/%s@16.png", name);
+        if (wxFileName::FileExists(iconPath)) {
+            wxImage image(iconPath, wxBITMAP_TYPE_PNG);
+            if (image.IsOk()) {
+                if (image.GetWidth() != 16 || image.GetHeight() != 16) {
+                    image = image.Rescale(16, 16, wxIMAGE_QUALITY_HIGH);
+                }
+                return tree_images_->Add(wxBitmap(image));
+            }
+        }
+        // Fallback to wxArtProvider
+        wxBitmap fallback = wxArtProvider::GetBitmap(fallbackArtId, wxART_OTHER, wxSize(16, 16));
+        if (fallback.IsOk()) {
+            return tree_images_->Add(fallback);
+        }
+        return -1;
+    };
+    
+    // =========================================================================
+    // COMPREHENSIVE ICON INDEX DEFINITIONS
+    // Must match GetIconIndexForNode() exactly
+    // =========================================================================
+    //
+    // 000-009: Application & Navigation
+    // 010-024: Database Objects (Tables, Views, Programmability)
+    // 025-029: Schema Organization
+    // 030-034: Security & Admin
+    // 035-044: Project Objects
+    // 045-049: Version Control
+    // 050-059: Maintenance & Operations
+    // 060-069: Infrastructure (Servers, Networks, Clusters)
+    // 070-079: Design & Planning (Whiteboards, Mindmaps, Drafts)
+    // 080-089: Design States (Implemented, Pending, Modified, etc)
+    // 090-099: Synchronization (Sync, Diff, Deploy, Migrate)
+    // 100-109: Collaboration (Shared, Team)
+    // 110-119: Security & Audit (Lock, History)
+    // 120:    Default/Unknown
+    //
+    // Total: 121 icon slots (0-120)
+    // =========================================================================
+    
+    // == Application & Navigation (0-9) ==
+    loadIcon("scratchrobin", wxART_HELP);             //  0 - root
+    loadIcon("connect", wxART_HARDDISK);              //  1 - connection
+    loadIcon("settings", wxART_HELP_SETTINGS);        //  2 - settings/config
+    loadIcon("stop", wxART_ERROR);                    //  3 - error
+    loadIcon("diagram", wxART_REPORT_VIEW);           //  4 - diagram/erd
+    loadIcon("bookmark", wxART_ADD_BOOKMARK);         //  5 - bookmark/favorite
+    loadIcon("tag", wxART_FIND);                      //  6 - tag/label
+    
+    // == Database Objects (10-24) ==
+    loadIcon("table", wxART_NORMAL_FILE);             // 10 - table
+    loadIcon("view", wxART_LIST_VIEW);                // 11 - view
+    loadIcon("column", wxART_HELP_BOOK);              // 12 - column
+    loadIcon("index", wxART_TIP);                     // 13 - index
+    loadIcon("sequence", wxART_ADD_BOOKMARK);         // 14 - sequence
+    loadIcon("trigger", wxART_WARNING);               // 15 - trigger
+    loadIcon("constraint", wxART_TICK_MARK);          // 16 - constraint
+    loadIcon("procedure", wxART_EXECUTABLE_FILE);     // 17 - procedure
+    loadIcon("function", wxART_EDIT);                 // 18 - function
+    loadIcon("package", wxART_NEW);                   // 19 - package
+    loadIcon("domain", wxART_CROSS_MARK);             // 20 - domain
+    loadIcon("collation", wxART_FIND);                // 21 - collation
+    loadIcon("tablespace", wxART_CDROM);              // 22 - tablespace
+    
+    // == Schema Organization (25-29) ==
+    loadIcon("database", wxART_REPORT_VIEW);          // 25 - database/catalog
+    loadIcon("catalog", wxART_GO_HOME);               // 26 - catalog
+    loadIcon("schema", wxART_FOLDER);                 // 27 - schema
+    loadIcon("folder", wxART_FOLDER_OPEN);            // 28 - folder/group
+    
+    // == Security & Admin (30-34) ==
+    loadIcon("users", wxART_NEW);                     // 30 - user/role
+    loadIcon("host", wxART_GO_TO_PARENT);             // 31 - host/server
+    loadIcon("permission", wxART_TICK_MARK);          // 32 - permission/grant
+    loadIcon("audit", wxART_FIND_AND_REPLACE);        // 33 - audit
+    loadIcon("history", wxART_GOTO_LAST);             // 34 - history
+    
+    // == Project Objects (35-44) ==
+    loadIcon("project", wxART_HELP_PAGE);             // 35 - project/workspace
+    loadIcon("sql", wxART_EDIT);                      // 36 - sql/script/query
+    loadIcon("note", wxART_HELP_PAGE);                // 37 - note/documentation
+    loadIcon("timeline", wxART_GOTO_FIRST);           // 38 - timeline/workflow
+    loadIcon("job", wxART_REFRESH);                   // 39 - job/scheduled task
+    
+    // == Version Control (45-49) ==
+    loadIcon("git", wxART_COPY);                      // 45 - git repository
+    loadIcon("branch", wxART_GO_DOWN);                // 46 - git branch
+    
+    // == Maintenance & Operations (50-54) ==
+    loadIcon("backup", wxART_FILE_SAVE);              // 50 - backup
+    loadIcon("restore", wxART_FILE_OPEN);             // 51 - restore
+    
+    // == Infrastructure (60-69) ==
+    loadIcon("server", wxART_HARDDISK);               // 60 - server
+    loadIcon("client", wxART_NORMAL_FILE);            // 61 - client
+    loadIcon("filespace", wxART_FOLDER_OPEN);         // 62 - filespace/storage
+    loadIcon("network", wxART_GO_TO_PARENT);          // 63 - network
+    loadIcon("cluster", wxART_CDROM);                 // 64 - cluster
+    loadIcon("instance", wxART_EXECUTABLE_FILE);      // 65 - database instance
+    loadIcon("replica", wxART_COPY);                  // 66 - replica/slave
+    loadIcon("shard", wxART_PASTE);                   // 67 - shard/partition
+    
+    // == Design & Planning (70-79) ==
+    loadIcon("whiteboard", wxART_HELP_BROWSER);       // 70 - whiteboard
+    loadIcon("mindmap", wxART_LIST_VIEW);              // 71 - mindmap
+    loadIcon("design", wxART_EDIT);                   // 72 - design
+    loadIcon("draft", wxART_HELP_SETTINGS);           // 73 - draft/concept
+    loadIcon("template", wxART_NEW_DIR);              // 74 - template
+    loadIcon("blueprint", wxART_REPORT_VIEW);         // 75 - blueprint/plan
+    loadIcon("concept", wxART_TIP);                   // 76 - concept/idea
+    loadIcon("plan", wxART_LIST_VIEW);                // 77 - implementation plan
+    
+    // == Design States (80-89) ==
+    loadIcon("implemented", wxART_TICK_MARK);         // 80 - implemented/deployed
+    loadIcon("pending", wxART_WARNING);               // 81 - pending/staged
+    loadIcon("modified", wxART_EDIT);                 // 82 - modified/changed
+    loadIcon("deleted", wxART_DELETE);                // 83 - deleted/removed
+    loadIcon("newitem", wxART_PLUS);                  // 84 - new item
+    
+    // == Synchronization (90-99) ==
+    loadIcon("sync", wxART_REFRESH);                  // 90 - sync
+    loadIcon("diff", wxART_FIND_AND_REPLACE);         // 91 - diff/compare
+    loadIcon("compare", wxART_FIND);                  // 92 - compare
+    loadIcon("migrate", wxART_GO_FORWARD);            // 93 - migrate
+    loadIcon("deploy", wxART_FILE_SAVE_AS);           // 94 - deploy
+    
+    // == Collaboration (100-109) ==
+    loadIcon("shared", wxART_COPY);                   // 100 - shared
+    loadIcon("collaboration", wxART_PASTE);           // 101 - collaboration
+    loadIcon("team", wxART_NEW);                      // 102 - team
+    
+    // == Security States (110-119) ==
+    loadIcon("lock", wxART_MISSING_IMAGE);            // 110 - locked/protected
+    loadIcon("unlock", wxART_MISSING_IMAGE);          // 111 - unlocked
+    
+    // == Default (120) ==
+    loadIcon("table", wxART_MISSING_IMAGE);           // 120 - default/unknown
+    
+    tree_->SetImageList(tree_images_);
+}
+
+int MainFrame::GetIconIndexForNode(const MetadataNode& node) const {
+    const std::string& kind = node.kind;
+    
+    // == Application & Navigation (0-9) ==
+    if (kind == "root" || kind == "app" || kind == "application") return 0;
+    if (kind == "connection" || kind == "connect") return 1;
+    if (kind == "settings" || kind == "config" || kind == "configuration" || 
+        kind == "preference" || kind == "option") return 2;
+    if (kind == "error" || kind == "warning" || kind == "alert" || 
+        kind == "critical" || kind == "fatal") return 3;
+    if (kind == "diagram" || kind == "erd" || kind == "chart" || 
+        kind == "visualization" || kind == "graph") return 4;
+    if (kind == "bookmark" || kind == "favorite" || kind == "star") return 5;
+    if (kind == "tag" || kind == "label" || kind == "marker") return 6;
+    
+    // == Database Objects (10-24) ==
+    if (kind == "table" || kind == "tbl") return 10;
+    if (kind == "view" || kind == "materialized_view" || kind == "mview" || 
+        kind == "virtual_table") return 11;
+    if (kind == "column" || kind == "field" || kind == "attribute" || 
+        kind == "property") return 12;
+    if (kind == "index" || kind == "key" || kind == "idx") return 13;
+    if (kind == "sequence" || kind == "seq" || kind == "generator" || 
+        kind == "auto_increment") return 14;
+    if (kind == "trigger" || kind == "event" || kind == "callback") return 15;
+    if (kind == "constraint" || kind == "check" || kind == "foreign_key" || 
+        kind == "primary_key" || kind == "unique" || kind == "fk" || 
+        kind == "pk" || kind == "uk" || kind == "not_null") return 16;
+    if (kind == "procedure" || kind == "proc" || kind == "stored_procedure" || 
+        kind == "sp") return 17;
+    if (kind == "function" || kind == "func" || kind == "udf" || 
+        kind == "routine") return 18;
+    if (kind == "package" || kind == "pkg" || kind == "module" || 
+        kind == "library") return 19;
+    if (kind == "domain" || kind == "type" || kind == "datatype" || 
+        kind == "enum" || kind == "data_type") return 20;
+    if (kind == "collation" || kind == "charset" || kind == "character_set" || 
+        kind == "encoding") return 21;
+    if (kind == "tablespace" || kind == "table_space" || kind == "ts" || 
+        kind == "filegroup") return 22;
+    
+    // == Schema Organization (25-29) ==
+    if (kind == "database" || kind == "db") return 25;
+    if (kind == "catalog") return 26;
+    if (kind == "schema" || kind == "namespace" || kind == "owner" || 
+        kind == "authorization") return 27;
+    if (kind == "folder" || kind == "group" || kind == "category" || 
+        kind == "directory" || kind == "path" || kind == "container") return 28;
+    
+    // == Security & Admin (30-34) ==
+    if (kind == "user" || kind == "account" || kind == "login" || 
+        kind == "principal") return 30;
+    if (kind == "role" || kind == "group_role" || kind == "security_group") return 30;
+    if (kind == "host" || kind == "server" || kind == "endpoint" || 
+        kind == "machine") return 31;
+    if (kind == "permission" || kind == "grant" || kind == "privilege" || 
+        kind == "access" || kind == "acl" || kind == "right") return 32;
+    if (kind == "audit" || kind == "log" || kind == "trace") return 33;
+    if (kind == "history" || kind == "archive" || kind == "snapshot") return 34;
+    
+    // == Project Objects (35-44) ==
+    if (kind == "project" || kind == "workspace") return 35;
+    if (kind == "sql" || kind == "script" || kind == "query" || 
+        kind == "statement" || kind == "command" || kind == "batch") return 36;
+    if (kind == "note" || kind == "comment" || kind == "documentation" || 
+        kind == "readme" || kind == "text" || kind == "memo") return 37;
+    if (kind == "timeline" || kind == "workflow" || kind == "pipeline" || 
+        kind == "stage" || kind == "phase" || kind == "process") return 38;
+    if (kind == "job" || kind == "task" || kind == "schedule" || 
+        kind == "cron" || kind == "scheduler" || kind == "batch_job") return 39;
+    
+    // == Version Control (45-49) ==
+    if (kind == "git" || kind == "repository" || kind == "repo" || 
+        kind == "vcs" || kind == "svn" || kind == "mercurial" || kind == "source") return 45;
+    if (kind == "branch" || kind == "tag" || kind == "commit" || 
+        kind == "revision" || kind == "version" || kind == "changeset") return 46;
+    
+    // == Maintenance & Operations (50-59) ==
+    if (kind == "backup" || kind == "dump" || kind == "export") return 50;
+    if (kind == "restore" || kind == "import" || kind == "load") return 51;
+    
+    // == Infrastructure (60-69) ==
+    if (kind == "server" || kind == "srv" || kind == "host_server") return 60;
+    if (kind == "client" || kind == "workstation" || kind == "terminal") return 61;
+    if (kind == "filespace" || kind == "storage" || kind == "volume" || 
+        kind == "disk" || kind == "mount" || kind == "filesystem") return 62;
+    if (kind == "network" || kind == "subnet" || kind == "vlan" || 
+        kind == "connection_pool") return 63;
+    if (kind == "cluster" || kind == "failover" || kind == "ha_group") return 64;
+    if (kind == "instance" || kind == "db_instance" || kind == "service") return 65;
+    if (kind == "replica" || kind == "slave" || kind == "standby" || 
+        kind == "mirror" || kind == "secondary") return 66;
+    if (kind == "shard" || kind == "partition" || kind == "slice" || 
+        kind == "segment") return 67;
+    
+    // == Design & Planning (70-79) ==
+    // For unmapped design elements - extracted from DB but not yet implemented
+    if (kind == "whiteboard" || kind == "canvas" || kind == "board") return 70;
+    if (kind == "mindmap" || kind == "concept_map" || kind == "brainstorm") return 71;
+    if (kind == "design" || kind == "model" || kind == "specification" || 
+        kind == "spec") return 72;
+    if (kind == "draft" || kind == "sketch" || kind == "wip" || 
+        kind == "work_in_progress") return 73;
+    if (kind == "template" || kind == "boilerplate" || kind == "pattern") return 74;
+    if (kind == "blueprint" || kind == "schema_design" || kind == "architecture") return 75;
+    if (kind == "concept" || kind == "idea" || kind == "proposal") return 76;
+    if (kind == "plan" || kind == "implementation_plan" || kind == "migration_plan" || 
+        kind == "deployment_plan") return 77;
+    
+    // == Design States (80-89) ==
+    // Track state of objects in design vs implementation
+    if (kind == "implemented" || kind == "deployed" || kind == "production" || 
+        kind == "live" || kind == "active") return 80;
+    if (kind == "pending" || kind == "staged" || kind == "ready" || 
+        kind == "approved") return 81;
+    if (kind == "modified" || kind == "changed" || kind == "edited" || 
+        kind == "altered" || kind == "updated") return 82;
+    if (kind == "deleted" || kind == "removed" || kind == "dropped" || 
+        kind == "obsolete" || kind == "deprecated") return 83;
+    if (kind == "newitem" || kind == "new" || kind == "added" || 
+        kind == "created" || kind == "fresh") return 84;
+    
+    // == Synchronization (90-99) ==
+    if (kind == "sync" || kind == "synchronize" || kind == "reconcile") return 90;
+    if (kind == "diff" || kind == "difference" || kind == "delta" || 
+        kind == "change_set") return 91;
+    if (kind == "compare" || kind == "comparison" || kind == "contrast") return 92;
+    if (kind == "migrate" || kind == "migration" || kind == "transform") return 93;
+    if (kind == "deploy" || kind == "publish" || kind == "release" || 
+        kind == "apply") return 94;
+    
+    // == Collaboration (100-109) ==
+    if (kind == "shared" || kind == "public" || kind == "common") return 100;
+    if (kind == "collaboration" || kind == "cooperation" || kind == "joint") return 101;
+    if (kind == "team" || kind == "group" || kind == "organization" || 
+        kind == "department") return 102;
+    
+    // == Security States (110-119) ==
+    if (kind == "lock" || kind == "locked" || kind == "protected" || 
+        kind == "secured" || kind == "frozen") return 110;
+    if (kind == "unlock" || kind == "unlocked" || kind == "open" || 
+        kind == "editable" || kind == "mutable") return 111;
+    
+    // == Default (120) ==
+    // Any unknown type gets the default icon
+    return 120;
+}
+
 void MainFrame::PopulateTree(const MetadataSnapshot& snapshot) {
     if (!tree_) {
         return;
@@ -314,9 +618,9 @@ void MainFrame::PopulateTree(const MetadataSnapshot& snapshot) {
     tree_->Freeze();
     tree_->DeleteAllItems();
 
-    wxTreeItemId root = tree_->AddRoot("ScratchRobin");
+    wxTreeItemId root = tree_->AddRoot("ScratchRobin", 0, 0);
     if (snapshot.roots.empty()) {
-        tree_->AppendItem(root, "No connections configured");
+        tree_->AppendItem(root, "No connections configured", 120, 120);
         tree_->Expand(root);
         tree_->Thaw();
         return;
@@ -324,7 +628,8 @@ void MainFrame::PopulateTree(const MetadataSnapshot& snapshot) {
 
     std::function<void(const wxTreeItemId&, const MetadataNode&)> addNode;
     addNode = [&](const wxTreeItemId& parent, const MetadataNode& node) {
-        wxTreeItemId id = tree_->AppendItem(parent, node.label, -1, -1,
+        int iconIndex = GetIconIndexForNode(node);
+        wxTreeItemId id = tree_->AppendItem(parent, node.label, iconIndex, iconIndex,
                                             new MetadataNodeData(&node));
         for (const auto& child : node.children) {
             if (HasMatch(child, filter)) {
@@ -342,7 +647,7 @@ void MainFrame::PopulateTree(const MetadataSnapshot& snapshot) {
     }
 
     if (!added_any) {
-        tree_->AppendItem(root, has_filter ? "No matches for filter" : "No metadata available");
+        tree_->AppendItem(root, has_filter ? "No matches for filter" : "No metadata available", 120, 120);
         tree_->Expand(root);
         tree_->Thaw();
         UpdateInspector(nullptr);

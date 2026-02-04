@@ -11,6 +11,7 @@
 #define SCRATCHROBIN_MAIN_FRAME_H
 
 #include <wx/frame.h>
+#include <wx/imaglist.h>
 #include <wx/notebook.h>
 #include <wx/treectrl.h>
 
@@ -83,6 +84,70 @@ private:
     void OnManageConnections(wxCommandEvent& event);
     void PopulateTree(const MetadataSnapshot& snapshot);
     void UpdateInspector(const MetadataNode* node);
+    
+    // =====================================================================
+    // COMPREHENSIVE TREE ICON SYSTEM
+    // =====================================================================
+    // Maps metadata node types to visual icons in the catalog browser.
+    // 
+    // ICON RANGES (121 slots total, 0-120):
+    //   000-009: Application & Navigation (root, connection, settings, error, 
+    //             diagram, bookmark, tag)
+    //   010-024: Database Objects (tables, views, columns, indexes, sequences,
+    //             triggers, constraints, procedures, functions, packages,
+    //             domains, collations, tablespaces)
+    //   025-029: Schema Organization (database, catalog, schema, folder)
+    //   030-034: Security & Admin (users, hosts, permissions, audit, history)
+    //   035-044: Project Objects (projects, SQL, notes, timelines, jobs)
+    //   045-049: Version Control (git repos, branches)
+    //   050-059: Maintenance & Operations (backup, restore)
+    //   060-069: Infrastructure (servers, clients, filespaces, networks,
+    //             clusters, instances, replicas, shards)
+    //   070-079: Design & Planning (whiteboards, mindmaps, designs, drafts,
+    //             templates, blueprints, concepts, plans)
+    //   080-089: Design States (implemented, pending, modified, deleted, new)
+    //   090-099: Synchronization (sync, diff, compare, migrate, deploy)
+    //   100-109: Collaboration (shared, collaboration, team)
+    //   110-119: Security States (locked, unlocked)
+    //   120:     Default/Unknown
+    //
+    // DESIGN WORKFLOW SUPPORT:
+    //   This icon system supports a complete design-to-implementation workflow:
+    //   1. Extract metadata from database -> icons 10-24
+    //   2. Create design drafts/changes -> icons 70-79 (design, draft, concept)
+    //   3. Track design state -> icons 80-89 (implemented, pending, modified)
+    //   4. Collaborate on designs -> icons 100-109 (shared, team)
+    //   5. Deploy changes -> icons 90-99 (sync, diff, deploy)
+    //
+    // ADDING NEW ICONS:
+    //   1. Create SVG in resources/icons/<name>.svg
+    //   2. Add to generate-pngs.sh ICONS array
+    //   3. Run: cd resources/icons && ./generate-pngs.sh
+    //   4. Add loadIcon() in InitializeTreeIcons() with next available index
+    //   5. Add kind-to-index mapping in GetIconIndexForNode()
+    //   6. Rebuild
+    //
+    // SUPPORTED KIND VALUES (100+ types):
+    //   Database:    table, view, column, index, sequence, trigger, constraint,
+    //                procedure, function, package, domain, collation, tablespace
+    //   Schema:      database, catalog, schema, folder, group, category
+    //   Security:    user, role, host, server, permission, grant, audit, history
+    //   Project:     project, sql, script, query, note, timeline, workflow,
+    //                job, task, schedule
+    //   VCS:         git, repository, branch, tag, commit
+    //   Infrastructure: server, client, filespace, network, cluster, instance,
+    //                   replica, shard
+    //   Design:      whiteboard, mindmap, design, draft, template, blueprint,
+    //                concept, plan
+    //   Design State: implemented, pending, modified, deleted, new
+    //   Sync:        sync, diff, compare, migrate, deploy
+    //   Collaboration: shared, collaboration, team
+    //   Security:    lock, unlock
+    //   Ops:         backup, restore
+    //   System:      root, connection, settings, error, diagram, bookmark, tag
+    // =====================================================================
+    void InitializeTreeIcons();
+    int GetIconIndexForNode(const MetadataNode& node) const;
     const MetadataNode* GetSelectedNode() const;
     bool HasMatch(const MetadataNode& node, const std::string& filter) const;
     std::string BuildSeedSql(const MetadataNode* node) const;
@@ -95,6 +160,7 @@ private:
     const AppConfig* app_config_ = nullptr;
     ApplicationPreferences preferences_;
     wxTreeCtrl* tree_ = nullptr;
+    wxImageList* tree_images_ = nullptr;
     wxTextCtrl* filter_ctrl_ = nullptr;
     wxButton* filter_clear_button_ = nullptr;
     wxNotebook* inspector_notebook_ = nullptr;
