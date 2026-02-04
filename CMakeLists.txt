@@ -97,6 +97,7 @@ set(SCRATCHROBIN_CORE_SOURCES
     src/core/session_state.cpp
     src/core/project.cpp
     src/core/testing_framework.cpp
+    src/core/docker_config.cpp
 )
 
 add_library(scratchrobin_core ${SCRATCHROBIN_CORE_SOURCES})

@@ -64,6 +64,14 @@ ScratchRobin is a comprehensive database design, modeling, and deployment tool t
 - **[DATABASE_GIT_PROTOCOL.md](DATABASE_GIT_PROTOCOL.md)** - ScratchBird Git protocol details
 - **[GIT_WORKFLOW_EXAMPLES.md](GIT_WORKFLOW_EXAMPLES.md)** - Practical Git workflow examples
 
+### Docker Deployment
+- **[DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)** - Docker container deployment and management
+  - Dockerfile configuration
+  - Docker Compose setup
+  - ScratchRobin Docker Manager
+  - Environment variables reference
+  - Backup and restore procedures
+
 ### Additional Features
 - **[ADDITIONAL_FEATURES.md](ADDITIONAL_FEATURES.md)** - Extended features including:
   - OLAP Cube Design for data warehousing
