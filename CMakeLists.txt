@@ -12,6 +12,17 @@ option(SCRATCHROBIN_USE_LIBPQ "Enable PostgreSQL (libpq) backend support" ON)
 option(SCRATCHROBIN_USE_MYSQL "Enable MySQL/MariaDB backend support" ON)
 option(SCRATCHROBIN_USE_FIREBIRD "Enable Firebird backend support" ON)
 
+# Sanitizer and analysis options
+option(SCRATCHROBIN_ENABLE_ASAN "Enable AddressSanitizer" OFF)
+option(SCRATCHROBIN_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+option(SCRATCHROBIN_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+option(SCRATCHROBIN_ENABLE_MSAN "Enable MemorySanitizer" OFF)
+option(SCRATCHROBIN_ENABLE_COVERAGE "Enable code coverage (gcov)" OFF)
+option(SCRATCHROBIN_ENABLE_CLANG_TIDY "Enable clang-tidy checks" OFF)
+option(SCRATCHROBIN_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
+option(SCRATCHROBIN_ENABLE_IWYU "Enable include-what-you-use" OFF)
+option(SCRATCHROBIN_ENABLE_CPPCHECK "Enable cppcheck" OFF)
+
 if(SCRATCHROBIN_BUILD_UI)
     set(SCRATCHROBIN_WX_COMPONENTS core base html
         CACHE STRING "wxWidgets components to use")
@@ -86,6 +97,144 @@ set(SCRATCHROBIN_CORE_SOURCES
 
 add_library(scratchrobin_core ${SCRATCHROBIN_CORE_SOURCES})
 target_include_directories(scratchrobin_core PUBLIC src)
+
+# =============================================================================
+# Compiler Warnings Configuration
+# =============================================================================
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    set(SCRATCHROBIN_WARNING_FLAGS
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wshadow
+        -Wnon-virtual-dtor
+        -Wold-style-cast
+        -Wcast-align
+        -Wunused
+        -Woverloaded-virtual
+        -Wconversion
+        -Wsign-conversion
+        -Wnull-dereference
+        -Wdouble-promotion
+        -Wformat=2
+        -Wimplicit-fallthrough
+        -Wmissing-declarations
+        -Wmissing-field-initializers
+        -Wunreachable-code
+        -Wdocumentation
+    )
+    
+    # Add warnings as errors if requested
+    if(SCRATCHROBIN_WARNINGS_AS_ERRORS)
+        list(APPEND SCRATCHROBIN_WARNING_FLAGS -Werror)
+    endif()
+    
+    target_compile_options(scratchrobin_core PRIVATE ${SCRATCHROBIN_WARNING_FLAGS})
+    
+    if(SCRATCHROBIN_BUILD_UI)
+        target_compile_options(scratchrobin PRIVATE ${SCRATCHROBIN_WARNING_FLAGS})
+    endif()
+endif()
+
+# =============================================================================
+# Sanitizer Configuration
+# =============================================================================
+if(SCRATCHROBIN_ENABLE_ASAN)
+    message(STATUS "AddressSanitizer enabled")
+    target_compile_options(scratchrobin_core PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+    target_link_options(scratchrobin_core PRIVATE -fsanitize=address)
+    if(SCRATCHROBIN_BUILD_UI)
+        target_compile_options(scratchrobin PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+        target_link_options(scratchrobin PRIVATE -fsanitize=address)
+    endif()
+endif()
+
+if(SCRATCHROBIN_ENABLE_UBSAN)
+    message(STATUS "UndefinedBehaviorSanitizer enabled")
+    target_compile_options(scratchrobin_core PRIVATE -fsanitize=undefined -fno-omit-frame-pointer)
+    target_link_options(scratchrobin_core PRIVATE -fsanitize=undefined)
+    if(SCRATCHROBIN_BUILD_UI)
+        target_compile_options(scratchrobin PRIVATE -fsanitize=undefined -fno-omit-frame-pointer)
+        target_link_options(scratchrobin PRIVATE -fsanitize=undefined)
+    endif()
+endif()
+
+if(SCRATCHROBIN_ENABLE_TSAN)
+    message(STATUS "ThreadSanitizer enabled")
+    target_compile_options(scratchrobin_core PRIVATE -fsanitize=thread)
+    target_link_options(scratchrobin_core PRIVATE -fsanitize=thread)
+    if(SCRATCHROBIN_BUILD_UI)
+        target_compile_options(scratchrobin PRIVATE -fsanitize=thread)
+        target_link_options(scratchrobin PRIVATE -fsanitize=thread)
+    endif()
+endif()
+
+if(SCRATCHROBIN_ENABLE_MSAN)
+    message(STATUS "MemorySanitizer enabled")
+    target_compile_options(scratchrobin_core PRIVATE -fsanitize=memory -fno-omit-frame-pointer)
+    target_link_options(scratchrobin_core PRIVATE -fsanitize=memory)
+    if(SCRATCHROBIN_BUILD_UI)
+        target_compile_options(scratchrobin PRIVATE -fsanitize=memory -fno-omit-frame-pointer)
+        target_link_options(scratchrobin PRIVATE -fsanitize=memory)
+    endif()
+endif()
+
+# =============================================================================
+# Code Coverage Configuration
+# =============================================================================
+if(SCRATCHROBIN_ENABLE_COVERAGE)
+    message(STATUS "Code coverage enabled")
+    target_compile_options(scratchrobin_core PRIVATE --coverage -O0)
+    target_link_options(scratchrobin_core PRIVATE --coverage)
+    if(SCRATCHROBIN_BUILD_UI)
+        target_compile_options(scratchrobin PRIVATE --coverage -O0)
+        target_link_options(scratchrobin PRIVATE --coverage)
+    endif()
+endif()
+
+# =============================================================================
+# Static Analysis Tools
+# =============================================================================
+if(SCRATCHROBIN_ENABLE_CLANG_TIDY)
+    find_program(CLANG_TIDY_EXE NAMES clang-tidy)
+    if(CLANG_TIDY_EXE)
+        message(STATUS "clang-tidy enabled: ${CLANG_TIDY_EXE}")
+        set_target_properties(scratchrobin_core PROPERTIES
+            CXX_CLANG_TIDY "${CLANG_TIDY_EXE}"
+        )
+        if(SCRATCHROBIN_BUILD_UI)
+            set_target_properties(scratchrobin PROPERTIES
+                CXX_CLANG_TIDY "${CLANG_TIDY_EXE}"
+            )
+        endif()
+    else()
+        message(WARNING "clang-tidy requested but not found")
+    endif()
+endif()
+
+if(SCRATCHROBIN_ENABLE_IWYU)
+    find_program(IWYU_EXE NAMES include-what-you-use iwyu)
+    if(IWYU_EXE)
+        message(STATUS "include-what-you-use enabled: ${IWYU_EXE}")
+        set_target_properties(scratchrobin_core PROPERTIES
+            CXX_INCLUDE_WHAT_YOU_USE "${IWYU_EXE}"
+        )
+    else()
+        message(WARNING "include-what-you-use requested but not found")
+    endif()
+endif()
+
+if(SCRATCHROBIN_ENABLE_CPPCHECK)
+    find_program(CPPCHECK_EXE NAMES cppcheck)
+    if(CPPCHECK_EXE)
+        message(STATUS "cppcheck enabled: ${CPPCHECK_EXE}")
+        set_target_properties(scratchrobin_core PROPERTIES
+            CXX_CPPCHECK "${CPPCHECK_EXE};--enable=warning,performance,portability,style;--std=c++17"
+        )
+    else()
+        message(WARNING "cppcheck requested but not found")
+    endif()
+endif()
 
 if(SCRATCHROBIN_BUILD_UI)
     add_executable(scratchrobin
@@ -165,6 +314,11 @@ if(SCRATCHROBIN_BUILD_UI)
         src/ui/icon_bar.cpp
         src/ui/window_manager.cpp
         src/ui/result_grid_table.cpp
+        # Phase 7: Beta Placeholder UIs
+        src/ui/cluster_manager_frame.cpp
+        src/ui/replication_manager_frame.cpp
+        src/ui/etl_manager_frame.cpp
+        src/ui/git_integration_frame.cpp
     )
 
     target_include_directories(scratchrobin PRIVATE src)
@@ -270,15 +424,72 @@ if(SCRATCHROBIN_USE_SCRATCHBIRD)
     endif()
 endif()
 
+# =============================================================================
+# Testing Configuration
+# =============================================================================
+
 enable_testing()
 
+# Find Google Test
+find_package(GTest QUIET)
+if(NOT GTest_FOUND)
+    # Try to fetch it if not found
+    include(FetchContent)
+    FetchContent_Declare(
+        googletest
+        URL https://github.com/google/googletest/archive/refs/tags/release-1.12.1.zip
+    )
+    FetchContent_MakeAvailable(googletest)
+endif()
+
+# Test executable
 add_executable(scratchrobin_tests
     tests/test_main.cpp
+    # Unit tests
+    tests/unit/test_metadata_model.cpp
+    tests/unit/test_statement_splitter.cpp
+    tests/unit/test_value_formatter.cpp
+    tests/unit/test_result_exporter.cpp
+    tests/unit/test_config.cpp
+    tests/unit/test_credentials.cpp
+    tests/unit/test_simple_json.cpp
+    tests/unit/test_error_handler.cpp
+    tests/unit/test_capability_detector.cpp
+    # Core tests
+    tests/unit/test_job_queue.cpp
+    tests/unit/test_session_state.cpp
+    # Diagram tests
+    tests/unit/test_diagram_model.cpp
+    tests/unit/test_layout_engine.cpp
+    tests/unit/test_forward_engineer.cpp
+    # Integration tests (environment-gated)
+    tests/integration/test_postgres_backend.cpp
+    tests/integration/test_mysql_backend.cpp
+    tests/integration/test_firebird_backend.cpp
 )
 
-target_link_libraries(scratchrobin_tests PRIVATE scratchrobin_core)
+target_link_libraries(scratchrobin_tests PRIVATE 
+    scratchrobin_core
+    GTest::gtest
+    GTest::gmock
+)
+
 target_include_directories(scratchrobin_tests PRIVATE src)
 target_compile_definitions(scratchrobin_tests PRIVATE
-    SCRATCHROBIN_TEST_SOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\")
+    SCRATCHROBIN_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
 
-add_test(NAME scratchrobin_tests COMMAND scratchrobin_tests)
+# Register tests with CTest
+include(GoogleTest)
+gtest_discover_tests(scratchrobin_tests)
+
+# Coverage target
+if(SCRATCHROBIN_ENABLE_COVERAGE)
+    add_custom_target(coverage
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/coverage
+        COMMAND gcovr -r ${CMAKE_SOURCE_DIR} --html --html-details 
+                -o ${CMAKE_BINARY_DIR}/coverage/index.html
+        DEPENDS scratchrobin_tests
+        COMMENT "Generating coverage report"
+    )
+endif()
