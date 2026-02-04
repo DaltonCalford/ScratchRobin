@@ -17,10 +17,15 @@
 #include "menu_builder.h"
 #include "menu_ids.h"
 #include "monitoring_frame.h"
+#include "package_manager_frame.h"
+#include "procedure_manager_frame.h"
 #include "schema_manager_frame.h"
+#include "sequence_manager_frame.h"
 #include "sql_editor_frame.h"
 #include "table_designer_frame.h"
+#include "trigger_manager_frame.h"
 #include "users_roles_frame.h"
+#include "view_manager_frame.h"
 #include "window_manager.h"
 
 #include <algorithm>
@@ -82,6 +87,11 @@ wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
     EVT_MENU(ID_MENU_SCHEMA_MANAGER, MainFrame::OnOpenSchemaManager)
     EVT_MENU(ID_MENU_TABLE_DESIGNER, MainFrame::OnOpenTableDesigner)
     EVT_MENU(ID_MENU_INDEX_DESIGNER, MainFrame::OnOpenIndexDesigner)
+    EVT_MENU(ID_MENU_SEQUENCE_MANAGER, MainFrame::OnOpenSequenceManager)
+    EVT_MENU(ID_MENU_VIEW_MANAGER, MainFrame::OnOpenViewManager)
+    EVT_MENU(ID_MENU_TRIGGER_MANAGER, MainFrame::OnOpenTriggerManager)
+    EVT_MENU(ID_MENU_PROCEDURE_MANAGER, MainFrame::OnOpenProcedureManager)
+    EVT_MENU(ID_MENU_PACKAGE_MANAGER, MainFrame::OnOpenPackageManager)
     EVT_MENU(ID_CONN_MANAGE, MainFrame::OnManageConnections)
     EVT_MENU(wxID_EXIT, MainFrame::OnQuit)
     EVT_CLOSE(MainFrame::OnClose)
@@ -521,6 +531,31 @@ void MainFrame::OnOpenTableDesigner(wxCommandEvent&) {
 
 void MainFrame::OnOpenIndexDesigner(wxCommandEvent&) {
     auto* frame = new IndexDesignerFrame(window_manager_, connection_manager_, connections_, app_config_);
+    frame->Show(true);
+}
+
+void MainFrame::OnOpenSequenceManager(wxCommandEvent&) {
+    auto* frame = new SequenceManagerFrame(window_manager_, connection_manager_, connections_, app_config_);
+    frame->Show(true);
+}
+
+void MainFrame::OnOpenViewManager(wxCommandEvent&) {
+    auto* frame = new ViewManagerFrame(window_manager_, connection_manager_, connections_, app_config_);
+    frame->Show(true);
+}
+
+void MainFrame::OnOpenTriggerManager(wxCommandEvent&) {
+    auto* frame = new TriggerManagerFrame(window_manager_, connection_manager_, connections_, app_config_);
+    frame->Show(true);
+}
+
+void MainFrame::OnOpenProcedureManager(wxCommandEvent&) {
+    auto* frame = new ProcedureManagerFrame(window_manager_, connection_manager_, connections_, app_config_);
+    frame->Show(true);
+}
+
+void MainFrame::OnOpenPackageManager(wxCommandEvent&) {
+    auto* frame = new PackageManagerFrame(window_manager_, connection_manager_, connections_, app_config_);
     frame->Show(true);
 }
 

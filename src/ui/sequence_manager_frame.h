@@ -1,0 +1,112 @@
+/*
+ * ScratchRobin
+ * Copyright (c) 2025-2026 Dalton Calford
+ *
+ * Licensed under the Initial Developer's Public License Version 1.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at:
+ * https://www.firebirdsql.org/en/initial-developer-s-public-license-version-1-0/
+ */
+#ifndef SCRATCHROBIN_SEQUENCE_MANAGER_FRAME_H
+#define SCRATCHROBIN_SEQUENCE_MANAGER_FRAME_H
+
+#include <string>
+#include <vector>
+
+#include <wx/frame.h>
+#include <wx/grid.h>
+
+#include "core/connection_manager.h"
+#include "core/query_types.h"
+
+class wxChoice;
+class wxGrid;
+class wxStaticText;
+class wxTextCtrl;
+class wxButton;
+
+namespace scratchrobin {
+
+class ResultGridTable;
+class WindowManager;
+struct AppConfig;
+
+class SequenceManagerFrame : public wxFrame {
+public:
+    SequenceManagerFrame(WindowManager* windowManager,
+                         ConnectionManager* connectionManager,
+                         const std::vector<ConnectionProfile>* connections,
+                         const AppConfig* appConfig);
+
+private:
+    void BuildMenu();
+    void BuildLayout();
+    void PopulateConnections();
+    const ConnectionProfile* GetSelectedProfile() const;
+    bool EnsureConnected(const ConnectionProfile& profile);
+    bool IsNativeProfile(const ConnectionProfile& profile) const;
+    void UpdateControls();
+    void UpdateStatus(const wxString& status);
+    void SetMessage(const std::string& message);
+
+    void RefreshSequences();
+    void RefreshSequenceDetails(const std::string& sequence_name);
+    void FetchSequenceValues(const std::string& sequence_name);
+    void RunCommand(const std::string& sql, const std::string& success_message);
+
+    std::string GetSelectedSequenceName() const;
+    int FindColumnIndex(const QueryResult& result, const std::vector<std::string>& names) const;
+    std::string ExtractValue(const QueryResult& result, int row, const std::vector<std::string>& names) const;
+    std::string FormatDetails(const QueryResult& result) const;
+
+    void OnConnect(wxCommandEvent& event);
+    void OnDisconnect(wxCommandEvent& event);
+    void OnRefresh(wxCommandEvent& event);
+    void OnSequenceSelected(wxGridEvent& event);
+    void OnCreate(wxCommandEvent& event);
+    void OnEdit(wxCommandEvent& event);
+    void OnDrop(wxCommandEvent& event);
+    void OnNewSqlEditor(wxCommandEvent& event);
+    void OnNewDiagram(wxCommandEvent& event);
+    void OnOpenMonitoring(wxCommandEvent& event);
+    void OnOpenUsersRoles(wxCommandEvent& event);
+    void OnOpenJobScheduler(wxCommandEvent& event);
+    void OnOpenDomainManager(wxCommandEvent& event);
+    void OnOpenSchemaManager(wxCommandEvent& event);
+    void OnOpenTableDesigner(wxCommandEvent& event);
+    void OnOpenIndexDesigner(wxCommandEvent& event);
+    void OnClose(wxCloseEvent& event);
+
+    WindowManager* window_manager_ = nullptr;
+    ConnectionManager* connection_manager_ = nullptr;
+    const std::vector<ConnectionProfile>* connections_ = nullptr;
+    const AppConfig* app_config_ = nullptr;
+
+    wxChoice* connection_choice_ = nullptr;
+    wxButton* connect_button_ = nullptr;
+    wxButton* disconnect_button_ = nullptr;
+    wxButton* refresh_button_ = nullptr;
+    wxButton* create_button_ = nullptr;
+    wxButton* edit_button_ = nullptr;
+    wxButton* drop_button_ = nullptr;
+    wxStaticText* status_text_ = nullptr;
+    wxTextCtrl* message_text_ = nullptr;
+    wxTextCtrl* details_text_ = nullptr;
+    wxStaticText* values_label_ = nullptr;
+
+    wxGrid* sequences_grid_ = nullptr;
+    ResultGridTable* sequences_table_ = nullptr;
+
+    int active_profile_index_ = -1;
+    int pending_queries_ = 0;
+    QueryResult sequences_result_;
+    QueryResult sequence_details_result_;
+    QueryResult sequence_values_result_;
+    std::string selected_sequence_;
+
+    wxDECLARE_EVENT_TABLE();
+};
+
+} // namespace scratchrobin
+
+#endif // SCRATCHROBIN_SEQUENCE_MANAGER_FRAME_H

@@ -109,6 +109,12 @@ wxMenu* BuildObjectsMenu() {
     menu->Append(ID_MENU_TABLE_DESIGNER, "Tables");
     menu->Append(ID_MENU_INDEX_DESIGNER, "Indexes");
     menu->Append(ID_MENU_DOMAIN_MANAGER, "Domains");
+    menu->Append(ID_MENU_SEQUENCE_MANAGER, "Sequences");
+    menu->Append(ID_MENU_VIEW_MANAGER, "Views");
+    menu->Append(ID_MENU_TRIGGER_MANAGER, "Triggers");
+    menu->Append(ID_MENU_PROCEDURE_MANAGER, "Procedures & Functions");
+    menu->Append(ID_MENU_PACKAGE_MANAGER, "Packages");
+    menu->AppendSeparator();
     menu->Append(ID_MENU_JOB_SCHEDULER, "Jobs");
     menu->Append(ID_MENU_USERS_ROLES, "Users & Roles");
     return menu;

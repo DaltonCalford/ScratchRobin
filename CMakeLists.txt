@@ -107,6 +107,16 @@ if(SCRATCHROBIN_BUILD_UI)
         src/ui/domain_editor_dialog.cpp
         src/ui/domain_manager_frame.cpp
         src/ui/error_dialog.cpp
+        src/ui/sequence_manager_frame.cpp
+        src/ui/sequence_editor_dialog.cpp
+        src/ui/view_manager_frame.cpp
+        src/ui/view_editor_dialog.cpp
+        src/ui/trigger_manager_frame.cpp
+        src/ui/trigger_editor_dialog.cpp
+        src/ui/procedure_manager_frame.cpp
+        src/ui/routine_editor_dialog.cpp
+        src/ui/package_manager_frame.cpp
+        src/ui/package_editor_dialog.cpp
         src/ui/index_designer_frame.cpp
         src/ui/index_editor_dialog.cpp
         src/ui/job_editor_dialog.cpp

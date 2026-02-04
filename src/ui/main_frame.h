@@ -55,6 +55,11 @@ private:
     void OnOpenSchemaManager(wxCommandEvent& event);
     void OnOpenTableDesigner(wxCommandEvent& event);
     void OnOpenIndexDesigner(wxCommandEvent& event);
+    void OnOpenSequenceManager(wxCommandEvent& event);
+    void OnOpenViewManager(wxCommandEvent& event);
+    void OnOpenTriggerManager(wxCommandEvent& event);
+    void OnOpenProcedureManager(wxCommandEvent& event);
+    void OnOpenPackageManager(wxCommandEvent& event);
     void OnTreeCopyName(wxCommandEvent& event);
     void OnTreeCopyDdl(wxCommandEvent& event);
     void OnTreeShowDependencies(wxCommandEvent& event);
