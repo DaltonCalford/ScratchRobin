@@ -96,6 +96,7 @@ set(SCRATCHROBIN_CORE_SOURCES
     src/core/firebird_backend.cpp
     src/core/session_state.cpp
     src/core/project.cpp
+    src/core/testing_framework.cpp
 )
 
 add_library(scratchrobin_core ${SCRATCHROBIN_CORE_SOURCES})
