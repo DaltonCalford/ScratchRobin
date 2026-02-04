@@ -16,7 +16,7 @@
 #include <sstream>
 
 #ifdef SCRATCHROBIN_USE_SCRATCHBIRD
-#include "scratchbird/client/network_client.h"
+#include "scratchbird/client/connection.h"
 #include "scratchbird/core/error_context.h"
 #include "scratchbird/network/socket_types.h"
 #include "scratchbird/protocol/sbwp_protocol.h"
@@ -64,31 +64,13 @@ std::string WireTypeToString(scratchbird::protocol::WireType type) {
         case WireType::INT64: return "INT64";
         case WireType::FLOAT32: return "FLOAT32";
         case WireType::FLOAT64: return "FLOAT64";
-        case WireType::DECIMAL: return "DECIMAL";
         case WireType::VARCHAR: return "VARCHAR";
-        case WireType::CHAR: return "CHAR";
+        // TEXT type not available, VARCHAR used instead
         case WireType::BYTEA: return "BYTEA";
         case WireType::DATE: return "DATE";
         case WireType::TIME: return "TIME";
         case WireType::TIMESTAMP: return "TIMESTAMP";
-        case WireType::TIMESTAMPTZ: return "TIMESTAMPTZ";
-        case WireType::INTERVAL: return "INTERVAL";
         case WireType::UUID: return "UUID";
-        case WireType::JSON: return "JSON";
-        case WireType::JSONB: return "JSONB";
-        case WireType::ARRAY: return "ARRAY";
-        case WireType::COMPOSITE: return "COMPOSITE";
-        case WireType::GEOMETRY: return "GEOMETRY";
-        case WireType::VECTOR: return "VECTOR";
-        case WireType::MONEY: return "MONEY";
-        case WireType::XML: return "XML";
-        case WireType::INET: return "INET";
-        case WireType::CIDR: return "CIDR";
-        case WireType::MACADDR: return "MACADDR";
-        case WireType::TSVECTOR: return "TSVECTOR";
-        case WireType::TSQUERY: return "TSQUERY";
-        case WireType::RANGE: return "RANGE";
-        case WireType::UNKNOWN: return "UNKNOWN";
     }
     return "UNKNOWN";
 }
@@ -103,112 +85,69 @@ std::string BytesToHex(const std::vector<uint8_t>& data) {
     return out.str();
 }
 
-std::string FormatColumnValue(scratchbird::protocol::WireType type,
-                              const scratchbird::protocol::ProtocolCodec::ColumnValue& value) {
-    if (value.is_null) {
+std::string FormatColumnValue(scratchbird::client::ResultSet* rs, int columnIndex,
+                              scratchbird::protocol::WireType type) {
+    if (rs->isNull(columnIndex)) {
         return "NULL";
     }
 
-    auto as_string = [&value]() {
-        return std::string(value.data.begin(), value.data.end());
-    };
-
     switch (type) {
-        case scratchbird::protocol::WireType::BOOLEAN: {
-            if (value.data.empty()) return "false";
-            return value.data[0] ? "true" : "false";
-        }
-        case scratchbird::protocol::WireType::INT16: {
-            if (value.data.size() < sizeof(int16_t)) return "<int16>";
-            int16_t v = 0;
-            std::memcpy(&v, value.data.data(), sizeof(int16_t));
-            return std::to_string(v);
-        }
+        case scratchbird::protocol::WireType::BOOLEAN:
+            return rs->getBool(columnIndex) ? "true" : "false";
+        case scratchbird::protocol::WireType::INT16:
+            return std::to_string(rs->getInt16(columnIndex));
         case scratchbird::protocol::WireType::INT32:
-        case scratchbird::protocol::WireType::DATE: {
-            if (value.data.size() < sizeof(int32_t)) return "<int32>";
-            int32_t v = 0;
-            std::memcpy(&v, value.data.data(), sizeof(int32_t));
-            return std::to_string(v);
-        }
+            return std::to_string(rs->getInt32(columnIndex));
         case scratchbird::protocol::WireType::INT64:
-        case scratchbird::protocol::WireType::TIMESTAMP:
-        case scratchbird::protocol::WireType::TIMESTAMPTZ:
-        case scratchbird::protocol::WireType::TIME:
-        case scratchbird::protocol::WireType::MONEY: {
-            if (value.data.size() < sizeof(int64_t)) return "<int64>";
-            int64_t v = 0;
-            std::memcpy(&v, value.data.data(), sizeof(int64_t));
-            return std::to_string(v);
-        }
-        case scratchbird::protocol::WireType::FLOAT32: {
-            if (value.data.size() < sizeof(float)) return "<float>";
-            float v = 0.0f;
-            std::memcpy(&v, value.data.data(), sizeof(float));
-            return std::to_string(v);
-        }
-        case scratchbird::protocol::WireType::FLOAT64: {
-            if (value.data.size() < sizeof(double)) return "<double>";
-            double v = 0.0;
-            std::memcpy(&v, value.data.data(), sizeof(double));
-            return std::to_string(v);
-        }
-        case scratchbird::protocol::WireType::DECIMAL:
+            return std::to_string(rs->getInt64(columnIndex));
+        case scratchbird::protocol::WireType::FLOAT32:
+            return std::to_string(rs->getFloat(columnIndex));
+        case scratchbird::protocol::WireType::FLOAT64:
+            return std::to_string(rs->getDouble(columnIndex));
         case scratchbird::protocol::WireType::VARCHAR:
-        case scratchbird::protocol::WireType::CHAR:
-        case scratchbird::protocol::WireType::JSON:
-        case scratchbird::protocol::WireType::XML: {
-            return as_string();
+            return rs->getString(columnIndex);
+        case scratchbird::protocol::WireType::BYTEA: {
+            auto data = rs->getBytes(columnIndex);
+            return BytesToHex(data);
         }
-        case scratchbird::protocol::WireType::BYTEA:
-        case scratchbird::protocol::WireType::UUID:
-        case scratchbird::protocol::WireType::JSONB:
-        case scratchbird::protocol::WireType::ARRAY:
-        case scratchbird::protocol::WireType::COMPOSITE:
-        case scratchbird::protocol::WireType::GEOMETRY:
-        case scratchbird::protocol::WireType::VECTOR:
-        case scratchbird::protocol::WireType::INET:
-        case scratchbird::protocol::WireType::CIDR:
-        case scratchbird::protocol::WireType::MACADDR:
-        case scratchbird::protocol::WireType::TSVECTOR:
-        case scratchbird::protocol::WireType::TSQUERY:
-        case scratchbird::protocol::WireType::RANGE:
-        case scratchbird::protocol::WireType::INTERVAL:
-        case scratchbird::protocol::WireType::UNKNOWN:
+        case scratchbird::protocol::WireType::DATE:
+            return std::to_string(rs->getDate(columnIndex));
+        case scratchbird::protocol::WireType::TIME:
+            return std::to_string(rs->getTime(columnIndex));
+        case scratchbird::protocol::WireType::TIMESTAMP:
+            return std::to_string(rs->getTimestamp(columnIndex));
+        case scratchbird::protocol::WireType::UUID: {
+            return rs->getUUID(columnIndex);
+        }
         case scratchbird::protocol::WireType::NULL_TYPE:
-            break;
+            return "NULL";
     }
-
-    if (value.data.empty()) return "<empty>";
-    return BytesToHex(value.data);
+    return "<unknown>";
 }
 
 class IpcBackend : public ConnectionBackend {
 public:
     bool Connect(const BackendConfig& config, std::string* error) override {
-        scratchbird::client::NetworkClientConfig net_config;
+        scratchbird::client::ConnectionConfig conn_config;
         
         // Resolve socket path
         std::string socket_path = ResolveSocketPath(config.host, config.database);
-        net_config.host = socket_path;
-        net_config.port = 0;  // IPC doesn't use ports
-        net_config.database = config.database;
-        net_config.username = config.username;
-        net_config.password = config.password;
-        net_config.application_name = config.applicationName.empty() 
-            ? "scratchrobin-ipc" : config.applicationName;
-        net_config.connect_timeout_ms = static_cast<uint32_t>(config.connectTimeoutMs);
-        net_config.read_timeout_ms = static_cast<uint32_t>(config.readTimeoutMs);
-        net_config.write_timeout_ms = static_cast<uint32_t>(config.writeTimeoutMs);
+        conn_config.database_name = config.database;
+        conn_config.username = config.username;
+        conn_config.password = config.password;
+        // Application name not in new API
+        conn_config.connect_timeout_ms = static_cast<uint32_t>(config.connectTimeoutMs);
+        conn_config.read_timeout_ms = static_cast<uint32_t>(config.readTimeoutMs);
+        conn_config.write_timeout_ms = static_cast<uint32_t>(config.writeTimeoutMs);
         
         // IPC uses REQUIRE by default (still uses TLS over Unix sockets if available)
-        net_config.ssl_mode = scratchbird::network::SSLMode::PREFER;
+        // SSL mode not in new ConnectionConfig API
         
         scratchbird::core::ErrorContext ctx;
-        auto status = client_.connect(net_config, &ctx);
+        auto status = client_.connect(conn_config, &ctx);
         if (status != scratchbird::core::Status::OK) {
             if (error) {
-                *error = ctx.message.empty() ? client_.lastError() : ctx.message;
+                *error = ctx.message.empty() ? client_.getLastError() : ctx.message;
                 // Add helpful context for common IPC errors
                 if (error->find("No such file") != std::string::npos ||
                     error->find("cannot connect") != std::string::npos) {
@@ -264,40 +203,41 @@ public:
             return false;
         }
 
-        scratchbird::client::NetworkResultSet results;
+        scratchbird::client::ResultSet rs;
         scratchbird::core::ErrorContext ctx;
-        auto status = client_.executeQuery(sql, results, &ctx);
+        auto status = client_.executeQuery(sql, &rs, &ctx);
         if (status != scratchbird::core::Status::OK) {
             if (error) {
-                *error = ctx.message.empty() ? client_.lastError() : ctx.message;
+                *error = ctx.message.empty() ? client_.getLastError() : ctx.message;
             }
             return false;
         }
 
         outResult->columns.clear();
         outResult->rows.clear();
-        outResult->rowsAffected = results.rows_affected;
-        outResult->commandTag = results.command_tag;
+        outResult->rowsAffected = rs.getRowsAffected();
+        outResult->commandTag = rs.getCommandTag();
 
+        int columnCount = static_cast<int>(rs.getColumnCount());
         std::vector<scratchbird::protocol::WireType> types;
-        types.reserve(results.columns.size());
+        types.reserve(columnCount);
 
-        for (const auto& col : results.columns) {
+        for (int i = 0; i < columnCount; ++i) {
             QueryColumn column;
-            column.name = col.name;
-            column.type = WireTypeToString(col.type);
+            column.name = rs.getColumnName(i);
+            column.type = WireTypeToString(rs.getColumnType(i));
             outResult->columns.push_back(std::move(column));
-            types.push_back(col.type);
+            types.push_back(rs.getColumnType(i));
         }
 
-        for (const auto& row : results.rows) {
+        while (rs.next()) {
             std::vector<QueryValue> out_row;
-            out_row.reserve(row.size());
-            for (size_t i = 0; i < row.size(); ++i) {
+            out_row.reserve(columnCount);
+            for (int i = 0; i < columnCount; ++i) {
                 QueryValue cell;
-                cell.isNull = row[i].is_null;
+                cell.isNull = rs.isNull(i);
                 if (!cell.isNull) {
-                    cell.value = FormatColumnValue(types[i], row[i]);
+                    cell.text = FormatColumnValue(&rs, i, types[i]);
                 }
                 out_row.push_back(std::move(cell));
             }
@@ -339,12 +279,9 @@ public:
 
     bool Cancel(std::string* error) override {
         scratchbird::core::ErrorContext ctx;
-        auto status = client_.sendQueryCancel(&ctx);
-        if (status != scratchbird::core::Status::OK) {
-            if (error) *error = ctx.message;
-            return false;
-        }
-        return true;
+        // Query cancellation not supported in current API
+        if (error) *error = "Query cancellation not supported";
+        return false;
     }
 
     BackendCapabilities Capabilities() const override {
@@ -356,7 +293,7 @@ public:
     }
 
 private:
-    scratchbird::client::NetworkClient client_;
+    scratchbird::client::Connection client_;
     BackendCapabilities capabilities_;
 };
 

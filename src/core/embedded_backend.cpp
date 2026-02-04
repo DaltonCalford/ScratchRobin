@@ -19,7 +19,7 @@
 #ifdef SCRATCHROBIN_USE_SCRATCHBIRD
 #include "scratchbird/core/status.h"
 #include "scratchbird/core/error_context.h"
-#include "scratchbird/client/network_client.h"
+#include "scratchbird/client/connection.h"
 #include "scratchbird/network/socket_types.h"
 #endif
 
@@ -67,29 +67,23 @@ public:
     }
 
     bool Connect(const BackendConfig& config, std::string* error) override {
-        scratchbird::client::NetworkClientConfig net_config;
+        scratchbird::client::ConnectionConfig net_config;
         
         // For embedded mode, we connect to the local embedded server
         // which may use shared memory or localhost
-        net_config.host = config.host.empty() ? "localhost" : config.host;
-        net_config.port = config.port > 0 ? static_cast<uint16_t>(config.port) : 3092;
-        net_config.database = config.database;
+        net_config.database_name = config.database;
         net_config.username = config.username;
         net_config.password = config.password;
-        net_config.application_name = config.applicationName.empty() 
-            ? "scratchrobin-embedded" : config.applicationName;
         net_config.connect_timeout_ms = static_cast<uint32_t>(config.connectTimeoutMs);
         net_config.read_timeout_ms = static_cast<uint32_t>(config.readTimeoutMs);
         net_config.write_timeout_ms = static_cast<uint32_t>(config.writeTimeoutMs);
-        
-        // Embedded mode can use PREFER for SSL (often disabled for local)
-        net_config.ssl_mode = scratchbird::network::SSLMode::PREFER;
+        net_config.tcp_port = config.port > 0 ? static_cast<uint16_t>(config.port) : 3092;
         
         scratchbird::core::ErrorContext ctx;
         auto status = client_.connect(net_config, &ctx);
         if (status != scratchbird::core::Status::OK) {
             if (error) {
-                *error = ctx.message.empty() ? client_.lastError() : ctx.message;
+                *error = ctx.message.empty() ? client_.getLastError() : ctx.message;
                 if (error->find("refused") != std::string::npos ||
                     error->find("No such file") != std::string::npos) {
                     *error += " (Is ScratchBird embedded server running?)";
@@ -144,37 +138,40 @@ public:
             return false;
         }
 
-        scratchbird::client::NetworkResultSet results;
+        scratchbird::client::ResultSet results;
         scratchbird::core::ErrorContext ctx;
-        auto status = client_.executeQuery(sql, results, &ctx);
+        auto status = client_.executeQuery(sql, &results, &ctx);
         if (status != scratchbird::core::Status::OK) {
             if (error) {
-                *error = ctx.message.empty() ? client_.lastError() : ctx.message;
+                *error = ctx.message.empty() ? client_.getLastError() : ctx.message;
             }
             return false;
         }
 
         outResult->columns.clear();
         outResult->rows.clear();
-        outResult->rowsAffected = results.rows_affected;
-        outResult->commandTag = results.command_tag;
+        outResult->rowsAffected = results.getRowsAffected();
+        outResult->commandTag = results.getCommandTag();
 
-        for (const auto& col : results.columns) {
+        // Get column metadata
+        const auto& columns = results.getColumns();
+        for (const auto& col : columns) {
             QueryColumn column;
             column.name = col.name;
-            // Map type_oid to type name
-            column.type = OidToTypeName(col.type_oid);
+            // Map wire type to type name
+            column.type = WireTypeToTypeName(col.type);
             outResult->columns.push_back(std::move(column));
         }
 
-        for (const auto& row : results.rows) {
+        // Iterate through results using next()
+        while (results.next()) {
             std::vector<QueryValue> out_row;
-            out_row.reserve(row.size());
-            for (size_t i = 0; i < row.size(); ++i) {
+            out_row.reserve(columns.size());
+            for (size_t i = 0; i < columns.size(); ++i) {
                 QueryValue cell;
-                cell.isNull = row[i].is_null;
+                cell.isNull = results.isNull(i);
                 if (!cell.isNull) {
-                    cell.value = FormatColumnValue(row[i].data, results.columns[i].type_oid);
+                    cell.text = GetColumnValue(results, i, columns[i].type);
                 }
                 out_row.push_back(std::move(cell));
             }
@@ -215,13 +212,9 @@ public:
     }
 
     bool Cancel(std::string* error) override {
-        scratchbird::core::ErrorContext ctx;
-        auto status = client_.sendQueryCancel(&ctx);
-        if (status != scratchbird::core::Status::OK) {
-            if (error) *error = ctx.message;
-            return false;
-        }
-        return true;
+        // TODO: Query cancellation not yet implemented in ScratchBird client
+        if (error) *error = "Query cancellation not supported";
+        return false;
     }
 
     BackendCapabilities Capabilities() const override {
@@ -233,94 +226,75 @@ public:
     }
 
 private:
-    std::string OidToTypeName(uint32_t oid) {
-        switch (oid) {
-            case 16: return "BOOLEAN";
-            case 17: return "BYTEA";
-            case 18: return "CHAR";
-            case 20: return "INT8";
-            case 21: return "INT2";
-            case 23: return "INT4";
-            case 25: return "TEXT";
-            case 114: return "JSON";
-            case 142: return "XML";
-            case 600: return "POINT";
-            case 700: return "FLOAT4";
-            case 701: return "FLOAT8";
-            case 790: return "MONEY";
-            case 829: return "MACADDR";
-            case 650: return "CIDR";
-            case 869: return "INET";
-            case 1042: return "BPCHAR";
-            case 1043: return "VARCHAR";
-            case 1082: return "DATE";
-            case 1083: return "TIME";
-            case 1114: return "TIMESTAMP";
-            case 1184: return "TIMESTAMPTZ";
-            case 1186: return "INTERVAL";
-            case 1700: return "NUMERIC";
-            case 2950: return "UUID";
-            case 3802: return "JSONB";
-            case 16384: return "VECTOR";
-            default: return "UNKNOWN:" + std::to_string(oid);
+    std::string WireTypeToTypeName(scratchbird::protocol::WireType type) {
+        using scratchbird::protocol::WireType;
+        switch (type) {
+            case WireType::BOOLEAN: return "BOOLEAN";
+            case WireType::INT16: return "INT2";
+            case WireType::INT32: return "INT4";
+            case WireType::INT64: return "INT8";
+            case WireType::FLOAT32: return "FLOAT4";
+            case WireType::FLOAT64: return "FLOAT8";
+            case WireType::VARCHAR: return "TEXT";
+            case WireType::BYTEA: return "BYTEA";
+            case WireType::TIMESTAMP: return "TIMESTAMP";
+            case WireType::TIMESTAMPTZ: return "TIMESTAMPTZ";
+            case WireType::DATE: return "DATE";
+            case WireType::TIME: return "TIME";
+            case WireType::INTERVAL: return "INTERVAL";
+            case WireType::DECIMAL: return "NUMERIC";
+            case WireType::UUID: return "UUID";
+            case WireType::JSON: return "JSON";
+            case WireType::JSONB: return "JSONB";
+            case WireType::ARRAY: return "ARRAY";
+            case WireType::NULL_TYPE: return "NULL";
+            default: return "UNKNOWN";
         }
     }
 
-    std::string FormatColumnValue(const std::vector<uint8_t>& data, uint32_t type_oid) {
-        if (data.empty()) {
+    std::string GetColumnValue(scratchbird::client::ResultSet& results, size_t column,
+                               scratchbird::protocol::WireType type) {
+        using scratchbird::protocol::WireType;
+        
+        if (results.isNull(column)) {
             return "";
         }
 
-        // For text-based types, interpret as string
-        if (type_oid == 25 || type_oid == 1043 || type_oid == 1042 || 
-            type_oid == 114 || type_oid == 3802 || type_oid == 142) {
-            return std::string(data.begin(), data.end());
+        switch (type) {
+            case WireType::BOOLEAN:
+                return results.getBool(column) ? "true" : "false";
+            case WireType::INT16:
+                return std::to_string(results.getInt16(column));
+            case WireType::INT32:
+                return std::to_string(results.getInt32(column));
+            case WireType::INT64:
+                return std::to_string(results.getInt64(column));
+            case WireType::FLOAT32:
+                return std::to_string(results.getFloat(column));
+            case WireType::FLOAT64:
+                return std::to_string(results.getDouble(column));
+            case WireType::VARCHAR:
+            case WireType::JSON:
+            case WireType::JSONB:
+                return results.getString(column);
+            case WireType::BYTEA:
+                return BytesToHex(results.getBytes(column));
+            case WireType::UUID:
+                return results.getUUID(column);
+            case WireType::TIMESTAMP:
+            case WireType::TIMESTAMPTZ:
+                return std::to_string(results.getTimestamp(column));
+            case WireType::DATE:
+                return std::to_string(results.getDate(column));
+            case WireType::TIME:
+                return std::to_string(results.getTime(column));
+            default:
+                // For unknown types, try to get as string
+                return results.getString(column);
         }
-
-        // For binary/bytea, return hex
-        if (type_oid == 17) {
-            return BytesToHex(data);
-        }
-
-        // For integers
-        if (type_oid == 21 && data.size() >= 2) {  // INT2
-            int16_t v = 0;
-            std::memcpy(&v, data.data(), sizeof(int16_t));
-            return std::to_string(v);
-        }
-        if (type_oid == 23 && data.size() >= 4) {  // INT4
-            int32_t v = 0;
-            std::memcpy(&v, data.data(), sizeof(int32_t));
-            return std::to_string(v);
-        }
-        if (type_oid == 20 && data.size() >= 8) {  // INT8
-            int64_t v = 0;
-            std::memcpy(&v, data.data(), sizeof(int64_t));
-            return std::to_string(v);
-        }
-
-        // For floats
-        if (type_oid == 700 && data.size() >= 4) {  // FLOAT4
-            float v = 0.0f;
-            std::memcpy(&v, data.data(), sizeof(float));
-            return std::to_string(v);
-        }
-        if (type_oid == 701 && data.size() >= 8) {  // FLOAT8
-            double v = 0.0;
-            std::memcpy(&v, data.data(), sizeof(double));
-            return std::to_string(v);
-        }
-
-        // For boolean
-        if (type_oid == 16) {
-            return data[0] ? "true" : "false";
-        }
-
-        // Default to hex representation
-        return BytesToHex(data);
     }
 
-    scratchbird::client::NetworkClient client_;
+    scratchbird::client::Connection client_;
     BackendCapabilities capabilities_;
 };
 

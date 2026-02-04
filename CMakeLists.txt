@@ -101,6 +101,13 @@ set(SCRATCHROBIN_CORE_SOURCES
     src/core/migration_generator.cpp
     src/core/deployment_plan.cpp
     src/core/collaboration.cpp
+    # Phase 5: Advanced Features
+    src/core/data_lineage.cpp
+    src/core/data_masking.cpp
+    src/core/api_generator.cpp
+    src/core/cdc_streaming.cpp
+    src/core/ai_assistant.cpp
+    src/core/ai_providers.cpp
 )
 
 add_library(scratchrobin_core ${SCRATCHROBIN_CORE_SOURCES})
@@ -230,6 +237,9 @@ if(SCRATCHROBIN_BUILD_UI)
         src/ui/docker_manager_panel.cpp
         src/ui/test_runner_panel.cpp
         src/ui/whiteboard_canvas.cpp
+        # Phase 5: Advanced Features UI
+        src/ui/ai_assistant_panel.cpp
+        src/ui/ai_settings_dialog.cpp
     )
 
     target_include_directories(scratchrobin PRIVATE src)
@@ -328,7 +338,7 @@ if(SCRATCHROBIN_USE_SCRATCHBIRD)
     if(EXISTS "${SCRATCHBIRD_ROOT}/CMakeLists.txt")
         add_subdirectory("${SCRATCHBIRD_ROOT}" "${CMAKE_BINARY_DIR}/scratchbird")
         target_include_directories(scratchrobin_core PRIVATE "${SCRATCHBIRD_ROOT}/include")
-        target_link_libraries(scratchrobin_core PRIVATE scratchbird_client)
+        target_link_libraries(scratchrobin_core PRIVATE scratchbird_protocol)
         target_compile_definitions(scratchrobin_core PRIVATE SCRATCHROBIN_USE_SCRATCHBIRD=1)
     else()
         message(WARNING "ScratchBird root not found at ${SCRATCHBIRD_ROOT}; building without ScratchBird support.")

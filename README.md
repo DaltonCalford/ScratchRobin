@@ -8,6 +8,8 @@
 
 ScratchRobin brings software engineering best practices (version control, testing, CI/CD) to database development. Design your database schema in isolation, review changes with your team, test thoroughly, and deploy safely.
 
+**Release Targets:** `docs/planning/RELEASE_TARGETS.md`
+
 ---
 
 ## 🌟 Key Features
