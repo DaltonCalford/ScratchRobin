@@ -25,6 +25,12 @@ namespace scratchrobin {
 class CredentialStore;
 class ConnectionBackend;
 
+enum class ConnectionMode {
+    Network,    // TCP/IP to remote server (default)
+    Ipc,        // Unix domain socket / named pipes
+    Embedded    // In-process, direct engine access
+};
+
 struct ConnectionProfile {
     std::string name;
     std::string host;
@@ -42,6 +48,8 @@ struct ConnectionProfile {
     std::string options;
     std::string backend;
     std::string fixturePath;
+    ConnectionMode mode = ConnectionMode::Network;  // Connection mode
+    std::string ipcPath;                            // Custom IPC socket path
 };
 
 struct NetworkOptions {

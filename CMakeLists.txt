@@ -77,8 +77,10 @@ endif()
 
 set(SCRATCHROBIN_CORE_SOURCES
     src/core/connection_manager.cpp
+    src/core/embedded_backend.cpp
     src/core/mock_backend.cpp
     src/core/network_backend.cpp
+    src/core/ipc_backend.cpp
     src/core/job_queue.cpp
     src/core/config.cpp
     src/core/credentials.cpp

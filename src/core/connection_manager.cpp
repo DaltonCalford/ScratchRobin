@@ -11,9 +11,11 @@
 
 #include "connection_backend.h"
 #include "credentials.h"
+#include "embedded_backend.h"
 #include "firebird_backend.h"
-#include "mysql_backend.h"
+#include "ipc_backend.h"
 #include "mock_backend.h"
+#include "mysql_backend.h"
 #include "network_backend.h"
 #include "postgres_backend.h"
 
@@ -69,6 +71,30 @@ void ConnectionManager::SetNetworkOptions(const NetworkOptions& options) {
 
 std::unique_ptr<ConnectionBackend> ConnectionManager::CreateBackendForProfile(
     const ConnectionProfile& profile, std::string* error) {
+    // First check connection mode for ScratchBird databases
+    if (profile.mode == ConnectionMode::Embedded) {
+        auto backend = CreateEmbeddedBackend();
+        if (!backend) {
+            if (error) {
+                *error = "ScratchBird embedded backend is not available in this build";
+            }
+            return nullptr;
+        }
+        return backend;
+    }
+
+    if (profile.mode == ConnectionMode::Ipc) {
+        auto backend = CreateIpcBackend();
+        if (!backend) {
+            if (error) {
+                *error = "ScratchBird IPC backend is not available in this build";
+            }
+            return nullptr;
+        }
+        return backend;
+    }
+
+    // Legacy backend selection based on name
     std::string backend_name = ToLower(Trim(profile.backend));
     if (backend_name.empty()) {
         backend_name = profile.fixturePath.empty() ? "network" : "mock";
@@ -147,7 +173,12 @@ bool ConnectionManager::Connect(const ConnectionProfile& profile) {
     }
 
     BackendConfig config;
-    config.host = profile.host;
+    // For IPC mode, use the ipcPath if specified, otherwise let the backend resolve
+    if (profile.mode == ConnectionMode::Ipc && !profile.ipcPath.empty()) {
+        config.host = profile.ipcPath;
+    } else {
+        config.host = profile.host;
+    }
     config.port = profile.port;
     if (config.port == 0) {
         std::string backend_name = ToLower(Trim(profile.backend));
