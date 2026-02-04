@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Undo/rollback icon -->
+  <circle cx="12" cy="12" r="10" fill="#e67e22"/>
+  <path d="M9 12 L15 8 L15 16 Z" fill="white"/>
+  <path d="M7 12 Q7 7 12 7" stroke="white" stroke-width="2" fill="none"/>
+</svg>

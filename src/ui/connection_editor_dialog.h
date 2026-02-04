@@ -52,6 +52,7 @@ private:
     void BuildAdvancedTab(wxNotebook* notebook);
     
     void OnBackendChanged(wxCommandEvent& event);
+    void OnConnectionModeChanged(wxCommandEvent& event);
     void OnTestConnection(wxCommandEvent& event);
     void OnBrowseSSLCert(wxCommandEvent& event);
     void OnBrowseSSLKey(wxCommandEvent& event);
@@ -68,6 +69,8 @@ private:
     // General tab controls
     wxTextCtrl* name_ctrl_ = nullptr;
     wxChoice* backend_choice_ = nullptr;
+    wxChoice* connection_mode_choice_ = nullptr;
+    wxStaticText* connection_mode_label_ = nullptr;
     wxTextCtrl* host_ctrl_ = nullptr;
     wxTextCtrl* port_ctrl_ = nullptr;
     wxTextCtrl* database_ctrl_ = nullptr;
@@ -76,6 +79,8 @@ private:
     wxCheckBox* save_password_ctrl_ = nullptr;
     wxTextCtrl* application_name_ctrl_ = nullptr;
     wxTextCtrl* role_ctrl_ = nullptr;
+    wxTextCtrl* ipc_path_ctrl_ = nullptr;
+    wxStaticText* ipc_path_label_ = nullptr;
     
     // SSL tab controls
     wxChoice* ssl_mode_choice_ = nullptr;

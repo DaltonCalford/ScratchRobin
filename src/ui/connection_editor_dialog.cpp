@@ -34,6 +34,10 @@ constexpr int kBackendMySQL = 2;
 constexpr int kBackendFirebird = 3;
 constexpr int kBackendMock = 4;
 
+constexpr int kConnectionModeNetwork = 0;
+constexpr int kConnectionModeIpc = 1;
+constexpr int kConnectionModeEmbedded = 2;
+
 constexpr int kSSLModePrefer = 0;
 constexpr int kSSLModeRequire = 1;
 constexpr int kSSLModeDisable = 2;
@@ -110,7 +114,7 @@ ConnectionEditorDialog::ConnectionEditorDialog(wxWindow* parent,
     : wxDialog(parent, wxID_ANY, 
                mode == ConnectionEditorMode::Create ? "New Connection" : 
                mode == ConnectionEditorMode::Edit ? "Edit Connection" : "Duplicate Connection",
-               wxDefaultPosition, wxSize(550, 500)),
+               wxDefaultPosition, wxSize(550, 550)),
       mode_(mode) {
     BuildLayout();
     
@@ -187,6 +191,23 @@ void ConnectionEditorDialog::BuildGeneralTab(wxNotebook* notebook) {
     backend_choice_->Append("Mock (Offline Testing)");
     backend_choice_->SetSelection(0);
     sizer->Add(backend_choice_, 1, wxEXPAND);
+    
+    // Connection Mode (only for ScratchBird)
+    connection_mode_label_ = new wxStaticText(panel, wxID_ANY, "Connection Mode:");
+    sizer->Add(connection_mode_label_, 0, wxALIGN_CENTER_VERTICAL);
+    connection_mode_choice_ = new wxChoice(panel, wxID_ANY);
+    connection_mode_choice_->Append("Network (TCP/IP)");
+    connection_mode_choice_->Append("IPC (Unix Socket/Pipe)");
+    connection_mode_choice_->Append("Embedded (In-Process)");
+    connection_mode_choice_->SetSelection(kConnectionModeNetwork);
+    sizer->Add(connection_mode_choice_, 1, wxEXPAND);
+    
+    // IPC Path (only shown for IPC mode)
+    ipc_path_label_ = new wxStaticText(panel, wxID_ANY, "Socket Path:");
+    sizer->Add(ipc_path_label_, 0, wxALIGN_CENTER_VERTICAL);
+    ipc_path_ctrl_ = new wxTextCtrl(panel, wxID_ANY);
+    ipc_path_ctrl_->SetHint("/var/run/scratchbird/mydb.sock (optional)");
+    sizer->Add(ipc_path_ctrl_, 1, wxEXPAND);
     
     // Host
     sizer->Add(new wxStaticText(panel, wxID_ANY, "Host:"), 0, wxALIGN_CENTER_VERTICAL);
@@ -354,14 +375,73 @@ void ConnectionEditorDialog::OnBackendChanged(wxCommandEvent& event) {
     UpdateFieldStates();
 }
 
+void ConnectionEditorDialog::OnConnectionModeChanged(wxCommandEvent& event) {
+    UpdateFieldStates();
+}
+
 void ConnectionEditorDialog::UpdateFieldStates() {
     int backend = backend_choice_->GetSelection();
+    bool isScratchBird = (backend == kBackendScratchBird);
     
     // Role field is mainly for Firebird/PostgreSQL
     if (role_ctrl_) {
         bool supportsRole = (backend == kBackendPostgreSQL || backend == kBackendFirebird);
         role_ctrl_->Enable(supportsRole);
     }
+    
+    // Connection mode controls only for ScratchBird
+    if (connection_mode_label_) {
+        connection_mode_label_->Show(isScratchBird);
+    }
+    if (connection_mode_choice_) {
+        connection_mode_choice_->Show(isScratchBird);
+    }
+    
+    // Show/hide fields based on connection mode
+    if (isScratchBird && connection_mode_choice_) {
+        int mode = connection_mode_choice_->GetSelection();
+        
+        // Network mode: show host/port, hide IPC path
+        bool isNetwork = (mode == kConnectionModeNetwork);
+        bool isIpc = (mode == kConnectionModeIpc);
+        bool isEmbedded = (mode == kConnectionModeEmbedded);
+        
+        // Host/Port visibility
+        // (Host might be shown for IPC to allow custom socket paths)
+        
+        // IPC path visibility
+        if (ipc_path_label_) {
+            ipc_path_label_->Show(isIpc);
+        }
+        if (ipc_path_ctrl_) {
+            ipc_path_ctrl_->Show(isIpc);
+        }
+        
+        // Port is not used for IPC/Embedded
+        if (port_ctrl_) {
+            port_ctrl_->Enable(isNetwork);
+            if (!isNetwork && !port_ctrl_->IsEmpty()) {
+                // Keep the value but disable
+            }
+        }
+        
+        // Update database hint based on mode
+        if (database_ctrl_) {
+            if (isEmbedded) {
+                database_ctrl_->SetHint("/path/to/database.sbd");
+            } else if (isIpc) {
+                database_ctrl_->SetHint("Database name");
+            } else {
+                database_ctrl_->SetHint("Database name or path");
+            }
+        }
+    } else {
+        // Hide IPC path for non-ScratchBird backends
+        if (ipc_path_label_) ipc_path_label_->Hide();
+        if (ipc_path_ctrl_) ipc_path_ctrl_->Hide();
+    }
+    
+    Layout();
 }
 
 void ConnectionEditorDialog::LoadProfile(const ConnectionProfile& profile) {
@@ -370,6 +450,22 @@ void ConnectionEditorDialog::LoadProfile(const ConnectionProfile& profile) {
     if (backend_choice_) {
         int backend = GetBackendFromName(profile.backend);
         backend_choice_->SetSelection(backend);
+    }
+    
+    // Load connection mode
+    if (connection_mode_choice_) {
+        int mode = kConnectionModeNetwork;  // Default
+        switch (profile.mode) {
+            case ConnectionMode::Network: mode = kConnectionModeNetwork; break;
+            case ConnectionMode::Ipc: mode = kConnectionModeIpc; break;
+            case ConnectionMode::Embedded: mode = kConnectionModeEmbedded; break;
+        }
+        connection_mode_choice_->SetSelection(mode);
+    }
+    
+    // Load IPC path if set
+    if (ipc_path_ctrl_) {
+        ipc_path_ctrl_->SetValue(profile.ipcPath);
     }
     
     if (host_ctrl_) host_ctrl_->SetValue(profile.host);
@@ -399,6 +495,21 @@ ConnectionProfile ConnectionEditorDialog::GetProfile() const {
     
     if (backend_choice_) {
         profile.backend = GetBackendName(backend_choice_->GetSelection());
+    }
+    
+    // Get connection mode
+    if (connection_mode_choice_) {
+        int mode = connection_mode_choice_->GetSelection();
+        switch (mode) {
+            case kConnectionModeNetwork: profile.mode = ConnectionMode::Network; break;
+            case kConnectionModeIpc: profile.mode = ConnectionMode::Ipc; break;
+            case kConnectionModeEmbedded: profile.mode = ConnectionMode::Embedded; break;
+        }
+    }
+    
+    // Get IPC path
+    if (ipc_path_ctrl_) {
+        profile.ipcPath = ipc_path_ctrl_->GetValue().ToStdString();
     }
     
     if (host_ctrl_) profile.host = host_ctrl_->GetValue().ToStdString();
@@ -446,7 +557,37 @@ bool ConnectionEditorDialog::ValidateForm() {
         return false;
     }
     
-    if (host_ctrl_ && host_ctrl_->IsEmpty()) {
+    // Validate based on connection mode
+    int backend = backend_choice_ ? backend_choice_->GetSelection() : kBackendScratchBird;
+    bool isScratchBird = (backend == kBackendScratchBird);
+    
+    if (isScratchBird && connection_mode_choice_) {
+        int mode = connection_mode_choice_->GetSelection();
+        
+        if (mode == kConnectionModeEmbedded) {
+            // Embedded mode requires database path
+            if (database_ctrl_ && database_ctrl_->IsEmpty()) {
+                wxMessageBox("Database path is required for Embedded mode.", 
+                            "Validation Error", wxOK | wxICON_ERROR, this);
+                database_ctrl_->SetFocus();
+                return false;
+            }
+        } else if (mode == kConnectionModeIpc) {
+            // IPC mode - host can be empty (will use default)
+            // but if provided, should be a valid path
+        }
+    }
+    
+    // Host validation (not required for Embedded mode)
+    bool hostRequired = true;
+    if (isScratchBird && connection_mode_choice_) {
+        int mode = connection_mode_choice_->GetSelection();
+        if (mode == kConnectionModeEmbedded) {
+            hostRequired = false;
+        }
+    }
+    
+    if (hostRequired && host_ctrl_ && host_ctrl_->IsEmpty()) {
         wxMessageBox("Host is required.", "Validation Error", wxOK | wxICON_ERROR, this);
         host_ctrl_->SetFocus();
         return false;

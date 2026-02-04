@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Index icon (table with lightning) -->
+  <rect x="3" y="4" width="18" height="16" rx="1" fill="#f39c12" stroke="#e67e22" stroke-width="1"/>
+  <line x1="3" y1="9" x2="21" y2="9" stroke="#e67e22" stroke-width="1"/>
+  <!-- Lightning bolt -->
+  <polygon points="13,4 10,10 13,10 11,16 17,9 14,9" fill="white"/>
+</svg>

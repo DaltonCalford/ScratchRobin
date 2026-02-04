@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Broken connection icon -->
+  <rect x="2" y="10" width="6" height="4" fill="#e74c3c"/>
+  <rect x="16" y="10" width="6" height="4" fill="#e74c3c"/>
+  <circle cx="5" cy="12" r="2" fill="#c0392b"/>
+  <circle cx="19" cy="12" r="2" fill="#c0392b"/>
+  <!-- X mark -->
+  <line x1="10" y1="8" x2="14" y2="16" stroke="#e74c3c" stroke-width="2"/>
+  <line x1="14" y1="8" x2="10" y2="16" stroke="#e74c3c" stroke-width="2"/>
+</svg>
