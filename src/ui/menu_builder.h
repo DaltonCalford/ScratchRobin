@@ -22,6 +22,7 @@ struct MenuBuildOptions {
     bool includeEdit = true;
     bool includeView = true;
     bool includeAdmin = true;
+    bool includeTools = true;  // Beta placeholder features
     bool includeWindow = true;
     bool includeHelp = true;
 };

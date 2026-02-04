@@ -65,6 +65,10 @@ private:
     void OnOpenDatabaseManager(wxCommandEvent& event);
     void OnBackup(wxCommandEvent& event);
     void OnRestore(wxCommandEvent& event);
+    void OnOpenClusterManager(wxCommandEvent& event);
+    void OnOpenReplicationManager(wxCommandEvent& event);
+    void OnOpenEtlManager(wxCommandEvent& event);
+    void OnOpenGitIntegration(wxCommandEvent& event);
     void OnBackupHistory(wxCommandEvent& event);
     void OnBackupSchedule(wxCommandEvent& event);
     void OnPreferences(wxCommandEvent& event);

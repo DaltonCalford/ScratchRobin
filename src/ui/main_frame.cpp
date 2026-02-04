@@ -11,10 +11,13 @@
 #include "backup_dialog.h"
 #include "backup_history_dialog.h"
 #include "backup_schedule_dialog.h"
+#include "cluster_manager_frame.h"
 #include "connection_editor_dialog.h"
 #include "database_manager_frame.h"
 #include "diagram_frame.h"
 #include "domain_manager_frame.h"
+#include "etl_manager_frame.h"
+#include "git_integration_frame.h"
 #include "help_browser.h"
 #include "icon_bar.h"
 #include "index_designer_frame.h"
@@ -25,6 +28,7 @@
 #include "package_manager_frame.h"
 #include "preferences_dialog.h"
 #include "procedure_manager_frame.h"
+#include "replication_manager_frame.h"
 #include "restore_dialog.h"
 #include "schema_manager_frame.h"
 #include "sequence_manager_frame.h"
@@ -111,6 +115,10 @@ wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
     EVT_MENU(ID_MENU_BACKUP_HISTORY, MainFrame::OnBackupHistory)
     EVT_MENU(ID_MENU_BACKUP_SCHEDULE, MainFrame::OnBackupSchedule)
     EVT_MENU(ID_MENU_PREFERENCES, MainFrame::OnPreferences)
+    EVT_MENU(ID_MENU_CLUSTER_MANAGER, MainFrame::OnOpenClusterManager)
+    EVT_MENU(ID_MENU_REPLICATION_MANAGER, MainFrame::OnOpenReplicationManager)
+    EVT_MENU(ID_MENU_ETL_MANAGER, MainFrame::OnOpenEtlManager)
+    EVT_MENU(ID_MENU_GIT_INTEGRATION, MainFrame::OnOpenGitIntegration)
     EVT_MENU(ID_MENU_SHORTCUTS, MainFrame::OnShortcuts)
     EVT_MENU(ID_MENU_CHEAT_SHEET, MainFrame::OnShortcutsCheatSheet)
     EVT_MENU(ID_MENU_HELP_WINDOW, MainFrame::OnHelp)
@@ -707,6 +715,54 @@ void MainFrame::OnManageConnections(wxCommandEvent&) {
         
         SetStatusText("Connections updated");
     }
+}
+
+// =============================================================================
+// Beta Placeholder Handlers (Phase 7)
+// =============================================================================
+
+void MainFrame::OnOpenClusterManager(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* frame = new ClusterManagerFrame(window_manager_, connection_manager_, 
+                                          connections_, app_config_);
+    window_manager_->RegisterWindow(frame);
+    frame->Show(true);
+    SetStatusText("Cluster Manager (Beta Preview) opened");
+}
+
+void MainFrame::OnOpenReplicationManager(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* frame = new ReplicationManagerFrame(window_manager_, connection_manager_, 
+                                              connections_, app_config_);
+    window_manager_->RegisterWindow(frame);
+    frame->Show(true);
+    SetStatusText("Replication Manager (Beta Preview) opened");
+}
+
+void MainFrame::OnOpenEtlManager(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* frame = new EtlManagerFrame(window_manager_, connection_manager_, 
+                                      connections_, app_config_);
+    window_manager_->RegisterWindow(frame);
+    frame->Show(true);
+    SetStatusText("ETL Manager (Beta Preview) opened");
+}
+
+void MainFrame::OnOpenGitIntegration(wxCommandEvent&) {
+    if (!window_manager_) {
+        return;
+    }
+    auto* frame = new GitIntegrationFrame(window_manager_, connection_manager_, 
+                                          connections_, app_config_);
+    window_manager_->RegisterWindow(frame);
+    frame->Show(true);
+    SetStatusText("Git Integration (Beta Preview) opened");
 }
 
 } // namespace scratchrobin

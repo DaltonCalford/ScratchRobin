@@ -1,0 +1,139 @@
+---
+# Clang-Format configuration for ScratchRobin
+# Based on ScratchBird style with adaptations for GUI code
+
+Language: Cpp
+BasedOnStyle: LLVM
+
+# Indentation
+IndentWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+AccessModifierOffset: -4
+
+# Line length
+ColumnLimit: 100
+
+# Braces
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortLambdasOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+# Namespace formatting
+NamespaceIndentation: All
+FixNamespaceComments: true
+ShortNamespaceLines: 0
+
+# Alignment
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignEscapedNewlines: Left
+AlignOperands: true
+AlignTrailingComments: true
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# Includes
+SortIncludes: false
+IncludeBlocks: Preserve
+
+# Spacing
+SpaceBeforeParens: ControlStatements
+SpaceAfterTemplateKeyword: true
+SpaceInEmptyParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpacesInAngles: false
+SpaceBeforeAssignmentOperators: true
+SpaceAfterLogicalNot: false
+
+# Line breaks
+BreakConstructorInitializers: BeforeColon
+BreakInheritanceList: BeforeColon
+BreakBeforeBinaryOperators: None
+BreakBeforeTernaryOperators: true
+AlwaysBreakTemplateDeclarations: Yes
+
+# Comments
+ReflowComments: true
+CommentPragmas: '^ IWYU pragma:'
+
+# Constructor initializer list
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+ConstructorInitializerIndentWidth: 4
+
+# Penalties (affects line breaking decisions)
+PenaltyBreakAssignment: 2
+PenaltyBreakBeforeFirstCallParameter: 19
+PenaltyBreakComment: 300
+PenaltyBreakFirstLessLess: 120
+PenaltyBreakString: 1000
+PenaltyBreakTemplateDeclaration: 10
+PenaltyExcessCharacter: 1000000
+PenaltyReturnTypeOnItsOwnLine: 60
+PenaltyIndentedWhitespace: 0
+
+# Special formatting for specific constructs
+AllowAllParametersOfDeclarationOnASingleLine: false
+AllowAllArgumentsOnASingleLine: true
+BinPackArguments: true
+BinPackParameters: false
+ExperimentalAutoDetectBinPacking: false
+
+# C++11/14/17 features
+Cpp11BracedListStyle: true
+Standard: c++17
+
+# Empty lines
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 2
+
+# Sorting
+SortUsingDeclarations: false
+
+# Derive pointer alignment from existing code
+DerivePointerAlignment: false
+
+# Indent case labels
+IndentCaseLabels: true
+IndentPPDirectives: None
+IndentWrappedFunctionNames: false
+
+# Macros
+ForEachMacros:
+  - foreach
+  - Q_FOREACH
+  - BOOST_FOREACH
+  - wxFOR_EACH
+StatementMacros:
+  - Q_UNUSED
+  - QT_REQUIRE_VERSION
+  - wxBEGIN_EVENT_TABLE
+  - wxEND_EVENT_TABLE
+  - wxDECLARE_EVENT_TABLE
+  - wxIMPLEMENT_DYNAMIC_CLASS
+
+# Raw string literals
+RawStringFormats:
+  - Language: Cpp
+    Delimiters:
+      - cc
+      - CC
+      - cpp
+      - Cpp
+      - CPP
+      - c++
+      - C++
+  - Language: TextProto
+    Delimiters:
+      - pb
+      - PB
+      - proto
+      - PROTO
+  - Language: Markdown
+    Delimiters:
+      - md
+      - MD
+...

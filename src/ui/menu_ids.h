@@ -83,6 +83,12 @@ constexpr int ID_CONN_GIT_PUSH = wxID_HIGHEST + 595;
 
 constexpr int ID_CONN_MANAGE = wxID_HIGHEST + 600;
 
+// Beta Placeholder Menus (Phase 7)
+constexpr int ID_MENU_CLUSTER_MANAGER = wxID_HIGHEST + 700;
+constexpr int ID_MENU_REPLICATION_MANAGER = wxID_HIGHEST + 701;
+constexpr int ID_MENU_ETL_MANAGER = wxID_HIGHEST + 702;
+constexpr int ID_MENU_GIT_INTEGRATION = wxID_HIGHEST + 703;
+
 } // namespace scratchrobin
 
 #endif // SCRATCHROBIN_MENU_IDS_H

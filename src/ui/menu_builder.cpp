@@ -14,6 +14,7 @@
 
 #include <algorithm>
 
+#include <wx/artprov.h>
 #include <wx/defs.h>
 #include <wx/frame.h>
 
@@ -140,6 +141,42 @@ wxMenu* BuildAdminMenu() {
     return menu;
 }
 
+wxMenu* BuildToolsMenu() {
+    auto* menu = new wxMenu();
+    
+    // Beta placeholder items - these open stub windows
+    auto* cluster_item = AppendItem(menu, ID_MENU_CLUSTER_MANAGER, 
+        "Cluster Manager...", true, 
+        "High-availability cluster management (Beta Preview)");
+    cluster_item->SetBitmap(wxArtProvider::GetBitmap(wxART_TIP, wxART_MENU, wxSize(16, 16)));
+    
+    auto* repl_item = AppendItem(menu, ID_MENU_REPLICATION_MANAGER, 
+        "Replication Manager...", true,
+        "Replication monitoring and management (Beta Preview)");
+    repl_item->SetBitmap(wxArtProvider::GetBitmap(wxART_TIP, wxART_MENU, wxSize(16, 16)));
+    
+    auto* etl_item = AppendItem(menu, ID_MENU_ETL_MANAGER, 
+        "ETL Manager...", true,
+        "Extract, Transform, Load workflows (Beta Preview)");
+    etl_item->SetBitmap(wxArtProvider::GetBitmap(wxART_TIP, wxART_MENU, wxSize(16, 16)));
+    
+    menu->AppendSeparator();
+    
+    auto* git_item = AppendItem(menu, ID_MENU_GIT_INTEGRATION, 
+        "Git Integration...", true,
+        "Version control for database schema (Beta Preview)");
+    git_item->SetBitmap(wxArtProvider::GetBitmap(wxART_TIP, wxART_MENU, wxSize(16, 16)));
+    
+    menu->AppendSeparator();
+    
+    auto* beta_info = AppendItem(menu, wxID_ANY, 
+        "About Beta Features...", true,
+        "Learn about upcoming Beta features");
+    beta_info->SetBitmap(wxArtProvider::GetBitmap(wxART_INFORMATION, wxART_MENU, wxSize(16, 16)));
+    
+    return menu;
+}
+
 wxMenu* BuildViewMenu() {
     auto* menu = new wxMenu();
     AppendItem(menu, wxID_ANY, "Toggle Panels", false);
@@ -238,6 +275,9 @@ wxMenuBar* BuildMenuBar(const MenuBuildOptions& options,
     }
     if (options.includeAdmin) {
         menu_bar->Append(BuildAdminMenu(), "Admin");
+    }
+    if (options.includeTools) {
+        menu_bar->Append(BuildToolsMenu(), "Tools");
     }
     if (options.includeWindow) {
         auto* window_menu = BuildWindowMenu(window_manager, current_frame);
