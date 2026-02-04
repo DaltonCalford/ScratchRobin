@@ -9,6 +9,7 @@
  */
 
 #include "ui/replication_manager_frame.h"
+#include <wx/wx.h>
 
 #include <wx/panel.h>
 #include <wx/sizer.h>
@@ -20,7 +21,7 @@
 #include <wx/listctrl.h>
 #include <wx/gauge.h>
 
-#include "app/window_manager.h"
+#include "ui/window_manager.h"
 #include "core/connection_manager.h"
 #include "core/config.h"
 
@@ -292,7 +293,7 @@ sub_warehouse  | orders_pub    | host=warehouse,...        | Yes
 
 void ReplicationManagerFrame::OnClose(wxCloseEvent& event) {
     if (window_manager_) {
-        window_manager_->OnChildWindowClosing(this);
+        window_manager_->UnregisterWindow(this);
     }
     Destroy();
 }

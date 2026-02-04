@@ -9,6 +9,7 @@
  */
 
 #include "ui/etl_manager_frame.h"
+#include <wx/wx.h>
 
 #include <wx/panel.h>
 #include <wx/sizer.h>
@@ -21,7 +22,7 @@
 #include <wx/textctrl.h>
 #include <wx/splitter.h>
 
-#include "app/window_manager.h"
+#include "ui/window_manager.h"
 #include "core/connection_manager.h"
 #include "core/config.h"
 
@@ -312,7 +313,7 @@ Customer Sync    | 2026-02-03 13:00:00 | 1m 08s   | 980     | 980      | SUCCESS
 
 void EtlManagerFrame::OnClose(wxCloseEvent& event) {
     if (window_manager_) {
-        window_manager_->OnChildWindowClosing(this);
+        window_manager_->UnregisterWindow(this);
     }
     Destroy();
 }

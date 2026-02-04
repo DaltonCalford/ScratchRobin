@@ -10,6 +10,7 @@
 
 #include "ui/cluster_manager_frame.h"
 
+#include <wx/wx.h>
 #include <wx/panel.h>
 #include <wx/sizer.h>
 #include <wx/stattext.h>
@@ -17,8 +18,9 @@
 #include <wx/hyperlink.h>
 #include <wx/statbox.h>
 #include <wx/scrolwin.h>
+#include <wx/menu.h>
 
-#include "app/window_manager.h"
+#include "ui/window_manager.h"
 #include "core/connection_manager.h"
 #include "core/config.h"
 
@@ -232,9 +234,9 @@ Auto-failover: ENABLED
 
 void ClusterManagerFrame::OnClose(wxCloseEvent& event) {
     if (window_manager_) {
-        window_manager_->OnChildWindowClosing(this);
+        window_manager_->UnregisterWindow(this);
     }
-    Destroy();
+    event.Skip();
 }
 
 void ClusterManagerFrame::OnShowDocumentation(wxCommandEvent& /*event*/) {

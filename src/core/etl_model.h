@@ -119,14 +119,20 @@ struct DataSource {
     // Connection reference (for database sources)
     std::optional<std::string> connectionProfileId;
     
-    // Source-specific configuration
+    // Source-specific configuration structs
+    struct DatabaseTableConfig { std::string schema; std::string table; };
+    struct DatabaseQueryConfig { std::string sql; };
+    struct CsvFileConfig { std::string filePath; std::string encoding; char delimiter; };
+    struct JsonFileConfig { std::string filePath; };
+    struct ApiEndpointConfig { std::string url; std::string method; std::map<std::string, std::string> headers; };
+    
     std::variant<
         std::monostate,
-        struct { std::string schema; std::string table; },                    // DatabaseTable
-        struct { std::string sql; },                                          // DatabaseQuery
-        struct { std::string filePath; std::string encoding; char delimiter; }, // CsvFile
-        struct { std::string filePath; },                                     // JsonFile, XmlFile, etc.
-        struct { std::string url; std::string method; std::map<std::string, std::string> headers; } // ApiEndpoint
+        DatabaseTableConfig,      // DatabaseTable
+        DatabaseQueryConfig,      // DatabaseQuery
+        CsvFileConfig,            // CsvFile
+        JsonFileConfig,           // JsonFile, XmlFile, etc.
+        ApiEndpointConfig         // ApiEndpoint
     > config;
     
     // Column definitions (for file sources without schema)
@@ -153,13 +159,18 @@ struct DataTarget {
     // Connection reference (for database targets)
     std::optional<std::string> connectionProfileId;
     
-    // Target-specific configuration
+    // Target-specific configuration structs
+    struct TargetDatabaseTableConfig { std::string schema; std::string table; bool createIfNotExists; bool truncateBeforeLoad; };
+    struct TargetCsvFileConfig { std::string filePath; std::string encoding; char delimiter; bool includeHeader; };
+    struct TargetJsonFileConfig { std::string filePath; bool prettyPrint; };
+    struct TargetExcelFileConfig { std::string filePath; std::string sheetName; };
+    
     std::variant<
         std::monostate,
-        struct { std::string schema; std::string table; bool createIfNotExists; bool truncateBeforeLoad; }, // DatabaseTable
-        struct { std::string filePath; std::string encoding; char delimiter; bool includeHeader; }, // CsvFile
-        struct { std::string filePath; bool prettyPrint; }, // JsonFile
-        struct { std::string filePath; std::string sheetName; } // ExcelFile
+        TargetDatabaseTableConfig,  // DatabaseTable
+        TargetCsvFileConfig,        // CsvFile
+        TargetJsonFileConfig,       // JsonFile
+        TargetExcelFileConfig       // ExcelFile
     > config;
     
     // Load options

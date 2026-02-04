@@ -130,113 +130,11 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     if(SCRATCHROBIN_WARNINGS_AS_ERRORS)
         list(APPEND SCRATCHROBIN_WARNING_FLAGS -Werror)
     endif()
-    
-    target_compile_options(scratchrobin_core PRIVATE ${SCRATCHROBIN_WARNING_FLAGS})
-    
-    if(SCRATCHROBIN_BUILD_UI)
-        target_compile_options(scratchrobin PRIVATE ${SCRATCHROBIN_WARNING_FLAGS})
-    endif()
 endif()
 
-# =============================================================================
-# Sanitizer Configuration
-# =============================================================================
-if(SCRATCHROBIN_ENABLE_ASAN)
-    message(STATUS "AddressSanitizer enabled")
-    target_compile_options(scratchrobin_core PRIVATE -fsanitize=address -fno-omit-frame-pointer)
-    target_link_options(scratchrobin_core PRIVATE -fsanitize=address)
-    if(SCRATCHROBIN_BUILD_UI)
-        target_compile_options(scratchrobin PRIVATE -fsanitize=address -fno-omit-frame-pointer)
-        target_link_options(scratchrobin PRIVATE -fsanitize=address)
-    endif()
-endif()
-
-if(SCRATCHROBIN_ENABLE_UBSAN)
-    message(STATUS "UndefinedBehaviorSanitizer enabled")
-    target_compile_options(scratchrobin_core PRIVATE -fsanitize=undefined -fno-omit-frame-pointer)
-    target_link_options(scratchrobin_core PRIVATE -fsanitize=undefined)
-    if(SCRATCHROBIN_BUILD_UI)
-        target_compile_options(scratchrobin PRIVATE -fsanitize=undefined -fno-omit-frame-pointer)
-        target_link_options(scratchrobin PRIVATE -fsanitize=undefined)
-    endif()
-endif()
-
-if(SCRATCHROBIN_ENABLE_TSAN)
-    message(STATUS "ThreadSanitizer enabled")
-    target_compile_options(scratchrobin_core PRIVATE -fsanitize=thread)
-    target_link_options(scratchrobin_core PRIVATE -fsanitize=thread)
-    if(SCRATCHROBIN_BUILD_UI)
-        target_compile_options(scratchrobin PRIVATE -fsanitize=thread)
-        target_link_options(scratchrobin PRIVATE -fsanitize=thread)
-    endif()
-endif()
-
-if(SCRATCHROBIN_ENABLE_MSAN)
-    message(STATUS "MemorySanitizer enabled")
-    target_compile_options(scratchrobin_core PRIVATE -fsanitize=memory -fno-omit-frame-pointer)
-    target_link_options(scratchrobin_core PRIVATE -fsanitize=memory)
-    if(SCRATCHROBIN_BUILD_UI)
-        target_compile_options(scratchrobin PRIVATE -fsanitize=memory -fno-omit-frame-pointer)
-        target_link_options(scratchrobin PRIVATE -fsanitize=memory)
-    endif()
-endif()
-
-# =============================================================================
-# Code Coverage Configuration
-# =============================================================================
-if(SCRATCHROBIN_ENABLE_COVERAGE)
-    message(STATUS "Code coverage enabled")
-    target_compile_options(scratchrobin_core PRIVATE --coverage -O0)
-    target_link_options(scratchrobin_core PRIVATE --coverage)
-    if(SCRATCHROBIN_BUILD_UI)
-        target_compile_options(scratchrobin PRIVATE --coverage -O0)
-        target_link_options(scratchrobin PRIVATE --coverage)
-    endif()
-endif()
-
-# =============================================================================
-# Static Analysis Tools
-# =============================================================================
-if(SCRATCHROBIN_ENABLE_CLANG_TIDY)
-    find_program(CLANG_TIDY_EXE NAMES clang-tidy)
-    if(CLANG_TIDY_EXE)
-        message(STATUS "clang-tidy enabled: ${CLANG_TIDY_EXE}")
-        set_target_properties(scratchrobin_core PROPERTIES
-            CXX_CLANG_TIDY "${CLANG_TIDY_EXE}"
-        )
-        if(SCRATCHROBIN_BUILD_UI)
-            set_target_properties(scratchrobin PROPERTIES
-                CXX_CLANG_TIDY "${CLANG_TIDY_EXE}"
-            )
-        endif()
-    else()
-        message(WARNING "clang-tidy requested but not found")
-    endif()
-endif()
-
-if(SCRATCHROBIN_ENABLE_IWYU)
-    find_program(IWYU_EXE NAMES include-what-you-use iwyu)
-    if(IWYU_EXE)
-        message(STATUS "include-what-you-use enabled: ${IWYU_EXE}")
-        set_target_properties(scratchrobin_core PROPERTIES
-            CXX_INCLUDE_WHAT_YOU_USE "${IWYU_EXE}"
-        )
-    else()
-        message(WARNING "include-what-you-use requested but not found")
-    endif()
-endif()
-
-if(SCRATCHROBIN_ENABLE_CPPCHECK)
-    find_program(CPPCHECK_EXE NAMES cppcheck)
-    if(CPPCHECK_EXE)
-        message(STATUS "cppcheck enabled: ${CPPCHECK_EXE}")
-        set_target_properties(scratchrobin_core PROPERTIES
-            CXX_CPPCHECK "${CPPCHECK_EXE};--enable=warning,performance,portability,style;--std=c++17"
-        )
-    else()
-        message(WARNING "cppcheck requested but not found")
-    endif()
-endif()
+# NOTE: Compiler warnings, sanitizers, and static analysis are configured
+# at the END of this file after all targets are defined, to avoid errors
+# about targets not existing yet.
 
 if(SCRATCHROBIN_BUILD_UI)
     add_executable(scratchrobin
@@ -429,7 +327,9 @@ endif()
 # =============================================================================
 # Testing Configuration
 # =============================================================================
+option(SCRATCHROBIN_BUILD_TESTS "Build test suite" ON)
 
+if(SCRATCHROBIN_BUILD_TESTS)
 enable_testing()
 
 # Find Google Test
@@ -500,4 +400,145 @@ if(SCRATCHROBIN_ENABLE_COVERAGE)
         DEPENDS scratchrobin_tests
         COMMENT "Generating coverage report"
     )
+endif()
+
+endif() # SCRATCHROBIN_BUILD_TESTS
+
+# =============================================================================
+# Compiler Warnings Configuration (applied after targets are defined)
+# =============================================================================
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    set(SCRATCHROBIN_WARNING_FLAGS
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wshadow
+        -Wnon-virtual-dtor
+        -Wold-style-cast
+        -Wcast-align
+        -Wunused
+        -Woverloaded-virtual
+        -Wconversion
+        -Wsign-conversion
+        -Wnull-dereference
+        -Wdouble-promotion
+        -Wformat=2
+        -Wimplicit-fallthrough
+        -Wmissing-declarations
+        -Wmissing-field-initializers
+        -Wunreachable-code
+    )
+    
+    if(SCRATCHROBIN_ENABLE_WARNINGS)
+        # Add warnings as errors if requested
+        if(SCRATCHROBIN_WARNINGS_AS_ERRORS)
+            list(APPEND SCRATCHROBIN_WARNING_FLAGS -Werror)
+        endif()
+        
+        target_compile_options(scratchrobin_core PRIVATE ${SCRATCHROBIN_WARNING_FLAGS})
+        
+        if(SCRATCHROBIN_BUILD_UI)
+            target_compile_options(scratchrobin PRIVATE ${SCRATCHROBIN_WARNING_FLAGS})
+        endif()
+    endif()
+endif()
+
+# =============================================================================
+# Sanitizer Configuration (applied after targets are defined)
+# =============================================================================
+if(SCRATCHROBIN_ENABLE_ASAN)
+    message(STATUS "AddressSanitizer enabled")
+    target_compile_options(scratchrobin_core PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+    target_link_options(scratchrobin_core PRIVATE -fsanitize=address)
+    if(SCRATCHROBIN_BUILD_UI)
+        target_compile_options(scratchrobin PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+        target_link_options(scratchrobin PRIVATE -fsanitize=address)
+    endif()
+endif()
+
+if(SCRATCHROBIN_ENABLE_UBSAN)
+    message(STATUS "UndefinedBehaviorSanitizer enabled")
+    target_compile_options(scratchrobin_core PRIVATE -fsanitize=undefined -fno-omit-frame-pointer)
+    target_link_options(scratchrobin_core PRIVATE -fsanitize=undefined)
+    if(SCRATCHROBIN_BUILD_UI)
+        target_compile_options(scratchrobin PRIVATE -fsanitize=undefined -fno-omit-frame-pointer)
+        target_link_options(scratchrobin PRIVATE -fsanitize=undefined)
+    endif()
+endif()
+
+if(SCRATCHROBIN_ENABLE_TSAN)
+    message(STATUS "ThreadSanitizer enabled")
+    target_compile_options(scratchrobin_core PRIVATE -fsanitize=thread)
+    target_link_options(scratchrobin_core PRIVATE -fsanitize=thread)
+    if(SCRATCHROBIN_BUILD_UI)
+        target_compile_options(scratchrobin PRIVATE -fsanitize=thread)
+        target_link_options(scratchrobin PRIVATE -fsanitize=thread)
+    endif()
+endif()
+
+if(SCRATCHROBIN_ENABLE_MSAN)
+    message(STATUS "MemorySanitizer enabled")
+    target_compile_options(scratchrobin_core PRIVATE -fsanitize=memory -fno-omit-frame-pointer)
+    target_link_options(scratchrobin_core PRIVATE -fsanitize=memory)
+    if(SCRATCHROBIN_BUILD_UI)
+        target_compile_options(scratchrobin PRIVATE -fsanitize=memory -fno-omit-frame-pointer)
+        target_link_options(scratchrobin PRIVATE -fsanitize=memory)
+    endif()
+endif()
+
+# =============================================================================
+# Code Coverage Configuration (applied after targets are defined)
+# =============================================================================
+if(SCRATCHROBIN_ENABLE_COVERAGE)
+    message(STATUS "Code coverage enabled")
+    target_compile_options(scratchrobin_core PRIVATE --coverage -O0)
+    target_link_options(scratchrobin_core PRIVATE --coverage)
+    if(SCRATCHROBIN_BUILD_UI)
+        target_compile_options(scratchrobin PRIVATE --coverage -O0)
+        target_link_options(scratchrobin PRIVATE --coverage)
+    endif()
+endif()
+
+# =============================================================================
+# Static Analysis Tools (applied after targets are defined)
+# =============================================================================
+if(SCRATCHROBIN_ENABLE_CLANG_TIDY)
+    find_program(CLANG_TIDY_EXE NAMES clang-tidy)
+    if(CLANG_TIDY_EXE)
+        message(STATUS "clang-tidy enabled: ${CLANG_TIDY_EXE}")
+        set_target_properties(scratchrobin_core PROPERTIES
+            CXX_CLANG_TIDY "${CLANG_TIDY_EXE}"
+        )
+        if(SCRATCHROBIN_BUILD_UI)
+            set_target_properties(scratchrobin PROPERTIES
+                CXX_CLANG_TIDY "${CLANG_TIDY_EXE}"
+            )
+        endif()
+    else()
+        message(WARNING "clang-tidy requested but not found")
+    endif()
+endif()
+
+if(SCRATCHROBIN_ENABLE_IWYU)
+    find_program(IWYU_EXE NAMES include-what-you-use iwyu)
+    if(IWYU_EXE)
+        message(STATUS "include-what-you-use enabled: ${IWYU_EXE}")
+        set_target_properties(scratchrobin_core PROPERTIES
+            CXX_INCLUDE_WHAT_YOU_USE "${IWYU_EXE}"
+        )
+    else()
+        message(WARNING "include-what-you-use requested but not found")
+    endif()
+endif()
+
+if(SCRATCHROBIN_ENABLE_CPPCHECK)
+    find_program(CPPCHECK_EXE NAMES cppcheck)
+    if(CPPCHECK_EXE)
+        message(STATUS "cppcheck enabled: ${CPPCHECK_EXE}")
+        set_target_properties(scratchrobin_core PROPERTIES
+            CXX_CPPCHECK "${CPPCHECK_EXE};--enable=warning,performance,portability,style;--std=c++17"
+        )
+    else()
+        message(WARNING "cppcheck requested but not found")
+    endif()
 endif()
