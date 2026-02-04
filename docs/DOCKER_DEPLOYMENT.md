@@ -61,10 +61,10 @@ services:
     restart: unless-stopped
     
     ports:
-      - "3050:3050"    # Native ScratchBird
+      - "3092:3092"    # ScratchBird Native (SBWP v1.1)
       - "5432:5432"    # PostgreSQL
       - "3306:3306"    # MySQL
-      - "3051:3051"    # Firebird
+      - "3050:3050"    # Firebird
       - "8080:8080"    # Web Admin
       - "9090:9090"    # Metrics
     

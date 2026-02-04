@@ -1,7 +1,7 @@
 # ScratchRobin UI Inventory
 
 Status: Draft
-Last Updated: 2026-01-09
+Last Updated: 2026-02-03
 
 This inventory captures every visible UI surface, menus, and core widgets so it
 is easy to review what exists and what is pending.
@@ -206,6 +206,87 @@ File: `src/ui/users_roles_frame.cpp`
 - Primary mock fixture: `config/fixtures/default.json`
 - Multi-catalog test fixture: `tests/fixtures/metadata_multicatalog.json`
 - Fixture schema: `docs/fixtures/README.md`
+
+## Docker Manager Panel
+
+File: `src/ui/docker_manager_panel.cpp`
+
+### Purpose
+Manage Docker containers for ScratchBird deployment with multiple database services.
+
+### Components
+- Container list with status, health, CPU/memory usage
+- Log viewer with auto-scroll
+- Configuration panel for services
+- Template selection (Development, Production, Minimal)
+
+### Features
+- Start/stop/restart containers
+- View real-time logs
+- Configure services (Native, PostgreSQL, MySQL, Firebird)
+- Port mapping configuration
+- Resource limits (memory, CPU)
+- Volume mounting
+
+---
+
+## Test Runner Panel
+
+File: `src/ui/test_runner_panel.cpp`
+
+### Purpose
+Execute and manage database tests with multiple test types.
+
+### Components
+- Test suite tree view (grouped by type)
+- Results list with pass/fail status
+- Progress gauge
+- Statistics panel (passed/failed/skipped/total)
+- Test details panel
+- Execution log
+
+### Supported Test Types
+1. **Unit** - Object structure validation
+2. **Integration** - Workflow testing
+3. **Performance** - Benchmark and load tests
+4. **Data Quality** - Data integrity checks
+5. **Security** - Access control validation
+6. **Migration** - Migration validation
+
+### Output Formats
+- Text, JSON, HTML, JUnit XML, Markdown
+
+---
+
+## Whiteboard Canvas
+
+File: `src/ui/whiteboard_canvas.cpp`
+
+### Purpose
+Free-form diagramming with typed objects for database architecture visualization.
+
+### Components
+- Canvas with zoom/pan/grid
+- Object palette (12 typed object types)
+- Connection lines
+- Selection and resize handles
+
+### Typed Objects
+Rectangular objects with:
+- **Header**: Colored bar showing `Type: Name`
+- **Body**: Free-form details area
+
+**Types**: Database, Schema, Table, View, Procedure, Function, Trigger, Index, Datastore, Server, Cluster, Generic
+
+### Interactions
+- Double-click header → Edit name
+- Double-click body → Edit details
+- F2 → Quick edit name
+- Enter → Quick edit details
+- Drag → Move
+- Resize handles → Resize
+
+---
 
 ## Known Gaps to Track
 

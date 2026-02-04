@@ -102,20 +102,42 @@ ScratchRobin is a comprehensive database design, modeling, and deployment tool t
 ---
 
 ### 6. Whiteboards
-**What it is:** Free-form canvas for brainstorming, sketching, and collaborative ideation.
+**What it is:** Free-form canvas for brainstorming, sketching, and collaborative ideation with typed objects for structured diagramming.
 
 **Why it exists:**
 - Not all design work is structured (ERDs)
 - Early ideation benefits from free-form drawing
 - Teams can sketch concepts before formalizing them
 - Captures the "why" behind design decisions
+- Visual database object mapping helps understand architectures
 
 **Features:**
+- **Typed Objects**: 12 object types (Database, Schema, Table, View, Procedure, Function, Trigger, Index, Datastore, Server, Cluster, Generic)
+- **Visual Header**: Colored header showing `Type: Name` with type-specific colors
+- **Details Area**: Free-form text area inside each object for specifications
+- **Editing**: Double-click header to edit name, body to edit details
 - Freehand drawing
 - Sticky notes
 - Shapes and connectors
 - Image import
 - Multiple pages/layers
+- Auto-sizing based on content
+
+**Object Types & Colors:**
+| Type | Color | Use Case |
+|------|-------|----------|
+| Database | Blue | Database servers |
+| Schema | Green | Schema containers |
+| Table | Peach | Data tables |
+| View | Plum | Database views |
+| Procedure | Yellow | Stored procedures |
+| Function | Light Blue | Functions |
+| Trigger | Pink | Triggers |
+| Index | Silver | Indexes |
+| Datastore | Tan | File storage |
+| Server | Steel Blue | Application servers |
+| Cluster | Sea Green | Server clusters |
+| Generic | Gray | Custom objects |
 
 ---
 
@@ -398,23 +420,32 @@ ScratchRobin bridges the gap by:
 - [x] Icon system (74 icons)
 - [x] Basic UI framework
 
-### Phase 2: Design (In Progress)
+### Phase 2: Design (Completed)
 - [x] ERD diagramming
-- [ ] Whiteboards
+- [x] Whiteboards with typed objects
 - [ ] Mind maps
 - [ ] OLAP cube design
 
-### Phase 3: Testing (Planned)
-- [x] Testing framework core
-- [ ] Test execution UI
-- [ ] Auto-test generation
-- [ ] Performance benchmarking
+### Phase 3: Testing (Completed)
+- [x] Testing framework core (6 test types)
+- [x] Test execution UI with progress tracking
+- [x] Auto-test generation (stubs)
+- [x] Performance benchmarking
+- [x] Data quality testing
+- [x] Security testing
 
-### Phase 4: Deployment (Planned)
-- [ ] Migration generation
-- [ ] Deployment plans
-- [ ] Multi-environment support
-- [ ] Rollback automation
+### Phase 4: Deployment (Completed)
+- [x] Migration generation with DDL export
+- [x] Deployment plans with approval workflow
+- [x] Multi-environment support (dev, test, staging, prod)
+- [x] Rollback automation (stubs)
+- [x] Docker deployment management
+
+### Phase 5: Collaboration (Completed)
+- [x] Real-time collaboration core (OT algorithm)
+- [x] Operational Transform implementation
+- [x] Conflict resolution strategies
+- [x] Lock management
 
 ### Phase 5: Advanced (Future)
 - [ ] Data lineage tracking
@@ -457,5 +488,5 @@ ScratchRobin is licensed under the Initial Developer's Public License Version 1.
 
 ---
 
-*Last updated: 2024-02-04*
-*Version: 0.1.0-alpha*
+*Last updated: 2026-02-03*
+*Version: 0.1.0-beta*

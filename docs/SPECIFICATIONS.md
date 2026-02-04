@@ -246,6 +246,7 @@ Free-form canvas for:
 - Drawing
 - Screenshots
 - Annotations
+- **Typed Objects** (structured diagram elements)
 
 **Tools:**
 - Pen/pencil (freehand)
@@ -255,6 +256,43 @@ Free-form canvas for:
 - Images/screenshots
 - Connectors
 - Layers
+- **Typed Objects** - Structured objects with type, name, and details
+
+**Typed Objects:**
+Rectangular objects with type-specific styling:
+- **Header**: Colored bar showing `Type: Name`
+  - Color-coded by object type (Database=blue, Schema=green, Table=peach, etc.)
+  - Editable via double-click or F2 key
+  
+- **Body**: Free-form text area
+  - Monospaced font for structured content
+  - Multi-line text support
+  - Auto-resizes based on content
+  - Editable via double-click or Enter key
+
+**Supported Object Types:**
+| Type | Color | Typical Details |
+|------|-------|-----------------|
+| Database | Cornflower Blue | Host, port, credentials |
+| Schema | Light Green | Owner, tables count |
+| Table | Peach | Columns, indexes |
+| View | Plum | Source query, dependencies |
+| Procedure | Light Yellow | Parameters, purpose |
+| Function | Light Blue | Return type, arguments |
+| Trigger | Light Pink | Events, timing |
+| Index | Silver | Columns, type |
+| Datastore | Tan | Path, format |
+| Server | Steel Blue | Specs, location |
+| Cluster | Sea Green | Nodes, config |
+| Generic | Light Gray | Custom notes |
+
+**Editing Interactions:**
+- Double-click header → Edit name dialog
+- Double-click body → Edit details dialog
+- F2 → Edit name
+- Enter → Edit details
+- Drag → Move object
+- Resize handles → Adjust size
 
 #### 2.1.6 Architecture Diagrams
 - System topology
