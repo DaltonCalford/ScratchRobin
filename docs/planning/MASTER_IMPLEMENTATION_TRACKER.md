@@ -2,7 +2,7 @@
 
 **Status**: Active Planning Document  
 **Created**: 2026-02-03  
-**Last Updated**: 2026-02-03 (PHASES 1-7 COMPLETE, PHASE 8 93%, PHASE 9-10 COMPLETE)  
+**Last Updated**: 2026-02-05 (Expanded scope tracked in IMPLEMENTATION_ROADMAP.md)  
 **Scope**: Full ScratchRobin GUI implementation to manage ScratchBird database
 
 ---
@@ -10,6 +10,8 @@
 ## Executive Summary
 
 This document provides a comprehensive, prioritized implementation plan for expanding ScratchRobin from its current template state into a full-featured database administration tool for ScratchBird. The plan is organized into phases with clear dependencies, acceptance criteria, and status tracking.
+
+**Note**: The expanded 2026 scope (project system, reporting, diagramming expansion, governance) is tracked in `docs/planning/IMPLEMENTATION_ROADMAP.md`.
 
 ### Current State Summary
 

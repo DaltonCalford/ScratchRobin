@@ -69,7 +69,7 @@ ScratchRobin is a comprehensive database design, modeling, and deployment tool t
 ### Core Specifications
 - **[SPECIFICATIONS.md](SPECIFICATIONS.md)** - Complete technical specifications for all features
 - **[WORKFLOW_GUIDE.md](WORKFLOW_GUIDE.md)** - Step-by-step workflow guide with visual diagrams
-- **[IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md)** - 12-month phased implementation plan
+- **[planning/IMPLEMENTATION_ROADMAP.md](planning/IMPLEMENTATION_ROADMAP.md)** - Current execution roadmap
 
 ### AI Integration
 - **[AI_INTEGRATION_SPEC.md](AI_INTEGRATION_SPEC.md)** - AI provider setup and configuration
@@ -98,6 +98,10 @@ ScratchRobin is a comprehensive database design, modeling, and deployment tool t
   - Data Masking & Anonymization
   - API Generation from database
   - Event Streaming / CDC
+
+### Expanded Specifications (ScratchBird Mirror)
+- **[specifications/README.md](specifications/README.md)** - Full spec index, including mirrored ScratchBird specs
+- **[specifications/SPEC_MAP.md](specifications/SPEC_MAP.md)** - Spec map and navigation
 
 **Dual-Repo Model:**
 ```

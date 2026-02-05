@@ -1,5 +1,12 @@
 # Additional Feature Specifications
 
+## 0. Expanded Project Additions (2026 Scope)
+
+- **Reporting System**: Stored questions, dashboards, collections, alerts, subscriptions, and segments/metrics tied to ScratchBird-only sources.
+- **Data Views in Diagrams**: Embedded query result panels (real or dummy) with refresh and invalidation rules.
+- **Auto-Documentation Templates**: Project templates for MOP/rollback documents and generated documentation in `docs/templates/`.
+- **Diagram Expansion**: Silverston supertype/subtype grids, whiteboard domain wizard, mind map format, and DFD traceability.
+
 ## 1. OLAP Cube Design (Data Warehouse)
 
 ### Cube Structure

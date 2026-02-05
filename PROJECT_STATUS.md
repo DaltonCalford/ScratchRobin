@@ -1,30 +1,40 @@
 # ScratchRobin Project Status
 
 **Project**: ScratchRobin Database Administration Tool  
-**Date**: 2026-02-04  
-**Overall Status**: 🟢 **99% Complete** - Release Candidate  
+**Date**: 2026-02-05  
+**Overall Status**: 🟡 **In Progress** - Expanded scope in execution  
 
 ---
 
 ## Executive Summary
 
-ScratchRobin has successfully completed all major development phases (1-7) representing 233 implementation tasks. The project is now in Phase 8 (Testing & QA), with the core testing infrastructure complete and ongoing work on performance benchmarks and final validation.
+ScratchRobin’s scope has expanded substantially with a full project system, extended diagramming (Silverston + whiteboard + mind map + DFD), reporting storage/execution specs, and a mirrored ScratchBird specification library. Core project persistence, extraction, and Git sync have been implemented, while reporting runtime and governance enforcement remain in progress. The execution tracker now lives in `docs/planning/IMPLEMENTATION_ROADMAP.md`.
 
 ### Key Metrics
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| Tasks Completed | 263+ / 263 | 99.5% |
+| Tasks Completed | Tracked in roadmap | In progress |
 | Source Files | 190+ C++ files | ✅ |
 | Lines of Code | 46,500+ | ✅ |
 | Test Files | 17 | ✅ |
 | Test Cases | 248+ | ✅ |
 | Test Coverage | ~80% | ✅ |
-| Documentation | 20+ pages | ✅ |
+| Documentation | Expanded (spec mirror + new specs) | ✅ |
 
 ---
 
 ## Phase Completion Status
+
+### Expanded Scope (2026) 🟡 In Progress
+- [x] Project persistence (binary) + on-disk layout
+- [x] Offline extraction pipeline (fixtures + pattern filters)
+- [x] Git sync + conflict resolution scaffolding
+- [x] Silverston diagram spec consolidation + topology/replication rules
+- [x] Reporting storage format spec + schema bundle
+- [ ] Reporting runtime execution engine
+- [ ] Data View persistence + refresh
+- [ ] Governance enforcement runtime
 
 ### Phase 1: Foundation Layer ✅ 100%
 **Timeline**: 2-3 weeks | **Tasks**: 24/24

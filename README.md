@@ -224,7 +224,7 @@ Deploy → Create Plan → Execute
 
 ### Additional Features
 - [ADDITIONAL_FEATURES.md](docs/ADDITIONAL_FEATURES.md) - Cube design, testing, lineage
-- [IMPLEMENTATION_ROADMAP.md](docs/IMPLEMENTATION_ROADMAP.md) - 12-month roadmap
+- [planning/IMPLEMENTATION_ROADMAP.md](docs/planning/IMPLEMENTATION_ROADMAP.md) - Current execution roadmap
 
 ---
 

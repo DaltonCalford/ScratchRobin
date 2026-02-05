@@ -4,6 +4,8 @@
 
 This document outlines the phased implementation of the comprehensive project system, expanded diagramming, and design workflow features.
 
+**Note**: The living execution tracker is maintained in `docs/planning/IMPLEMENTATION_ROADMAP.md`.
+
 ---
 
 ## Phase 1: Core Project Infrastructure (Months 1-2)
@@ -476,4 +478,3 @@ class TimeTracker {
 | Collaboration complexity | Start with simple lock-based, evolve to OT |
 | Database compatibility | Abstract DB layer, extensive testing |
 | Security concerns | Security audit, encryption, access control |
-

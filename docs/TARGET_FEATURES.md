@@ -21,6 +21,8 @@ ScratchRobin is a comprehensive database design, modeling, and deployment tool t
 - Object state tracking (extracted, new, modified, pending, approved, implemented)
 - Design-to-deployment workflow
 - Change history and audit trail
+- Binary project persistence with deterministic chunking
+- Governance metadata (owners, environments, compliance, AI policies)
 
 ---
 
@@ -42,7 +44,21 @@ ScratchRobin is a comprehensive database design, modeling, and deployment tool t
 
 ---
 
-### 3. Comprehensive Icon System (121 slots, 74 icons)
+### 3. Reporting & Data Views
+**What it is:** A built-in reporting system with stored questions, dashboards, subscriptions, and embedded data views in diagrams.
+
+**Why it exists:**
+- Design artifacts must include live context and examples
+- Teams need consistent reporting definitions tied to schema evolution
+
+**Key capabilities:**
+- Reporting object storage format (questions, dashboards, alerts, segments)
+- Embedded Data View panels (cached query samples and dummy examples)
+- Refresh scheduling and invalidation on schema change
+
+---
+
+### 4. Comprehensive Icon System (121 slots, 74 icons)
 **What it is:** Visual representation of all object types in the catalog tree with state-based coloring.
 
 **Why it exists:**
@@ -60,7 +76,7 @@ ScratchRobin is a comprehensive database design, modeling, and deployment tool t
 
 ---
 
-### 4. Design State Management
+### 5. Design State Management
 **What it is:** A state machine tracking the lifecycle of each database object from extraction to deployment.
 
 **Why it exists:**
@@ -78,6 +94,22 @@ ScratchRobin is a comprehensive database design, modeling, and deployment tool t
 | Approved | Green | Approved for deployment |
 | Implemented | Blue | Successfully deployed |
 | Deleted | Red X | Marked for removal |
+
+---
+
+### 6. Expanded Diagramming & Modeling
+**What it is:** A multi-notation diagramming system covering ERD, Silverston, whiteboard, mind map, and data flow.
+
+**Why it exists:**
+- Teams need multiple representations for different stages of design
+- Complex systems require topology, replication, and workflow views
+
+**Key capabilities:**
+- Silverston supertype/subtype grids with replication groups
+- Whiteboard models with domain wizard + freeform attributes
+- Mind map serialization and round-trip rules
+- DFD diagrams with ERD traceability
+- SVG-first rendering for consistent export
 
 ---
 

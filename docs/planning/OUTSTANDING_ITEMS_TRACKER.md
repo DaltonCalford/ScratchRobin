@@ -1,8 +1,8 @@
 # ScratchRobin Outstanding Items Tracker
 
 **Created**: 2026-02-03  
-**Last Updated**: 2026-02-04  
-**Overall Completion**: ~99%
+**Last Updated**: 2026-02-05  
+**Overall Completion**: In progress (expanded scope)
 
 This document tracks all TODOs, FIXMEs, and unimplemented features found in the ScratchRobin codebase.
 
@@ -12,13 +12,14 @@ This document tracks all TODOs, FIXMEs, and unimplemented features found in the 
 
 | Category | Items | Status | Priority |
 |----------|-------|--------|----------|
-| Git Integration | 4 | ✅ **Complete** | P0 |
-| API Generator | 12 | ✅ **Complete** | P1 |
-| CDC/Streaming | 10 | ✅ **Complete** | P2 |
-| Data Masking | 6 | ✅ **Complete** | P2 |
+| Project System (persistence, extraction, git sync) | 6 | 🟡 In Progress | P0 |
+| Reporting (storage, execution, alerts) | 5 | 🟡 In Progress | P0 |
+| Diagramming Expansion (Silverston, DFD, whiteboard) | 6 | 🟡 In Progress | P1 |
+| Git Integration (UI + repo) | 4 | ✅ Complete | P0 |
+| API Generator | 12 | ✅ Complete | P1 |
+| CDC/Streaming | 10 | ✅ Complete | P2 |
+| Data Masking | 6 | ✅ Complete | P2 |
 | Beta Placeholder Features | 3 | 🔴 Stub Only | P1 |
-| UI Polish | 11 | ✅ Complete | P3 |
-| Core Features | 2 | 🟡 Partial | P3 |
 
 ---
 

@@ -397,6 +397,7 @@ add_executable(scratchrobin_tests
     tests/unit/test_project_extraction_patterns.cpp
     tests/unit/test_project_extraction_kinds.cpp
     tests/unit/test_project_git_sync.cpp
+    tests/unit/test_git_conflict_resolution.cpp
     # Core tests
     tests/unit/test_job_queue.cpp
     tests/unit/test_session_state.cpp

@@ -9,7 +9,11 @@
  */
 #include "project_panel.h"
 
+#include <ctime>
+#include <iomanip>
+#include <sstream>
 #include <wx/artprov.h>
+#include <wx/listbox.h>
 #include <wx/listctrl.h>
 #include <wx/sizer.h>
 #include <wx/splitter.h>
@@ -17,6 +21,7 @@
 #include <wx/stattext.h>
 #include <wx/toolbar.h>
 #include <wx/treectrl.h>
+#include <wx/frame.h>
 
 #include "core/project.h"
 
@@ -131,6 +136,13 @@ void ProjectPanel::BuildStatsPanel() {
     stats_list_->AppendColumn("Count", wxLIST_FORMAT_RIGHT, 80);
     
     sizer->Add(stats_list_, 1, wxEXPAND | wxALL, 8);
+
+    auto* sync_title = new wxStaticText(stats_panel_, wxID_ANY, "Sync History");
+    sync_title->SetFont(sync_title->GetFont().Bold());
+    sizer->Add(sync_title, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+
+    sync_list_ = new wxListBox(stats_panel_, wxID_ANY);
+    sizer->Add(sync_list_, 1, wxEXPAND | wxALL, 8);
     
     stats_panel_->SetSizer(sizer);
 }
@@ -140,6 +152,9 @@ void ProjectPanel::SetProject(std::shared_ptr<Project> project) {
         // Remove old observer
         project_->RemoveObserver(object_changed_callback_);
         project_->ClearStatusCallback();
+        if (sync_list_) {
+            sync_list_->Clear();
+        }
     }
     
     project_ = project;
@@ -151,13 +166,15 @@ void ProjectPanel::SetProject(std::shared_ptr<Project> project) {
         };
         project_->AddObserver(object_changed_callback_);
         project_->SetStatusCallback([this](const Project::StatusEvent& evt) {
-            if (evt.is_error) {
-                wxMessageBox(evt.message, "Project Sync", wxOK | wxICON_ERROR, this);
-            }
+            AppendSyncEvent(evt);
+            PostStatus(evt.message, evt.is_error);
         });
         
         PopulateTree();
         UpdateStatsDisplay();
+        for (const auto& evt : project_->GetStatusEvents()) {
+            AppendSyncEvent(evt);
+        }
     }
 }
 
@@ -342,20 +359,38 @@ void ProjectPanel::OnRefresh(wxCommandEvent&) {
 
 void ProjectPanel::OnSyncToDb(wxCommandEvent&) {
     if (project_) {
-        bool ok = project_->SyncToDatabase();
-        if (ok) {
-            wxMessageBox("Sync to repository completed.", "Sync", wxOK | wxICON_INFORMATION, this);
-        }
+        project_->SyncToDatabase();
     }
 }
 
 void ProjectPanel::OnSyncFromDb(wxCommandEvent&) {
     if (project_) {
-        bool ok = project_->SyncFromDatabase();
-        if (ok) {
-            wxMessageBox("Sync from repository completed.", "Sync", wxOK | wxICON_INFORMATION, this);
-        }
+        project_->SyncFromDatabase();
     }
+}
+
+void ProjectPanel::AppendSyncEvent(const Project::StatusEvent& evt) {
+    if (!sync_list_) return;
+    std::tm tm = *std::localtime(&evt.timestamp);
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%H:%M:%S") << " ";
+    oss << (evt.is_error ? "[ERR] " : "[OK] ");
+    oss << evt.message;
+    sync_list_->Append(oss.str());
+    if (sync_list_->GetCount() > 200) {
+        sync_list_->Delete(0);
+    }
+    if (sync_list_->GetCount() > 0) {
+        sync_list_->SetFirstItem(sync_list_->GetCount() - 1);
+    }
+}
+
+void ProjectPanel::PostStatus(const std::string& message, bool is_error) {
+    auto* top = wxGetTopLevelParent(this);
+    auto* frame = dynamic_cast<wxFrame*>(top);
+    if (!frame) return;
+    frame->SetStatusText(message);
+    (void)is_error;
 }
 
 } // namespace scratchrobin

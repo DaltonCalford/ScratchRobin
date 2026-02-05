@@ -21,6 +21,7 @@ class wxNotebook;
 class wxSplitterWindow;
 class wxListCtrl;
 class wxToolBar;
+class wxListBox;
 
 namespace scratchrobin {
 
@@ -61,6 +62,8 @@ private:
     void BuildToolbar();
     void BuildTree();
     void BuildStatsPanel();
+    void AppendSyncEvent(const Project::StatusEvent& evt);
+    void PostStatus(const std::string& message, bool is_error);
     
     // Event handlers
     void OnTreeSelection(wxTreeEvent& event);
@@ -100,6 +103,7 @@ private:
     wxTreeCtrl* tree_ = nullptr;
     wxPanel* stats_panel_ = nullptr;
     wxListCtrl* stats_list_ = nullptr;
+    wxListBox* sync_list_ = nullptr;
     wxImageList* tree_images_ = nullptr;
     
     // Tree organization
