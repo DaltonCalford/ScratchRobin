@@ -11,6 +11,8 @@
 
 #include <algorithm>
 #include <future>
+#include <map>
+#include <set>
 
 namespace scratchrobin {
 namespace diagram {
@@ -409,6 +411,21 @@ DiagramNode ReverseEngineer::CreateNodeFromTable(const std::string& schema,
     return node;
 }
 
+// Helper function to execute query synchronously using async API
+static bool ExecuteQuerySync(ConnectionManager* cm, const std::string& sql, QueryResult& result) {
+    if (!cm) return false;
+    
+    std::promise<bool> promise;
+    auto future = promise.get_future();
+    
+    cm->ExecuteQueryAsync(sql, [&promise, &result](bool ok, QueryResult res, const std::string&) {
+        result = std::move(res);
+        promise.set_value(ok);
+    });
+    
+    return future.get();
+}
+
 // SchemaComparator implementation
 std::vector<SchemaDifference> SchemaComparator::Compare(
     const DiagramModel& model,
@@ -417,15 +434,230 @@ std::vector<SchemaDifference> SchemaComparator::Compare(
     
     std::vector<SchemaDifference> differences;
     
-    // TODO: Implement schema comparison
-    // This would query the database and compare with the diagram model
+    if (!connection_manager || !profile) {
+        return differences;
+    }
+    
+    // Build a set of tables in the diagram model
+    std::map<std::string, const DiagramNode*> model_tables;
+    for (const auto& node : model.nodes()) {
+        model_tables[node.name] = &node;
+    }
+    
+    // Query database tables based on backend
+    std::string tables_sql;
+    if (profile->backend == "postgresql" || profile->backend == "postgres") {
+        tables_sql = "SELECT table_schema, table_name FROM information_schema.tables "
+                     "WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('pg_catalog', 'information_schema')";
+    } else if (profile->backend == "mysql" || profile->backend == "mariadb") {
+        tables_sql = "SELECT table_schema, table_name FROM information_schema.tables "
+                     "WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')";
+    } else {
+        tables_sql = "SELECT schema_name, name FROM sb_catalog.sb_tables";
+    }
+    
+    QueryResult db_tables;
+    if (ExecuteQuerySync(connection_manager, tables_sql, db_tables)) {
+        std::set<std::string> db_table_names;
+        
+        for (size_t i = 1; i < db_tables.rows.size(); ++i) {
+            const auto& row = db_tables.rows[i];
+            std::string schema = row.size() > 0 && !row[0].isNull ? row[0].text : "";
+            std::string table = row.size() > 1 && !row[1].isNull ? row[1].text : "";
+            std::string full_name = schema.empty() ? table : schema + "." + table;
+            db_table_names.insert(full_name);
+            
+            // Check if table exists in model
+            auto it = model_tables.find(full_name);
+            if (it == model_tables.end()) {
+                // Table exists in DB but not in model
+                SchemaDifference diff;
+                diff.type = SchemaDifference::ChangeType::Added;
+                diff.object_type = "table";
+                diff.object_name = full_name;
+                diff.details = "Table exists in database but not in diagram";
+                differences.push_back(diff);
+            } else {
+                // Table exists in both - compare columns
+                const DiagramNode* node = it->second;
+                
+                // Query columns for this table
+                std::string cols_sql;
+                if (profile->backend == "postgresql" || profile->backend == "postgres") {
+                    cols_sql = "SELECT column_name, data_type FROM information_schema.columns "
+                               "WHERE table_schema = '" + schema + "' AND table_name = '" + table + "'";
+                } else if (profile->backend == "mysql" || profile->backend == "mariadb") {
+                    cols_sql = "SELECT column_name, data_type FROM information_schema.columns "
+                               "WHERE table_schema = '" + schema + "' AND table_name = '" + table + "'";
+                } else {
+                    cols_sql = "SELECT name, data_type FROM sb_catalog.sb_columns "
+                               "WHERE schema_name = '" + schema + "' AND table_name = '" + table + "'";
+                }
+                
+                QueryResult db_columns;
+                if (ExecuteQuerySync(connection_manager, cols_sql, db_columns)) {
+                    std::map<std::string, std::string> db_cols;
+                    for (size_t j = 1; j < db_columns.rows.size(); ++j) {
+                        const auto& col_row = db_columns.rows[j];
+                        std::string col_name = col_row.size() > 0 && !col_row[0].isNull ? col_row[0].text : "";
+                        std::string col_type = col_row.size() > 1 && !col_row[1].isNull ? col_row[1].text : "";
+                        db_cols[col_name] = col_type;
+                    }
+                    
+                    // Compare columns
+                    for (const auto& attr : node->attributes) {
+                        auto col_it = db_cols.find(attr.name);
+                        if (col_it == db_cols.end()) {
+                            // Column in model but not in DB
+                            SchemaDifference diff;
+                            diff.type = SchemaDifference::ChangeType::Removed;
+                            diff.object_type = "column";
+                            diff.object_name = full_name + "." + attr.name;
+                            diff.details = "Column exists in diagram but not in database";
+                            differences.push_back(diff);
+                        } else if (col_it->second != attr.data_type) {
+                            // Column type differs
+                            SchemaDifference diff;
+                            diff.type = SchemaDifference::ChangeType::Modified;
+                            diff.object_type = "column";
+                            diff.object_name = full_name + "." + attr.name;
+                            diff.details = "Column type differs: diagram=" + attr.data_type + ", database=" + col_it->second;
+                            differences.push_back(diff);
+                        }
+                    }
+                    
+                    // Check for columns in DB but not in model
+                    std::set<std::string> model_col_names;
+                    for (const auto& attr : node->attributes) {
+                        model_col_names.insert(attr.name);
+                    }
+                    for (const auto& [col_name, col_type] : db_cols) {
+                        if (model_col_names.find(col_name) == model_col_names.end()) {
+                            SchemaDifference diff;
+                            diff.type = SchemaDifference::ChangeType::Added;
+                            diff.object_type = "column";
+                            diff.object_name = full_name + "." + col_name;
+                            diff.details = "Column exists in database but not in diagram: " + col_type;
+                            differences.push_back(diff);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Check for tables in model but not in DB
+        for (const auto& [name, node] : model_tables) {
+            if (db_table_names.find(name) == db_table_names.end()) {
+                SchemaDifference diff;
+                diff.type = SchemaDifference::ChangeType::Removed;
+                diff.object_type = "table";
+                diff.object_name = name;
+                diff.details = "Table exists in diagram but not in database";
+                differences.push_back(diff);
+            }
+        }
+    }
     
     return differences;
 }
 
 bool SchemaComparator::ApplyDifferences(DiagramModel* model,
                                         const std::vector<SchemaDifference>& differences) {
-    // TODO: Apply differences to the diagram
+    if (!model) {
+        return false;
+    }
+    
+    for (const auto& diff : differences) {
+        switch (diff.type) {
+            case SchemaDifference::ChangeType::Added:
+                if (diff.object_type == "table") {
+                    // Add table to diagram (create a placeholder node)
+                    DiagramNode new_node;
+                    new_node.name = diff.object_name;
+                    new_node.type = "entity";
+                    new_node.x = 100.0;  // Default position
+                    new_node.y = 100.0;
+                    model->AddNode(new_node);
+                } else if (diff.object_type == "column") {
+                    // Add column to existing table
+                    size_t dot_pos = diff.object_name.rfind('.');
+                    if (dot_pos != std::string::npos) {
+                        std::string table_name = diff.object_name.substr(0, dot_pos);
+                        std::string col_name = diff.object_name.substr(dot_pos + 1);
+                        
+                        for (auto& node : model->nodes()) {
+                            if (node.name == table_name) {
+                                DiagramAttribute attr;
+                                attr.name = col_name;
+                                attr.data_type = "UNKNOWN";
+                                node.attributes.push_back(attr);
+                                break;
+                            }
+                        }
+                    }
+                }
+                break;
+                
+            case SchemaDifference::ChangeType::Removed:
+                if (diff.object_type == "table") {
+                    // Remove table from diagram
+                    for (auto it = model->nodes().begin(); it != model->nodes().end(); ++it) {
+                        if (it->name == diff.object_name) {
+                            model->nodes().erase(it);
+                            break;
+                        }
+                    }
+                } else if (diff.object_type == "column") {
+                    // Remove column from table
+                    size_t dot_pos = diff.object_name.rfind('.');
+                    if (dot_pos != std::string::npos) {
+                        std::string table_name = diff.object_name.substr(0, dot_pos);
+                        std::string col_name = diff.object_name.substr(dot_pos + 1);
+                        
+                        for (auto& node : model->nodes()) {
+                            if (node.name == table_name) {
+                                auto& attrs = node.attributes;
+                                attrs.erase(std::remove_if(attrs.begin(), attrs.end(),
+                                    [&col_name](const DiagramAttribute& a) { return a.name == col_name; }),
+                                    attrs.end());
+                                break;
+                            }
+                        }
+                    }
+                }
+                break;
+                
+            case SchemaDifference::ChangeType::Modified:
+                // For modified columns, update the type
+                if (diff.object_type == "column") {
+                    // Parse the details to get new type
+                    size_t db_pos = diff.details.find("database=");
+                    if (db_pos != std::string::npos) {
+                        std::string new_type = diff.details.substr(db_pos + 9);
+                        
+                        size_t dot_pos = diff.object_name.rfind('.');
+                        if (dot_pos != std::string::npos) {
+                            std::string table_name = diff.object_name.substr(0, dot_pos);
+                            std::string col_name = diff.object_name.substr(dot_pos + 1);
+                            
+                            for (auto& node : model->nodes()) {
+                                if (node.name == table_name) {
+                                    for (auto& attr : node.attributes) {
+                                        if (attr.name == col_name) {
+                                            attr.data_type = new_type;
+                                            break;
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                break;
+        }
+    }
+    
     return true;
 }
 

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="244" height="118">
+<rect width="100%" height="100%" fill="white"/>
+<g font-family="monospace" font-size="12" fill="#111">
+<text x="10" y="22">┌──────────────────────────────┐</text>
+<text x="10" y="36">│ -{ PARTY }-         [entity] │</text>
+<text x="10" y="50">│  # PARTY ID : UUID           │</text>
+<text x="10" y="64">│  * PARTY NAME : VARCHAR(80)  │</text>
+<text x="10" y="78">│  o STATUS : PARTY_STATUS     │</text>
+<text x="10" y="92">│  o CREATED_AT : TIMESTAMPTZ  │</text>
+<text x="10" y="106">└──────────────────────────────┘</text>
+</g></svg>

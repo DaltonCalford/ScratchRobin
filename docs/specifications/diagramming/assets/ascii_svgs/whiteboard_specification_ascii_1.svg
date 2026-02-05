@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="118">
+<rect width="100%" height="100%" fill="white"/>
+<g font-family="monospace" font-size="12" fill="#111">
+<text x="10" y="22">[Select Wizard] → [Scan Attribute Lines]</text>
+<text x="10" y="36">        ↓                 ↓</text>
+<text x="10" y="50"> [Group by Name] → [Prompt for Domain]</text>
+<text x="10" y="64">        ↓                 ↓</text>
+<text x="10" y="78"> [Apply to Matches] → [Review + Confirm]</text>
+<text x="10" y="92">        ↓</text>
+<text x="10" y="106">     [Finish]</text>
+</g></svg>

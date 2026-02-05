@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <wx/panel.h>
+#include <wx/datetime.h>
 
 #include "core/connection_manager.h"
 #include "core/query_types.h"
@@ -118,6 +119,9 @@ private:
     void ExportToJSON();
     std::string GetCurrentTabName() const;
 
+    // Custom date range dialog
+    bool ShowCustomDateRangeDialog();
+
     // Event handlers
     void OnRefresh(wxCommandEvent& event);
     void OnAutoRefreshToggle(wxCommandEvent& event);
@@ -172,6 +176,8 @@ private:
     std::vector<TableIOStats> table_io_stats_;
     std::vector<IndexIOStats> index_io_stats_;
     TimeRange current_time_range_ = TimeRange::LastHour;
+    wxDateTime custom_start_date_;
+    wxDateTime custom_end_date_;
     int current_tab_ = 0;  // 0=Database, 1=Table, 2=Index
     bool query_running_ = false;
     JobHandle query_job_;

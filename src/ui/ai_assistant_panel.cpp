@@ -147,6 +147,9 @@ void AiAssistantPanel::BindEvents() {
     Bind(wxEVT_BUTTON, &AiAssistantPanel::OnExportChat, this, ID_EXPORT_CHAT);
     Bind(wxEVT_BUTTON, &AiAssistantPanel::OnSettings, this, ID_SETTINGS);
     
+    // Bind thread event for async AI responses
+    Bind(wxEVT_THREAD, &AiAssistantPanel::OnThreadEvent, this);
+    
     input_text_->Bind(wxEVT_CHAR, [this](wxKeyEvent& event) {
         if (event.GetKeyCode() == WXK_RETURN && event.ControlDown()) {
             wxCommandEvent dummy_event;
@@ -255,9 +258,45 @@ void AiAssistantPanel::ShowLoading(bool loading) {
 void AiAssistantPanel::ProcessRequest(const wxString& prompt, const wxString& type) {
     ShowLoading(true);
     
-    // This would make an actual AI request in the real implementation
-    // For now, we'll simulate responses based on the mode
+    // Get the AI assistant manager
+    AiAssistantManager& manager = AiAssistantManager::Instance();
+    AiProvider* provider = manager.GetActiveProvider();
     
+    // If no provider is available or not initialized, fall back to simulated responses
+    if (!provider || !provider->IsAvailable()) {
+        ProcessSimulatedRequest(prompt, type);
+        return;
+    }
+    
+    // Build the AI request
+    AiRequest request;
+    request.system_message = "You are a helpful database assistant. Provide clear, accurate SQL and database advice.";
+    request.prompt = prompt.ToStdString();
+    
+    // Add conversation history as context
+    auto messages = chat_session_->GetMessages();
+    for (const auto& msg : messages) {
+        request.context.push_back({msg.role, msg.content});
+    }
+    
+    // Set model parameters
+    AiProviderConfig config = manager.GetConfig();
+    request.max_tokens = config.max_tokens;
+    request.temperature = config.temperature;
+    
+    // Run the request asynchronously
+    std::thread([this, request, type, provider]() {
+        AiResponse response = provider->SendRequest(request);
+        
+        // Queue the result back to the main thread
+        wxThreadEvent* event = new wxThreadEvent(wxEVT_THREAD);
+        event->SetString(wxString::FromUTF8(response.content));
+        event->SetInt(response.success ? 1 : 0);
+        wxQueueEvent(this, event);
+    }).detach();
+}
+
+void AiAssistantPanel::ProcessSimulatedRequest(const wxString& prompt, const wxString& type) {
     wxString response;
     
     if (type == "Query Optimization") {
@@ -333,8 +372,6 @@ void AiAssistantPanel::ProcessRequest(const wxString& prompt, const wxString& ty
                    "What would you like to work on?";
     }
     
-    // For now, just add the response directly
-    // TODO: Implement actual async AI request
     AddAssistantMessage(response);
     ShowLoading(false);
 }
@@ -377,6 +414,19 @@ void AiAssistantPanel::GenerateDocumentation() {
                        "- API documentation\n"
                        "- Entity Relationship Diagrams\n"
                        "- Change logs");
+}
+
+void AiAssistantPanel::OnThreadEvent(wxThreadEvent& event) {
+    wxString response = event.GetString();
+    bool success = event.GetInt() != 0;
+    
+    if (success && !response.IsEmpty()) {
+        AddAssistantMessage(response);
+    } else {
+        AddAssistantMessage("Sorry, I encountered an error processing your request. "
+                           "Please check your AI settings and try again.");
+    }
+    ShowLoading(false);
 }
 
 } // namespace scratchrobin

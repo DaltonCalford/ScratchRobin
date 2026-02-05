@@ -10,8 +10,10 @@
 #include "project.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <memory>
@@ -21,10 +23,203 @@
 #include <vector>
 
 #include "core/simple_json.h"
+#include "project_serialization.h"
 
 #include "git_client.h"
 
 namespace scratchrobin {
+
+namespace {
+
+std::vector<std::string> SplitPath(const std::string& path, char delim) {
+    std::vector<std::string> parts;
+    std::string current;
+    for (char c : path) {
+        if (c == delim) {
+            if (!current.empty()) parts.push_back(current);
+            current.clear();
+        } else {
+            current.push_back(c);
+        }
+    }
+    if (!current.empty()) parts.push_back(current);
+    return parts;
+}
+
+std::string EnsureTrailingSlash(const std::string& path) {
+    if (path.empty()) return path;
+    if (path.back() == '/' || path.back() == '\\') return path;
+    return path + "/";
+}
+
+std::shared_ptr<ProjectObject> FindObjectByDesignPath(Project* project,
+                                                      const std::string& design_path) {
+    for (const auto& pair : project->objects_by_id) {
+        const auto& obj = pair.second;
+        if (obj && obj->design_file_path == design_path) {
+            return obj;
+        }
+    }
+    return nullptr;
+}
+
+void UpdateSyncStateFromGit(Project* project,
+                            ProjectGitManager& git,
+                            const std::string& designs_path) {
+    auto status = git.GetRepositoryStatus();
+    project->sync_state.last_sync = std::time(nullptr);
+    project->sync_state.project_repo.branch = status.currentBranch;
+    project->sync_state.project_repo.head_commit = status.currentCommit.value_or("");
+    project->sync_state.project_repo.dirty_files.clear();
+
+    auto changed = git.GetChangedFilesInPath(EnsureTrailingSlash(designs_path));
+    for (const auto& file : changed) {
+        project->sync_state.project_repo.dirty_files.push_back(file.path);
+    }
+
+    project->sync_state.pending.project_to_db.clear();
+    for (const auto& file : changed) {
+        project->sync_state.pending.project_to_db.push_back(file.path);
+    }
+}
+
+bool MatchesValue(const std::string& value, const std::string& pattern) {
+    if (pattern.empty()) return false;
+    return value.find(pattern) != std::string::npos;
+}
+
+bool MatchesPatterns(const MetadataNode& node, const std::vector<std::string>& patterns) {
+    if (patterns.empty()) return true;
+
+    std::string schema;
+    std::string derived_path = DeriveObjectPath(node, &schema);
+    const std::string name = node.label.empty() ? node.name : node.label;
+    const std::string kind = node.kind.empty() ? node.name : node.kind;
+    const std::string catalog = node.catalog;
+
+    for (const auto& p : patterns) {
+        if (p.empty()) continue;
+
+        if (p.rfind("kind:", 0) == 0) {
+            if (kind == p.substr(5)) return true;
+            continue;
+        }
+        if (p.rfind("type:", 0) == 0) {
+            if (kind == p.substr(5)) return true;
+            continue;
+        }
+        if (p.rfind("schema:", 0) == 0) {
+            if (schema == p.substr(7)) return true;
+            continue;
+        }
+        if (p.rfind("catalog:", 0) == 0) {
+            if (catalog == p.substr(8)) return true;
+            continue;
+        }
+        if (p.rfind("table:", 0) == 0) {
+            if (kind == "table" && name == p.substr(6)) return true;
+            continue;
+        }
+        if (p.rfind("view:", 0) == 0) {
+            if (kind == "view" && name == p.substr(5)) return true;
+            continue;
+        }
+        if (p.rfind("procedure:", 0) == 0) {
+            if (kind == "procedure" && name == p.substr(10)) return true;
+            continue;
+        }
+        if (p.rfind("trigger:", 0) == 0) {
+            if (kind == "trigger" && name == p.substr(8)) return true;
+            continue;
+        }
+
+        if (MatchesValue(node.path, p) ||
+            MatchesValue(name, p) ||
+            MatchesValue(node.name, p) ||
+            MatchesValue(derived_path, p) ||
+            MatchesValue(schema, p)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IsFixtureConnection(const DatabaseConnection& conn, std::string* fixture_path) {
+    const std::string& cs = conn.connection_string;
+    const std::string prefix1 = "fixture:";
+    const std::string prefix2 = "file:";
+    if (cs.rfind(prefix1, 0) == 0) {
+        *fixture_path = cs.substr(prefix1.size());
+        return true;
+    }
+    if (cs.rfind(prefix2, 0) == 0) {
+        *fixture_path = cs.substr(prefix2.size());
+        return true;
+    }
+    return false;
+}
+
+std::string DeriveObjectPath(const MetadataNode& node, std::string* out_schema) {
+    if (out_schema) out_schema->clear();
+    if (!node.path.empty()) {
+        auto parts = SplitPath(node.path, '.');
+        if (parts.size() >= 2 && out_schema) {
+            *out_schema = parts[1];
+        }
+        if (node.kind == "schema" && parts.size() >= 2) {
+            return parts[1];
+        }
+        if (node.kind == "column" && parts.size() >= 4) {
+            return parts[1] + "." + parts[2] + "." + parts[3];
+        }
+        if (parts.size() >= 3) {
+            return parts[1] + "." + parts[2];
+        }
+    }
+    return node.label.empty() ? node.name : node.label;
+}
+
+void AddObjectFromNode(Project* project, const MetadataNode& node) {
+    const std::string kind = node.kind.empty() ? node.name : node.kind;
+    if (kind.empty()) return;
+    if (kind == "folder" || kind == "note") return;
+    if (!IsSupportedKind(kind)) return;
+
+    std::string schema;
+    std::string path = DeriveObjectPath(node, &schema);
+    std::string name = node.label.empty() ? node.name : node.label;
+    if (name.empty() && !path.empty()) {
+        auto parts = SplitPath(path, '.');
+        if (!parts.empty()) name = parts.back();
+    }
+
+    auto obj = std::make_shared<ProjectObject>(kind, name);
+    obj->schema_name = schema;
+    obj->path = path;
+    obj->design_file_path = project->config.designs_path + "/" + obj->path + "." + kind + ".json";
+
+    obj->has_source = true;
+    obj->source_snapshot = node;
+    obj->current_design = node;
+    obj->design_state.state = ObjectState::EXTRACTED;
+    obj->design_state.changed_by = "system";
+    obj->design_state.changed_at = std::time(nullptr);
+
+    project->objects_by_id[obj->id] = obj;
+    if (!obj->path.empty()) {
+        project->objects_by_path[obj->path] = obj;
+    }
+}
+
+bool IsSupportedKind(const std::string& kind) {
+    static const std::vector<std::string> allowed = {
+        "schema", "table", "view", "procedure", "function", "trigger",
+        "index", "column", "constraint", "sequence", "domain", "type"
+    };
+    return std::find(allowed.begin(), allowed.end(), kind) != allowed.end();
+}
+
+} // namespace
 
 // ============================================================================
 // UUID Implementation
@@ -301,7 +496,15 @@ bool Project::CreateNew(const std::string& path, const ProjectConfig& cfg) {
     config = cfg;
     
     // Create project directory structure
-    // In production, use proper filesystem operations
+    std::filesystem::create_directories(project_root_path);
+    std::filesystem::create_directories(project_root_path + "/" + config.designs_path);
+    std::filesystem::create_directories(project_root_path + "/" + config.diagrams_path);
+    std::filesystem::create_directories(project_root_path + "/" + config.whiteboards_path);
+    std::filesystem::create_directories(project_root_path + "/" + config.mindmaps_path);
+    std::filesystem::create_directories(project_root_path + "/" + config.docs_path);
+    std::filesystem::create_directories(project_root_path + "/" + config.tests_path);
+    std::filesystem::create_directories(project_root_path + "/" + config.deployments_path);
+    std::filesystem::create_directories(project_root_path + "/" + config.reports_path);
     
     is_open_ = true;
     is_modified_ = true;
@@ -474,37 +677,196 @@ void Project::RemoveObserver(ObjectChangedCallback callback) {
         observers_.end());
 }
 
-// File I/O stubs - would be fully implemented
-bool Project::SaveProjectFile() { return true; }
-bool Project::SaveObjectFiles() { return true; }
-bool Project::LoadProjectFile() { return true; }
-bool Project::LoadObjectFiles() { return true; }
+// File I/O
+bool Project::SaveProjectFile() {
+    if (project_file_path.empty()) {
+        project_file_path = project_root_path + "/project.srproj";
+    }
+    std::string error;
+    return ProjectSerializer::SaveToFile(*this, project_file_path, &error);
+}
+
+bool Project::SaveObjectFiles() {
+    std::filesystem::create_directories(project_root_path + "/" + config.designs_path);
+    for (const auto& pair : objects_by_id) {
+        const auto& obj = pair.second;
+        if (obj->design_file_path.empty()) continue;
+        std::string full_path = project_root_path + "/" + obj->design_file_path;
+        std::filesystem::create_directories(std::filesystem::path(full_path).parent_path());
+        std::ofstream out(full_path, std::ios::binary);
+        if (!out) continue;
+        obj->ToJson(out);
+    }
+    return true;
+}
+
+bool Project::LoadProjectFile() {
+    if (project_file_path.empty()) {
+        project_file_path = project_root_path + "/project.srproj";
+    }
+    std::string error;
+    return ProjectSerializer::LoadFromFile(this, project_file_path, &error);
+}
+
+bool Project::LoadObjectFiles() {
+    // Optional: object files are exports; project file is authoritative
+    return true;
+}
 
 // Git sync implementations using GitClient
 bool Project::SyncToDatabase() {
-    // TODO: Implement proper Git sync
-    // This requires updating to use actual Project class members
+    if (!config.git.enabled) {
+        return false;
+    }
+
+    auto& git = ProjectGitManager::Instance();
+    if (!git.OpenProjectRepository(project_root_path)) {
+        if (!git.InitializeProjectRepository(project_root_path,
+                                             config.git.repo_url.empty()
+                                                 ? std::nullopt
+                                                 : std::optional<std::string>(config.git.repo_url))) {
+            return false;
+        }
+    }
+
+    if (!SaveProjectFile()) return false;
+    SaveObjectFiles();
+
+    if (!git.SyncDesignToRepository(config.designs_path)) {
+        return false;
+    }
+
+    UpdateSyncStateFromGit(this, git, config.designs_path);
+
+    auto conflicts = git.GetConflictedFilesInPath(EnsureTrailingSlash(config.designs_path));
+    sync_state.pending.conflicts = conflicts;
+    for (const auto& conflict : conflicts) {
+        auto obj = FindObjectByDesignPath(this, conflict);
+        if (obj) {
+            obj->SetState(ObjectState::CONFLICTED, "Git sync conflict", "git_sync");
+        }
+    }
+
+    is_modified_ = true;
     return true;
 }
 
 bool Project::SyncFromDatabase() {
-    // TODO: Implement proper Git sync
-    // This requires updating to use actual Project class members  
+    if (!config.git.enabled) {
+        return false;
+    }
+
+    auto& git = ProjectGitManager::Instance();
+    if (!git.OpenProjectRepository(project_root_path)) {
+        return false;
+    }
+
+    if (!git.SyncRepositoryToDesign(config.designs_path)) {
+        return false;
+    }
+
+    UpdateSyncStateFromGit(this, git, config.designs_path);
+
+    auto conflicts = git.GetConflictedFilesInPath(EnsureTrailingSlash(config.designs_path));
+    sync_state.pending.conflicts = conflicts;
+    for (const auto& conflict : conflicts) {
+        auto obj = FindObjectByDesignPath(this, conflict);
+        if (obj) {
+            obj->SetState(ObjectState::CONFLICTED, "Git sync conflict", "git_sync");
+        }
+    }
+
+    is_modified_ = true;
     return true;
 }
 
 bool Project::ResolveConflict(const UUID& id, const std::string& resolution) {
-    (void)id;
-    (void)resolution;
-    // TODO: Implement proper conflict resolution
+    auto obj = GetObject(id);
+    if (!obj || obj->design_file_path.empty()) return false;
+
+    if (!config.git.enabled) return false;
+
+    auto& git = ProjectGitManager::Instance();
+    if (!git.OpenProjectRepository(project_root_path)) {
+        return false;
+    }
+
+    std::string lower = resolution;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    bool keep_project = (lower == "ours" || lower == "project" || lower == "keep_project");
+    bool keep_database = (lower == "theirs" || lower == "database" || lower == "keep_database");
+
+    if (keep_project) {
+        std::string full_path = project_root_path + "/" + obj->design_file_path;
+        std::filesystem::create_directories(std::filesystem::path(full_path).parent_path());
+        std::ofstream out(full_path, std::ios::binary);
+        if (!out) return false;
+        obj->ToJson(out);
+    } else if (keep_database) {
+        std::string full_path = project_root_path + "/" + obj->design_file_path;
+        std::ifstream in(full_path, std::ios::binary);
+        if (!in) return false;
+        std::stringstream buffer;
+        buffer << in.rdbuf();
+        auto incoming = ProjectObject::FromJson(buffer.str());
+        if (!incoming) return false;
+        obj->kind = incoming->kind;
+        obj->name = incoming->name;
+        obj->path = incoming->path;
+        obj->schema_name = incoming->schema_name;
+    }
+
+    if (!git.ResolveObjectConflict(obj->design_file_path, resolution)) {
+        return false;
+    }
+
+    obj->SetState(ObjectState::MODIFIED, "Resolved conflict", "git_sync");
+    sync_state.pending.conflicts.erase(
+        std::remove(sync_state.pending.conflicts.begin(),
+                    sync_state.pending.conflicts.end(),
+                    obj->design_file_path),
+        sync_state.pending.conflicts.end());
+    is_modified_ = true;
     return true;
 }
 
 bool Project::ExtractFromDatabase(const DatabaseConnection& conn,
                                    const std::vector<std::string>& object_patterns) {
-    (void)conn;
-    (void)object_patterns;
-    // TODO: Implement proper database extraction
+    MetadataModel model;
+    std::string fixture_path;
+    std::string error;
+
+    if (IsFixtureConnection(conn, &fixture_path)) {
+        if (!model.LoadFromFixture(fixture_path, &error)) {
+            return false;
+        }
+    } else {
+        model.LoadStub();
+    }
+
+    const auto& snapshot = model.GetSnapshot();
+    for (const auto& node : snapshot.nodes) {
+        if (!MatchesPatterns(node, object_patterns)) {
+            continue;
+        }
+        AddObjectFromNode(this, node);
+
+        if ((node.kind == "table" || node.kind == "view") && !node.children.empty()) {
+            for (const auto& child : node.children) {
+                AddObjectFromNode(this, child);
+            }
+        } else {
+            for (const auto& child : node.children) {
+                if (MatchesPatterns(child, object_patterns)) {
+                    AddObjectFromNode(this, child);
+                }
+            }
+        }
+    }
+
+    is_modified_ = true;
     return true;
 }
 

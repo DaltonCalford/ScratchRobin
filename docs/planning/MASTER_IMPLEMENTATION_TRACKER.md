@@ -59,7 +59,7 @@ This document provides a comprehensive, prioritized implementation plan for expa
 | 1.1.9 | Implement profile CRUD operations | ✅ | P0 | 2d | 1.1.1 | Create, edit, duplicate, delete profiles |
 | 1.1.10 | Wire into main window Connections menu | ✅ | P0 | 0.5d | 1.1.9 | Menu items enabled and functional |
 
-**Specification**: `docs/specifications/CONNECTION_PROFILE_EDITOR.md` (to be created)  
+**Specification**: `docs/specifications/core/CONNECTION_PROFILE_EDITOR.md` (to be created)  
 **Implementation**: `src/ui/connection_editor_dialog.h`, `src/ui/connection_editor_dialog.cpp`  
 **Completed**: 2026-02-03
 
@@ -75,7 +75,7 @@ This document provides a comprehensive, prioritized implementation plan for expa
 | 1.2.6 | Add isolation level selector | ✅ | P1 | 1d | 1.2.2 | Dropdown for READ COMMITTED, SERIALIZABLE, etc. |
 | 1.2.7 | Implement savepoint support | ✅ | P2 | 2d | 1.2.2 | Create, rollback to, release savepoints with SQL templates per backend |
 
-**Specification**: `docs/specifications/TRANSACTION_MANAGEMENT.md` (COMPLETE)  
+**Specification**: `docs/specifications/core/TRANSACTION_MANAGEMENT.md` (COMPLETE)  
 **Implementation**: `src/ui/sql_editor_frame.h`, `src/ui/sql_editor_frame.cpp`  
 **Completed**: 2026-02-03
 
@@ -90,7 +90,7 @@ This document provides a comprehensive, prioritized implementation plan for expa
 | 1.3.5 | Add error logging infrastructure | ✅ | P1 | 1d | 1.3.1 | Logging with file rotation |
 | 1.3.6 | Surface server notices in UI | ✅ | P1 | 1d | - | QueryResult::messages integration, AppendMessages() display |
 
-**Specification**: `docs/specifications/ERROR_HANDLING.md` (COMPLETE)  
+**Specification**: `docs/specifications/core/ERROR_HANDLING.md` (COMPLETE)  
 **Implementation**: `src/core/error_handler.h`, `src/core/error_handler.cpp`, `src/ui/error_dialog.h`, `src/ui/error_dialog.cpp`  
 **Completed**: 2026-02-03
 
@@ -130,7 +130,7 @@ This document provides a comprehensive, prioritized implementation plan for expa
 | 2.1.9 | Add table search/filter | ✅ | P1 | 1d | 2.1.2 | Filter box with real-time filtering |
 | 2.1.10 | Add GRANT/REVOKE UI | ✅ | P2 | 0.5d | 2.1.1 | Full dialog with privilege checklist for tables |
 
-**Specification**: `docs/specifications/TABLE_DESIGNER_UI.md`  
+**Specification**: `docs/specifications/managers/TABLE_DESIGNER_UI.md`  
 **Implementation**: `src/ui/table_designer_frame.h/cpp` - Full backend integration complete
 
 ### 2.2 Index Designer Completion
@@ -147,7 +147,7 @@ This document provides a comprehensive, prioritized implementation plan for expa
 | 2.2.8 | Add index type icons | ✅ | P2 | 1d | 2.2.2 | Visual distinction for B-Tree, GIN, etc. |
 | 2.2.9 | Add index usage statistics | ✅ | P2 | 1d | 2.2.2 | Usage Statistics tab in Index Designer with scan counts |
 
-**Specification**: `docs/specifications/INDEX_DESIGNER_UI.md`  
+**Specification**: `docs/specifications/managers/INDEX_DESIGNER_UI.md`  
 **Implementation**: `src/ui/index_designer_frame.h/cpp` - Full backend integration complete
 
 ### 2.3 Schema Manager Completion
@@ -162,7 +162,7 @@ This document provides a comprehensive, prioritized implementation plan for expa
 | 2.3.6 | Implement DROP SCHEMA with CASCADE | ✅ | P0 | 0.5d | 2.3.1 | Cascade/Restrict options |
 | 2.3.7 | Add schema object count display | ✅ | P1 | 1d | 2.3.2 | Table, view, function counts per schema |
 
-**Specification**: `docs/specifications/SCHEMA_MANAGER_UI.md`  
+**Specification**: `docs/specifications/managers/SCHEMA_MANAGER_UI.md`  
 **Implementation**: `src/ui/schema_manager_frame.h/cpp` - Full backend integration complete
 
 ### 2.4 Domain Manager Completion
@@ -177,7 +177,7 @@ This document provides a comprehensive, prioritized implementation plan for expa
 | 2.4.6 | Implement DROP DOMAIN | ✅ | P0 | 0.5d | 2.4.1 | Confirmation with dependency check |
 | 2.4.7 | Add domain usage reference | ✅ | P1 | 1d | 2.4.2 | Show tables/columns using domain |
 
-**Specification**: `docs/specifications/DOMAIN_MANAGER_UI.md`  
+**Specification**: `docs/specifications/managers/DOMAIN_MANAGER_UI.md`  
 **Implementation**: `src/ui/domain_manager_frame.h/cpp` - Full backend integration complete
 
 ### 2.5 Job Scheduler Completion
@@ -196,7 +196,7 @@ This document provides a comprehensive, prioritized implementation plan for expa
 | 2.5.10 | Add job dependencies visualization | ✅ | P1 | 2d | 2.5.1 | Tree/graph of job dependencies |
 | 2.5.11 | Add scheduler config panel | ✅ | P1 | 1d | 2.5.1 | Full config panel with enable, max-concurrent, poll-interval, timezone |
 
-**Specification**: `docs/specifications/JOB_SCHEDULER_UI.md`  
+**Specification**: `docs/specifications/managers/JOB_SCHEDULER_UI.md`  
 **Implementation**: `src/ui/job_scheduler_frame.h/cpp` - Full backend integration complete
 
 ### 2.6 Users & Roles Enhancement
@@ -516,7 +516,7 @@ src/diagram/
 
 **Implementation**: `src/ui/help_browser.h/cpp` - wxHtmlWindow with topic tree and search
 
-**Specification**: `docs/specifications/CONTEXT_SENSITIVE_HELP.md` (exists)
+**Specification**: `docs/specifications/ui/CONTEXT_SENSITIVE_HELP.md` (exists)
 
 ### 6.3 Session State Persistence
 

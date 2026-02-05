@@ -145,6 +145,7 @@ struct DatabaseConnection {
     bool is_target = false;    // Deployment target
     std::string git_branch;    // Associated Git branch
     bool requires_approval = false;
+    std::string credential_ref;
     
     // For ScratchBird Git repos
     bool is_git_enabled = false;
@@ -188,9 +189,49 @@ struct ProjectConfig {
     std::string whiteboards_path = "whiteboards";
     std::string mindmaps_path = "mindmaps";
     std::string docs_path = "docs";
+    std::string reports_path = "reports";
     std::string tests_path = "tests";
     std::string deployments_path = "deployments";
-    
+
+    struct GovernanceReviewPolicy {
+        uint32_t min_reviewers = 0;
+        std::vector<std::string> required_roles;
+        uint32_t approval_window_hours = 0;
+    };
+
+    struct GovernanceAiPolicy {
+        bool enabled = false;
+        bool requires_review = true;
+        std::vector<std::string> allowed_scopes;
+        std::vector<std::string> prohibited_scopes;
+    };
+
+    struct GovernanceAuditPolicy {
+        std::string log_level;
+        uint32_t retain_days = 0;
+        std::string export_target;
+    };
+
+    struct GovernanceEnvironment {
+        std::string id;
+        std::string name;
+        bool approval_required = false;
+        uint32_t min_reviewers = 0;
+        std::vector<std::string> allowed_roles;
+    };
+
+    struct Governance {
+        std::vector<std::string> owners;
+        std::vector<std::string> stewards;
+        std::vector<GovernanceEnvironment> environments;
+        std::vector<std::string> compliance_tags;
+        GovernanceReviewPolicy review_policy;
+        GovernanceAiPolicy ai_policy;
+        GovernanceAuditPolicy audit_policy;
+    };
+
+    Governance governance;
+
     // Serialization
     void ToYaml(std::ostream& out) const;
     static ProjectConfig FromYaml(const std::string& yaml);

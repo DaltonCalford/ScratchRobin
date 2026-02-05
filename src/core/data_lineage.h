@@ -13,6 +13,7 @@
 #include <ctime>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -264,6 +265,44 @@ struct LineageVisualOptions {
 };
 
 // ============================================================================
+// Data Lineage Retention Policy
+// ============================================================================
+enum class RetentionPolicyType {
+    TimeBased,      // Retain for X days
+    CountBased,     // Retain last X events
+    SizeBased,      // Retain up to X MB
+    Manual          // No automatic cleanup
+};
+
+struct RetentionPolicy {
+    RetentionPolicyType type = RetentionPolicyType::TimeBased;
+    int retention_days = 30;           // For TimeBased
+    size_t max_event_count = 10000;    // For CountBased
+    size_t max_size_mb = 100;          // For SizeBased
+    
+    // Archival options
+    bool archive_before_delete = false;
+    std::string archive_path;          // Where to archive old lineage data
+    
+    // Enforcement schedule
+    bool enforce_on_record = true;     // Enforce policy on each new record
+    int cleanup_interval_hours = 24;   // Background cleanup frequency (0 = disabled)
+    
+    bool IsValid() const;
+    std::string ToString() const;
+};
+
+// Retention policy enforcement result
+struct RetentionEnforcementResult {
+    bool success = false;
+    int events_removed = 0;
+    int events_archived = 0;
+    size_t bytes_freed = 0;
+    std::string error_message;
+    std::time_t enforcement_time;
+};
+
+// ============================================================================
 // Lineage Visualizer
 // ============================================================================
 class LineageVisualizer {
@@ -325,13 +364,65 @@ public:
     // Export
     void ExportLineage(const std::string& path, const std::string& format);
     
+    // ============================================================================
+    // Retention Policy Management
+    // ============================================================================
+    
+    // Set the retention policy for lineage data
+    void SetRetentionPolicy(const RetentionPolicy& policy);
+    
+    // Get current retention policy
+    RetentionPolicy GetRetentionPolicy() const;
+    
+    // Manually trigger retention policy enforcement
+    RetentionEnforcementResult EnforceRetentionPolicy();
+    
+    // Get retention statistics
+    struct RetentionStats {
+        size_t total_events_stored = 0;
+        size_t total_events_archived = 0;
+        size_t total_events_deleted = 0;
+        size_t current_storage_size_mb = 0;
+        std::time_t oldest_event_time = 0;
+        std::time_t newest_event_time = 0;
+        std::time_t last_cleanup_time = 0;
+    };
+    RetentionStats GetRetentionStats() const;
+    
+    // Archive lineage data to external storage
+    bool ArchiveLineageData(const std::string& archive_path, 
+                            std::time_t older_than = 0);
+    
+    // Restore lineage data from archive
+    bool RestoreFromArchive(const std::string& archive_path);
+    
+    // Purge all lineage data (with optional archive first)
+    bool PurgeAllLineageData(bool archive_first = false);
+    
 private:
-    LineageManager() = default;
+    LineageManager();
     ~LineageManager() = default;
+    
+    // Internal retention enforcement
+    RetentionEnforcementResult EnforceTimeBasedPolicy(const RetentionPolicy& policy);
+    RetentionEnforcementResult EnforceCountBasedPolicy(const RetentionPolicy& policy);
+    RetentionEnforcementResult EnforceSizeBasedPolicy(const RetentionPolicy& policy);
+    
+    // Archive helper
+    bool ArchiveEvents(const std::vector<RuntimeLineageCollector::QueryEvent>& events,
+                       const std::string& archive_path);
+    
+    // Calculate storage size
+    size_t CalculateStorageSize() const;
     
     std::unique_ptr<LineageGraph> graph_;
     std::unique_ptr<RuntimeLineageCollector> collector_;
     std::unique_ptr<SqlLineageParser> parser_;
+    
+    // Retention policy
+    RetentionPolicy retention_policy_;
+    RetentionStats retention_stats_;
+    mutable std::mutex retention_mutex_;
 };
 
 } // namespace scratchrobin

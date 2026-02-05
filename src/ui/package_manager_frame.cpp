@@ -757,8 +757,8 @@ void PackageManagerFrame::OnCreate(wxCommandEvent&) {
     if (window_manager_) {
         auto* editor = new SqlEditorFrame(window_manager_, connection_manager_, connections_,
                                           app_config_, nullptr);
+        editor->LoadStatement(sql);
         editor->Show(true);
-        // TODO: Set SQL text in the editor
     }
 }
 
@@ -774,8 +774,8 @@ void PackageManagerFrame::OnEdit(wxCommandEvent&) {
     if (window_manager_) {
         auto* editor = new SqlEditorFrame(window_manager_, connection_manager_, connections_,
                                           app_config_, nullptr);
+        editor->LoadStatement(sql);
         editor->Show(true);
-        // TODO: Set SQL text in the editor
     }
 }
 

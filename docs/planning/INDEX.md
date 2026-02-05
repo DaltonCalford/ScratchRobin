@@ -7,6 +7,7 @@ This directory contains implementation plans, trackers, and roadmaps for the Scr
 | Document | Purpose |
 |----------|---------|
 | [MASTER_IMPLEMENTATION_TRACKER.md](MASTER_IMPLEMENTATION_TRACKER.md) | **Primary reference** - Comprehensive task tracker with priorities, dependencies, and status |
+| [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md) | Living tracker for missing specs + implementation tasks to reach full implementability |
 
 ## Quick Reference
 

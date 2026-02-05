@@ -47,7 +47,7 @@
 - Fixture packs allow UI and tests to run before live listeners exist.
 
 ## Related Specifications
-- UI window model: `docs/specifications/UI_WINDOW_MODEL.md`
-- ERD modeling: `docs/specifications/ERD_MODELING_AND_ENGINEERING.md`
-- Context-sensitive help: `docs/specifications/CONTEXT_SENSITIVE_HELP.md`
-- Icon assets: `docs/specifications/UI_ICON_ASSETS.md`
+- UI window model: `docs/specifications/ui/UI_WINDOW_MODEL.md`
+- ERD modeling: `docs/specifications/diagramming/ERD_MODELING_AND_ENGINEERING.md`
+- Context-sensitive help: `docs/specifications/ui/CONTEXT_SENSITIVE_HELP.md`
+- Icon assets: `docs/specifications/ui/UI_ICON_ASSETS.md`

@@ -1,0 +1,54 @@
+document:
+  type: mop
+  title: "Deployment MOP"
+  version: "1.0"
+  description: "Default Method of Procedure template for deployment plans."
+  sections:
+    - title: "Summary"
+      source: deployment.meta
+      fields:
+        - name
+        - plan_id
+        - target_env
+        - created_at
+        - created_by
+    - title: "Pre-Checks"
+      source: deployment.pre_checks
+      fields:
+        - id
+        - type
+        - parameters
+    - title: "Execution Steps"
+      source: deployment.steps
+      fields:
+        - id
+        - name
+        - type
+        - script
+        - sql
+        - timeout_sec
+        - retry
+    - title: "Rollback Plan"
+      source: deployment.steps
+      fields:
+        - id
+        - name
+        - rollback
+    - title: "Post-Validation"
+      source: deployment.post_checks
+      fields:
+        - id
+        - type
+        - parameters
+
+generation_stub:
+  engine: "scratchrobin-docgen"
+  input:
+    deployment_plan: "deployments/example.srdeploy"
+  output:
+    path: "docs/generated/mops/Deploy_v1_0.md"
+    format: "markdown"
+  options:
+    include_diagrams: true
+    include_signatures: true
+    include_checksums: true

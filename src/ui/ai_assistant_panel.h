@@ -14,6 +14,7 @@
 #include <wx/splitter.h>
 
 #include <memory>
+#include <thread>
 
 namespace scratchrobin {
 
@@ -60,6 +61,8 @@ private:
     void ShowLoading(bool loading);
     
     void ProcessRequest(const wxString& prompt, const wxString& type);
+    void ProcessSimulatedRequest(const wxString& prompt, const wxString& type);
+    void OnThreadEvent(wxThreadEvent& event);
     
     // UI controls
     wxSplitterWindow* splitter_;

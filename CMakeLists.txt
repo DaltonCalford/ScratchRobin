@@ -96,6 +96,7 @@ set(SCRATCHROBIN_CORE_SOURCES
     src/core/firebird_backend.cpp
     src/core/session_state.cpp
     src/core/project.cpp
+    src/core/project_serialization.cpp
     src/core/git_client.cpp
     src/core/testing_framework.cpp
     src/core/docker_config.cpp
@@ -391,6 +392,10 @@ add_executable(scratchrobin_tests
     tests/unit/test_simple_json.cpp
     tests/unit/test_error_handler.cpp
     tests/unit/test_capability_detector.cpp
+    tests/unit/test_project_serialization.cpp
+    tests/unit/test_project_extraction.cpp
+    tests/unit/test_project_extraction_patterns.cpp
+    tests/unit/test_project_extraction_kinds.cpp
     # Core tests
     tests/unit/test_job_queue.cpp
     tests/unit/test_session_state.cpp

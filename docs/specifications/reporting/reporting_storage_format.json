@@ -1,0 +1,135 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://scratchrobin.local/schemas/reporting/reporting_storage_format.json",
+  "title": "ScratchRobin Reporting Storage Format",
+  "type": "object",
+  "description": "Schema bundle for reporting artifacts (ScratchBird only).",
+  "definitions": {
+    "question": {
+      "$id": "https://scratchrobin.local/schemas/reporting/question.json",
+      "type": "object",
+      "required": ["id", "name", "created_at", "updated_at"],
+      "properties": {
+        "id": {"type": "string"},
+        "name": {"type": "string"},
+        "collection_id": {"type": ["string", "null"]},
+        "sql_mode": {"type": "boolean"},
+        "query": {"type": ["object", "null"]},
+        "sql": {"type": ["string", "null"]},
+        "parameters": {"type": "array"},
+        "visualization": {"type": "object"},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"}
+      }
+    },
+    "dashboard": {
+      "$id": "https://scratchrobin.local/schemas/reporting/dashboard.json",
+      "type": "object",
+      "required": ["id", "name", "created_at", "updated_at"],
+      "properties": {
+        "id": {"type": "string"},
+        "name": {"type": "string"},
+        "collection_id": {"type": ["string", "null"]},
+        "cards": {"type": "array"},
+        "filters": {"type": "array"},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"}
+      }
+    },
+    "collection": {
+      "$id": "https://scratchrobin.local/schemas/reporting/collection.json",
+      "type": "object",
+      "required": ["id", "name", "created_at", "updated_at"],
+      "properties": {
+        "id": {"type": "string"},
+        "name": {"type": "string"},
+        "parent_id": {"type": ["string", "null"]},
+        "permissions": {"type": ["object", "null"]},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"}
+      }
+    },
+    "model": {
+      "$id": "https://scratchrobin.local/schemas/reporting/model.json",
+      "type": "object",
+      "required": ["id", "name", "created_at", "updated_at"],
+      "properties": {
+        "id": {"type": "string"},
+        "name": {"type": "string"},
+        "collection_id": {"type": ["string", "null"]},
+        "source": {"type": "string"},
+        "fields": {"type": "array"},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"}
+      }
+    },
+    "alert": {
+      "$id": "https://scratchrobin.local/schemas/reporting/alert.json",
+      "type": "object",
+      "required": ["id", "question_id", "created_at", "updated_at"],
+      "properties": {
+        "id": {"type": "string"},
+        "question_id": {"type": "string"},
+        "condition": {"type": "object"},
+        "schedule": {"type": "string"},
+        "channels": {"type": "array"},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"}
+      }
+    },
+    "subscription": {
+      "$id": "https://scratchrobin.local/schemas/reporting/subscription.json",
+      "type": "object",
+      "required": ["id", "target_type", "target_id", "created_at", "updated_at"],
+      "properties": {
+        "id": {"type": "string"},
+        "target_type": {"type": "string"},
+        "target_id": {"type": "string"},
+        "schedule": {"type": "string"},
+        "channels": {"type": "array"},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"}
+      }
+    },
+    "timeline": {
+      "$id": "https://scratchrobin.local/schemas/reporting/timeline.json",
+      "type": "object",
+      "required": ["id", "name", "created_at", "updated_at"],
+      "properties": {
+        "id": {"type": "string"},
+        "name": {"type": "string"},
+        "collection_id": {"type": ["string", "null"]},
+        "events": {"type": "array"},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"}
+      }
+    },
+    "segment": {
+      "$id": "https://scratchrobin.local/schemas/reporting/segment.json",
+      "type": "object",
+      "required": ["id", "name", "created_at", "updated_at"],
+      "properties": {
+        "id": {"type": "string"},
+        "name": {"type": "string"},
+        "collection_id": {"type": ["string", "null"]},
+        "expression": {"type": "string"},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"}
+      }
+    },
+    "metric": {
+      "$id": "https://scratchrobin.local/schemas/reporting/metric.json",
+      "type": "object",
+      "required": ["id", "name", "created_at", "updated_at"],
+      "properties": {
+        "id": {"type": "string"},
+        "name": {"type": "string"},
+        "collection_id": {"type": ["string", "null"]},
+        "expression": {"type": "string"},
+        "model_ref": {"type": "string"},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"}
+      }
+    }
+  }
+}

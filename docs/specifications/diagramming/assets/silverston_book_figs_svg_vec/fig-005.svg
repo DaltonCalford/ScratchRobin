@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+
+<rect x="60" y="40" width="240" height="160" rx="12" ry="12" fill="#fff" stroke="#111" stroke-width="2"/>
+<text x="80" y="70" font-family="sans-serif" font-size="14">ORDER ITEM</text>
+<text x="80" y="95" font-family="sans-serif" font-size="12"># ORDER ITEM SEQ ID</text>
+<rect x="320" y="220" width="240" height="140" rx="12" ry="12" fill="#fff" stroke="#111" stroke-width="2"/>
+<text x="340" y="250" font-family="sans-serif" font-size="14">ORDER</text>
+<text x="340" y="275" font-family="sans-serif" font-size="12"># ORDER ID</text>
+<line x1="200" y1="200" x2="320" y2="220" stroke="#111" stroke-width="2"/>
+<text x="245" y="205" font-family="sans-serif" font-size="12">~</text>
+<text x="215" y="185" font-family="sans-serif" font-size="10">part of</text>
+<text x="330" y="210" font-family="sans-serif" font-size="10">composed of</text>
+<text x="300" y="210" font-family="sans-serif" font-size="16">&#x2304;</text>
+
+</svg>

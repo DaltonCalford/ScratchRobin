@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+
+<rect x="60" y="70" width="520" height="200" rx="14" ry="14" fill="#fff" stroke="#111" stroke-width="2"/>
+<text x="90" y="105" font-family="sans-serif" font-size="16">ORDER</text>
+<text x="90" y="135" font-family="sans-serif" font-size="14"># ORDER ID</text>
+<text x="90" y="160" font-family="sans-serif" font-size="14">* ORDER DATE</text>
+<text x="90" y="185" font-family="sans-serif" font-size="14">o ENTRY DATE</text>
+
+</svg>

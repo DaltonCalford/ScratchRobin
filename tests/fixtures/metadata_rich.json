@@ -1,0 +1,53 @@
+{
+  "metadata": {
+    "nodes": [
+      {
+        "kind": "schema",
+        "catalog": "native",
+        "path": "native.public"
+      },
+      {
+        "label": "orders",
+        "kind": "table",
+        "catalog": "native",
+        "path": "native.public.orders",
+        "ddl": "CREATE TABLE public.orders (order_id BIGINT PRIMARY KEY, amount NUMERIC(12,2));",
+        "children": [
+          {
+            "label": "order_id",
+            "kind": "column",
+            "catalog": "native",
+            "path": "native.public.orders.order_id"
+          },
+          {
+            "label": "amount",
+            "kind": "column",
+            "catalog": "native",
+            "path": "native.public.orders.amount"
+          }
+        ]
+      },
+      {
+        "label": "orders_view",
+        "kind": "view",
+        "catalog": "native",
+        "path": "native.public.orders_view",
+        "ddl": "CREATE VIEW public.orders_view AS SELECT order_id, amount FROM orders;"
+      },
+      {
+        "label": "calc_total",
+        "kind": "procedure",
+        "catalog": "native",
+        "path": "native.public.calc_total",
+        "ddl": "CREATE PROCEDURE calc_total() AS BEGIN END;"
+      },
+      {
+        "label": "orders_insert",
+        "kind": "trigger",
+        "catalog": "native",
+        "path": "native.public.orders_insert",
+        "ddl": "CREATE TRIGGER orders_insert BEFORE INSERT ON orders AS BEGIN END;"
+      }
+    ]
+  }
+}

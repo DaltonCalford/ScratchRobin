@@ -20,6 +20,7 @@
 #include <wx/button.h>
 #include <wx/checkbox.h>
 #include <wx/choice.h>
+#include <wx/datectrl.h>
 #include <wx/filedlg.h>
 #include <wx/grid.h>
 #include <wx/msgdlg.h>
@@ -915,10 +916,84 @@ void IOStatisticsPanel::OnTimeRangeChanged(wxCommandEvent&) {
             break;
         case 3:
             current_time_range_ = TimeRange::Custom;
-            // TODO: Show custom date range dialog
+            if (!ShowCustomDateRangeDialog()) {
+                // User cancelled - revert to previous selection
+                time_range_choice_->SetSelection(0);
+                current_time_range_ = TimeRange::LastHour;
+            }
             break;
     }
     RefreshData();
+}
+
+bool IOStatisticsPanel::ShowCustomDateRangeDialog() {
+    wxDialog dialog(this, wxID_ANY, "Custom Date Range", wxDefaultPosition, wxSize(350, 200));
+    
+    wxBoxSizer* main_sizer = new wxBoxSizer(wxVERTICAL);
+    
+    // Start date
+    wxBoxSizer* start_sizer = new wxBoxSizer(wxHORIZONTAL);
+    start_sizer->Add(new wxStaticText(&dialog, wxID_ANY, "Start Date:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    wxDatePickerCtrl* start_picker = new wxDatePickerCtrl(&dialog, wxID_ANY, custom_start_date_.IsValid() ? custom_start_date_ : wxDateTime::Now().Subtract(wxDateSpan::Days(7)));
+    start_sizer->Add(start_picker, 1, wxEXPAND);
+    main_sizer->Add(start_sizer, 0, wxEXPAND | wxALL, 10);
+    
+    // End date
+    wxBoxSizer* end_sizer = new wxBoxSizer(wxHORIZONTAL);
+    end_sizer->Add(new wxStaticText(&dialog, wxID_ANY, "End Date:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    wxDatePickerCtrl* end_picker = new wxDatePickerCtrl(&dialog, wxID_ANY, custom_end_date_.IsValid() ? custom_end_date_ : wxDateTime::Now());
+    end_sizer->Add(end_picker, 1, wxEXPAND);
+    main_sizer->Add(end_sizer, 0, wxEXPAND | wxALL, 10);
+    
+    // Preset buttons
+    wxBoxSizer* preset_sizer = new wxBoxSizer(wxHORIZONTAL);
+    wxButton* last_7_days_btn = new wxButton(&dialog, wxID_ANY, "Last 7 Days");
+    wxButton* last_30_days_btn = new wxButton(&dialog, wxID_ANY, "Last 30 Days");
+    wxButton* this_month_btn = new wxButton(&dialog, wxID_ANY, "This Month");
+    preset_sizer->Add(last_7_days_btn, 1, wxRIGHT, 5);
+    preset_sizer->Add(last_30_days_btn, 1, wxRIGHT, 5);
+    preset_sizer->Add(this_month_btn, 1);
+    main_sizer->Add(preset_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
+    
+    // Button event handlers
+    last_7_days_btn->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) {
+        start_picker->SetValue(wxDateTime::Now().Subtract(wxDateSpan::Days(7)));
+        end_picker->SetValue(wxDateTime::Now());
+    });
+    last_30_days_btn->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) {
+        start_picker->SetValue(wxDateTime::Now().Subtract(wxDateSpan::Days(30)));
+        end_picker->SetValue(wxDateTime::Now());
+    });
+    this_month_btn->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) {
+        wxDateTime now = wxDateTime::Now();
+        wxDateTime start_of_month(now.GetDay(), now.GetMonth(), now.GetYear());
+        start_picker->SetValue(start_of_month);
+        end_picker->SetValue(now);
+    });
+    
+    // Standard dialog buttons
+    wxStdDialogButtonSizer* button_sizer = new wxStdDialogButtonSizer();
+    button_sizer->AddButton(new wxButton(&dialog, wxID_OK));
+    button_sizer->AddButton(new wxButton(&dialog, wxID_CANCEL));
+    button_sizer->Realize();
+    main_sizer->Add(button_sizer, 0, wxEXPAND | wxALL, 10);
+    
+    dialog.SetSizer(main_sizer);
+    dialog.Centre();
+    
+    if (dialog.ShowModal() == wxID_OK) {
+        custom_start_date_ = start_picker->GetValue();
+        custom_end_date_ = end_picker->GetValue();
+        // Set to beginning of start day and end of end day
+        custom_start_date_.SetHour(0);
+        custom_start_date_.SetMinute(0);
+        custom_start_date_.SetSecond(0);
+        custom_end_date_.SetHour(23);
+        custom_end_date_.SetMinute(59);
+        custom_end_date_.SetSecond(59);
+        return true;
+    }
+    return false;
 }
 
 void IOStatisticsPanel::OnExportCSV(wxCommandEvent&) {

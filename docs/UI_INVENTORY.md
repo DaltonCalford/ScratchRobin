@@ -299,5 +299,5 @@ Rectangular objects with:
 
 ## Related Specs
 
-- `docs/specifications/UI_WINDOW_MODEL.md`
-- `docs/specifications/ERD_MODELING_AND_ENGINEERING.md`
+- `docs/specifications/ui/UI_WINDOW_MODEL.md`
+- `docs/specifications/diagramming/ERD_MODELING_AND_ENGINEERING.md`

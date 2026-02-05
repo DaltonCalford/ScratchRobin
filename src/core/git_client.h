@@ -158,12 +158,14 @@ public:
 
     // Conflict handling
     std::vector<std::string> GetConflictedObjects();
+    std::vector<std::string> GetConflictedFilesInPath(const std::string& pathPrefix);
     bool ResolveObjectConflict(const std::string& objectPath,
                                 const std::string& resolution);  // "ours", "theirs", "merge"
 
     // Status
     GitRepository GetRepositoryStatus();
     std::vector<GitChangedFile> GetChangedDesignFiles();
+    std::vector<GitChangedFile> GetChangedFilesInPath(const std::string& pathPrefix);
     bool HasUncommittedDesignChanges() const;
 
     // DDL Generation

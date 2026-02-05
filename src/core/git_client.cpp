@@ -1088,6 +1088,20 @@ std::vector<std::string> ProjectGitManager::GetConflictedObjects() {
     return conflicts;
 }
 
+std::vector<std::string> ProjectGitManager::GetConflictedFilesInPath(const std::string& pathPrefix) {
+    std::vector<std::string> conflicts;
+    if (!IsProjectRepositoryOpen()) return conflicts;
+
+    auto files = git_.GetConflictedFiles();
+    for (const auto& file : files) {
+        if (file.find(pathPrefix) == 0) {
+            conflicts.push_back(file);
+        }
+    }
+
+    return conflicts;
+}
+
 bool ProjectGitManager::ResolveObjectConflict(const std::string& objectPath,
                                                const std::string& resolution) {
     if (!IsProjectRepositoryOpen()) return false;
@@ -1143,6 +1157,20 @@ std::vector<GitChangedFile> ProjectGitManager::GetChangedDesignFiles() {
     }
 
     return designFiles;
+}
+
+std::vector<GitChangedFile> ProjectGitManager::GetChangedFilesInPath(const std::string& pathPrefix) {
+    if (!IsProjectRepositoryOpen()) return {};
+
+    auto files = git_.GetChangedFiles();
+    std::vector<GitChangedFile> result;
+    for (const auto& file : files) {
+        if (file.path.find(pathPrefix) == 0) {
+            result.push_back(file);
+        }
+    }
+
+    return result;
 }
 
 bool ProjectGitManager::HasUncommittedDesignChanges() const {

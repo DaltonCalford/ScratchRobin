@@ -141,7 +141,7 @@ Additional specification needed:
 
 **Status**: **SPECIFIED AND IMPLEMENTED** (2026-02-03)
 
-**Specification**: `docs/specifications/TRANSACTION_MANAGEMENT.md`
+**Specification**: `docs/specifications/core/TRANSACTION_MANAGEMENT.md`
 
 **Implementation**: `src/ui/sql_editor_frame.cpp`
 
@@ -200,7 +200,7 @@ Transaction Management Specification
 
 **Status**: **SPECIFIED AND IMPLEMENTED** (2026-02-03)
 
-**Specification**: `docs/specifications/ERROR_HANDLING.md`
+**Specification**: `docs/specifications/core/ERROR_HANDLING.md`
 
 **Implementation**: `src/core/error_handler.cpp`
 
@@ -255,7 +255,7 @@ Error Handling Specification
 
 **Status**: **SPECIFIED AND IMPLEMENTED** (2026-02-03)
 
-**Specification**: `docs/specifications/ERD_NOTATION_DICTIONARIES.md`
+**Specification**: `docs/specifications/diagramming/ERD_NOTATION_DICTIONARIES.md`
 
 **Implementation**: `src/diagram/erd_notation.h`, `src/diagram/diagram_canvas.cpp`
 
@@ -418,7 +418,7 @@ project owner as referenced in ERD_MODELING_AND_ENGINEERING.md line 32.
 
 **Status**: **SPECIFIED AND IMPLEMENTED** (2026-02-03)
 
-**Specification**: `docs/specifications/AUTO_LAYOUT.md`
+**Specification**: `docs/specifications/diagramming/AUTO_LAYOUT.md`
 
 **Implementation**: `src/diagram/layout_engine.cpp`
 
@@ -508,7 +508,7 @@ Per ERD_TOOLING_RESEARCH.md recommendation:
 
 **Status**: **SPECIFIED AND IMPLEMENTED** (2026-02-03)
 
-**Specification**: `docs/specifications/UNDO_REDO.md`
+**Specification**: `docs/specifications/diagramming/UNDO_REDO.md`
 
 **Implementation**: `src/diagram/command.cpp`
 

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420">
+  <style>
+    .box { fill: #ffffff; stroke: #111111; stroke-width: 2; }
+    .box-dash { fill: #ffffff; stroke: #111111; stroke-width: 2; stroke-dasharray: 6 4; }
+    .label { font-family: "Arial", sans-serif; font-size: 14px; fill: #111111; }
+    .small { font-size: 12px; }
+  </style>
+
+  <rect class="box" x="20" y="20" width="720" height="380" rx="6" />
+  <text class="label" x="36" y="44">Project</text>
+
+  <rect class="box" x="60" y="70" width="340" height="300" rx="6" />
+  <text class="label" x="76" y="94">Region: US-East</text>
+
+  <rect class="box" x="420" y="90" width="280" height="260" rx="6" />
+  <text class="label" x="436" y="114">Region: US-West (replica)</text>
+
+  <rect class="box" x="90" y="110" width="280" height="240" rx="6" />
+  <text class="label" x="106" y="134">DB: Sales</text>
+
+  <rect class="box" x="120" y="150" width="220" height="180" rx="6" />
+  <text class="label" x="136" y="174">PARTY</text>
+  <text class="label small" x="136" y="194">-{ name }-</text>
+
+  <rect class="box-dash" x="140" y="210" width="180" height="90" rx="6" />
+  <text class="label small" x="154" y="234">Role Types</text>
+
+  <text class="label small" x="154" y="258">Customer</text>
+  <text class="label small" x="154" y="278">Vendor</text>
+</svg>
