@@ -59,6 +59,7 @@ struct DiagramNode {
     std::string id;
     std::string name;
     std::string type;
+    std::string parent_id;
     double x = 0.0;
     double y = 0.0;
     double width = 0.0;
@@ -67,6 +68,8 @@ struct DiagramNode {
     bool ghosted = false;
     bool pinned = false;  // Pinned nodes are excluded from auto-layout
     std::vector<DiagramAttribute> attributes;
+    std::vector<std::string> tags;
+    std::vector<std::string> trace_refs;  // Links to ERD/metadata objects (DFD traceability)
 };
 
 struct DiagramEdge {
@@ -74,6 +77,7 @@ struct DiagramEdge {
     std::string source_id;
     std::string target_id;
     std::string label;
+    std::string edge_type;
     bool directed = true;
     bool identifying = false;
     Cardinality source_cardinality = Cardinality::One;
@@ -115,7 +119,9 @@ private:
 
 std::string DiagramTypeLabel(DiagramType type);
 std::string DiagramTypeKey(DiagramType type);
+DiagramType StringToDiagramType(const std::string& value);
 std::string CardinalityLabel(Cardinality value);
+Cardinality CardinalityFromString(const std::string& value);
 
 } // namespace scratchrobin
 

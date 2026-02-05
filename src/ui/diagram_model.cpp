@@ -98,6 +98,15 @@ std::string DiagramTypeKey(DiagramType type) {
     }
 }
 
+DiagramType StringToDiagramType(const std::string& value) {
+    if (value == "erd") return DiagramType::Erd;
+    if (value == "silverston") return DiagramType::Silverston;
+    if (value == "whiteboard") return DiagramType::Whiteboard;
+    if (value == "mindmap") return DiagramType::MindMap;
+    if (value == "dfd" || value == "dataflow") return DiagramType::DataFlow;
+    return DiagramType::Erd;
+}
+
 std::string CardinalityLabel(Cardinality value) {
     switch (value) {
         case Cardinality::One:
@@ -111,6 +120,14 @@ std::string CardinalityLabel(Cardinality value) {
         default:
             return "?";
     }
+}
+
+Cardinality CardinalityFromString(const std::string& value) {
+    if (value == "1") return Cardinality::One;
+    if (value == "0..1") return Cardinality::ZeroOrOne;
+    if (value == "1..N") return Cardinality::OneOrMany;
+    if (value == "0..N") return Cardinality::ZeroOrMany;
+    return Cardinality::One;
 }
 
 // ERD Notation support (Phase 3.2)

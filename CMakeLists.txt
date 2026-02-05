@@ -176,6 +176,7 @@ if(SCRATCHROBIN_BUILD_UI)
         src/diagram/reverse_engineer.cpp
         src/diagram/forward_engineer.cpp
         src/diagram/export_manager.cpp
+        src/diagram/diagram_serialization.cpp
         src/diagram/graphviz_layout.cpp
         src/diagram/migration_generator.cpp
         src/ui/domain_editor_dialog.cpp
@@ -398,12 +399,14 @@ add_executable(scratchrobin_tests
     tests/unit/test_project_extraction_kinds.cpp
     tests/unit/test_project_git_sync.cpp
     tests/unit/test_git_conflict_resolution.cpp
+    tests/unit/test_diagram_serialization.cpp
     # Core tests
     tests/unit/test_job_queue.cpp
     tests/unit/test_session_state.cpp
     # Diagram tests (require diagram source files)
     tests/unit/test_diagram_model.cpp
     src/ui/diagram_model.cpp
+    src/diagram/diagram_serialization.cpp
     tests/unit/test_layout_engine.cpp
     src/diagram/layout_engine.cpp
     tests/unit/test_forward_engineer.cpp
