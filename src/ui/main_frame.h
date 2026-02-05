@@ -36,6 +36,7 @@ public:
               const AppConfig* appConfig);
 
     void OnMetadataUpdated(const MetadataSnapshot& snapshot) override;
+    bool SelectMetadataPath(const std::string& path);
 
 private:
     void BuildMenu();

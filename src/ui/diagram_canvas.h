@@ -121,6 +121,7 @@ private:
     void OnPaint(wxPaintEvent& event);
     void OnLeftDown(wxMouseEvent& event);
     void OnLeftUp(wxMouseEvent& event);
+    void OnLeftDClick(wxMouseEvent& event);
     void OnRightDown(wxMouseEvent& event);
     void OnRightUp(wxMouseEvent& event);
     void OnMotion(wxMouseEvent& event);
@@ -135,6 +136,7 @@ private:
     void DrawGrid(wxDC& dc);
     void DrawEdges(wxDC& dc);
     void DrawNodes(wxDC& dc);
+    bool IsNodeVisible(const DiagramNode& node) const;
     void DrawSelectionHandles(wxDC& dc, const DiagramNode& node);
     void DrawEdgeHandles(wxDC& dc, const wxPoint& source, const wxPoint& target);
 

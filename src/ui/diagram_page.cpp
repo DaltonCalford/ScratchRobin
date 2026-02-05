@@ -11,15 +11,19 @@
 
 #include "diagram_template_dialog.h"
 #include "diagram/diagram_serialization.h"
+#include "main_frame.h"
 
 #include <cctype>
+#include <map>
 #include <random>
+#include <sstream>
 
 #include <wx/button.h>
 #include <wx/choice.h>
 #include <wx/checkbox.h>
 #include <wx/listbox.h>
 #include <wx/msgdlg.h>
+#include <wx/app.h>
 #include <wx/sizer.h>
 #include <wx/statline.h>
 #include <wx/stattext.h>
@@ -34,7 +38,7 @@ std::vector<std::string> BuildPaletteTypes(DiagramType type) {
         return {"Cluster", "Node", "Database", "Schema", "Table", "Service", "Host", "Network", "Dependency"};
     }
     if (type == DiagramType::Whiteboard) {
-        return {"Note", "Group", "Sketch", "Image", "Link"};
+        return {"Table", "Note", "Group", "Sketch", "Image", "Link"};
     }
     if (type == DiagramType::MindMap) {
         return {"Topic", "Subtopic", "Idea", "Note", "Link"};
@@ -262,6 +266,15 @@ void DiagramPage::BuildLayout() {
     edge_type_edit_ = new wxTextCtrl(propsPanel, wxID_ANY, "");
     propsSizer->Add(edge_type_edit_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
+    auto* attrsLabel = new wxStaticText(propsPanel, wxID_ANY, "Attributes");
+    attrsLabel->SetForegroundColour(wxColour(200, 200, 200));
+    propsSizer->Add(attrsLabel, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+    attributes_edit_ = new wxTextCtrl(propsPanel, wxID_ANY, "", wxDefaultPosition,
+                                      wxDefaultSize, wxTE_MULTILINE);
+    propsSizer->Add(attributes_edit_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    domain_wizard_button_ = new wxButton(propsPanel, wxID_ANY, "Domain Wizard...");
+    propsSizer->Add(domain_wizard_button_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+
     auto* labelPosLabel = new wxStaticText(propsPanel, wxID_ANY, "Label Position");
     labelPosLabel->SetForegroundColour(wxColour(200, 200, 200));
     propsSizer->Add(labelPosLabel, 0, wxLEFT | wxRIGHT | wxTOP, 8);
@@ -319,6 +332,8 @@ void DiagramPage::BuildLayout() {
     name_edit_->Bind(wxEVT_TEXT, &DiagramPage::OnNameEdited, this);
     edge_label_edit_->Bind(wxEVT_TEXT, &DiagramPage::OnEdgeLabelEdited, this);
     edge_type_edit_->Bind(wxEVT_TEXT, &DiagramPage::OnEdgeTypeEdited, this);
+    attributes_edit_->Bind(wxEVT_TEXT, &DiagramPage::OnAttributesEdited, this);
+    domain_wizard_button_->Bind(wxEVT_BUTTON, &DiagramPage::OnDomainWizard, this);
     label_position_choice_->Bind(wxEVT_CHOICE, &DiagramPage::OnLabelPositionChanged, this);
     cardinality_source_choice_->Bind(wxEVT_CHOICE, &DiagramPage::OnCardinalityChanged, this);
     cardinality_target_choice_->Bind(wxEVT_CHOICE, &DiagramPage::OnCardinalityChanged, this);
@@ -363,6 +378,9 @@ void DiagramPage::UpdateProperties() {
         edge_label_label_->Enable(false);
         edge_type_edit_->ChangeValue("");
         edge_type_edit_->Enable(false);
+        attributes_edit_->ChangeValue("");
+        attributes_edit_->Enable(false);
+        domain_wizard_button_->Enable(false);
         label_position_choice_->Enable(false);
         cardinality_source_choice_->Enable(false);
         cardinality_target_choice_->Enable(false);
@@ -388,6 +406,36 @@ void DiagramPage::UpdateProperties() {
         edge_label_label_->Enable(false);
         edge_type_edit_->ChangeValue("");
         edge_type_edit_->Enable(false);
+        if (diagram_type_ == DiagramType::Whiteboard) {
+            std::ostringstream attrs;
+            for (size_t i = 0; i < selected_node->attributes.size(); ++i) {
+                const auto& attr = selected_node->attributes[i];
+                attrs << attr.name;
+                if (!attr.data_type.empty()) {
+                    attrs << ": " << attr.data_type;
+                }
+                std::vector<std::string> flags;
+                if (attr.is_primary) flags.push_back("pk");
+                if (attr.is_foreign) flags.push_back("fk");
+                if (!attr.is_nullable) flags.push_back("nn");
+                if (!flags.empty()) {
+                    attrs << " (" ;
+                    for (size_t f = 0; f < flags.size(); ++f) {
+                        attrs << flags[f];
+                        if (f + 1 < flags.size()) attrs << ",";
+                    }
+                    attrs << ")";
+                }
+                if (i + 1 < selected_node->attributes.size()) attrs << "\n";
+            }
+            attributes_edit_->ChangeValue(attrs.str());
+            attributes_edit_->Enable(true);
+            domain_wizard_button_->Enable(true);
+        } else {
+            attributes_edit_->ChangeValue("");
+            attributes_edit_->Enable(false);
+            domain_wizard_button_->Enable(false);
+        }
         label_position_choice_->Enable(false);
         cardinality_source_choice_->Enable(false);
         cardinality_target_choice_->Enable(false);
@@ -423,6 +471,9 @@ void DiagramPage::UpdateProperties() {
     if (edge_type_edit_->GetValue() != selected_edge->edge_type) {
         edge_type_edit_->ChangeValue(selected_edge->edge_type);
     }
+    attributes_edit_->ChangeValue("");
+    attributes_edit_->Enable(false);
+    domain_wizard_button_->Enable(false);
     label_position_choice_->Enable(true);
     if (selected_edge->label_offset > 0) {
         label_position_choice_->SetSelection(1);
@@ -654,6 +705,12 @@ void DiagramPage::OnSelectionChanged(wxCommandEvent& event) {
             if (label_dialog.ShowModal() == wxID_OK) {
                 std::string label = label_dialog.GetValue().ToStdString();
                 canvas_->AddEdge(relationship_source_id_, target->id, label);
+                if (diagram_type_ == DiagramType::MindMap) {
+                    auto* target_mut = canvas_->GetSelectedNodeMutable();
+                    if (target_mut) {
+                        target_mut->parent_id = relationship_source_id_;
+                    }
+                }
             }
         }
         relationship_mode_ = false;
@@ -705,6 +762,118 @@ void DiagramPage::OnEdgeTypeEdited(wxCommandEvent&) {
     canvas_->Refresh();
 }
 
+void DiagramPage::OnAttributesEdited(wxCommandEvent&) {
+    auto* selected = canvas_->GetSelectedNodeMutable();
+    if (!selected || diagram_type_ != DiagramType::Whiteboard) {
+        return;
+    }
+    std::string value = attributes_edit_->GetValue().ToStdString();
+    std::vector<DiagramAttribute> attrs;
+    std::string line;
+    std::istringstream stream(value);
+    while (std::getline(stream, line)) {
+        if (line.empty()) continue;
+        DiagramAttribute attr;
+        std::string name_part = line;
+        std::string type_part;
+        std::string hint_part;
+
+        auto colon = line.find(':');
+        if (colon != std::string::npos) {
+            name_part = line.substr(0, colon);
+            type_part = line.substr(colon + 1);
+        }
+        auto paren = name_part.find('(');
+        if (paren != std::string::npos) {
+            hint_part = name_part.substr(paren + 1);
+            name_part = name_part.substr(0, paren);
+        }
+        auto paren2 = type_part.find('(');
+        if (paren2 != std::string::npos) {
+            hint_part = type_part.substr(paren2 + 1);
+            type_part = type_part.substr(0, paren2);
+        }
+        auto close = hint_part.find(')');
+        if (close != std::string::npos) {
+            hint_part = hint_part.substr(0, close);
+        }
+
+        auto trim = [](std::string s) {
+            while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.erase(s.begin());
+            while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.pop_back();
+            return s;
+        };
+        name_part = trim(name_part);
+        type_part = trim(type_part);
+        hint_part = trim(hint_part);
+
+        if (name_part.empty()) continue;
+        attr.name = name_part;
+        attr.data_type = type_part;
+
+        if (!hint_part.empty()) {
+            std::istringstream hints(hint_part);
+            std::string token;
+            while (std::getline(hints, token, ',')) {
+                token = trim(token);
+                if (token == "pk") {
+                    attr.is_primary = true;
+                } else if (token == "fk") {
+                    attr.is_foreign = true;
+                } else if (token == "nn") {
+                    attr.is_nullable = false;
+                } else if (attr.data_type.empty()) {
+                    attr.data_type = token;
+                }
+            }
+        }
+
+        attrs.push_back(attr);
+    }
+    selected->attributes = attrs;
+}
+
+void DiagramPage::OnDomainWizard(wxCommandEvent&) {
+    if (diagram_type_ != DiagramType::Whiteboard) {
+        return;
+    }
+    std::map<std::string, int> counts;
+    for (const auto& node : canvas_->model().nodes()) {
+        if (node.type != "Table") continue;
+        for (const auto& attr : node.attributes) {
+            counts[attr.name]++;
+        }
+    }
+    std::vector<std::string> candidates;
+    for (const auto& [name, count] : counts) {
+        if (count >= 2) candidates.push_back(name);
+    }
+    if (candidates.empty()) {
+        wxMessageBox("No repeated attribute names found.", "Domain Wizard",
+                     wxOK | wxICON_INFORMATION, this);
+        return;
+    }
+    for (const auto& attr_name : candidates) {
+        wxTextEntryDialog dialog(this,
+                                 "Define domain for attribute: " + attr_name,
+                                 "Domain Wizard");
+        if (dialog.ShowModal() != wxID_OK) {
+            continue;
+        }
+        std::string domain = dialog.GetValue().ToStdString();
+        if (domain.empty()) continue;
+        for (auto& node : canvas_->model().nodes()) {
+            if (node.type != "Table") continue;
+            for (auto& attr : node.attributes) {
+                if (attr.name == attr_name) {
+                    attr.data_type = domain;
+                }
+            }
+        }
+    }
+    UpdateProperties();
+}
+
 void DiagramPage::OnParentIdEdited(wxCommandEvent&) {
     auto* selected = canvas_->GetSelectedNodeMutable();
     if (!selected) {
@@ -754,7 +923,23 @@ void DiagramPage::OnOpenTrace(wxCommandEvent&) {
     wxSingleChoiceDialog dialog(this, "Select a trace target", "Open Trace", choices);
     if (dialog.ShowModal() == wxID_OK) {
         wxString ref = dialog.GetStringSelection();
-        wxMessageBox("Would open traced object: " + ref, "Trace", wxOK | wxICON_INFORMATION, this);
+        bool opened = false;
+        for (auto* win : wxTopLevelWindows) {
+            auto* main = dynamic_cast<MainFrame*>(win);
+            if (!main) {
+                continue;
+            }
+            if (main->SelectMetadataPath(ref.ToStdString())) {
+                main->Raise();
+                main->Show(true);
+                opened = true;
+                break;
+            }
+        }
+        if (!opened) {
+            wxMessageBox("Trace target not found in catalog: " + ref,
+                         "Trace", wxOK | wxICON_WARNING, this);
+        }
     }
 }
 

@@ -67,6 +67,7 @@ struct DiagramNode {
     int stack_count = 1;
     bool ghosted = false;
     bool pinned = false;  // Pinned nodes are excluded from auto-layout
+    bool collapsed = false;
     std::vector<DiagramAttribute> attributes;
     std::vector<std::string> tags;
     std::vector<std::string> trace_refs;  // Links to ERD/metadata objects (DFD traceability)

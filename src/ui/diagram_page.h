@@ -33,6 +33,7 @@ public:
     bool LoadFromFile(const std::string& path, std::string* error);
     const std::string& file_path() const { return file_path_; }
     void set_file_path(const std::string& path) { file_path_ = path; }
+    DiagramType diagram_type() const { return diagram_type_; }
 
 private:
     void BuildLayout();
@@ -50,6 +51,8 @@ private:
     void OnNameEdited(wxCommandEvent& event);
     void OnEdgeLabelEdited(wxCommandEvent& event);
     void OnEdgeTypeEdited(wxCommandEvent& event);
+    void OnAttributesEdited(wxCommandEvent& event);
+    void OnDomainWizard(wxCommandEvent& event);
     void OnParentIdEdited(wxCommandEvent& event);
     void OnTraceRefsEdited(wxCommandEvent& event);
     void OnOpenTrace(wxCommandEvent& event);
@@ -80,6 +83,8 @@ private:
     wxTextCtrl* edge_label_edit_ = nullptr;
     wxTextCtrl* edge_type_edit_ = nullptr;
     wxStaticText* edge_label_label_ = nullptr;
+    wxTextCtrl* attributes_edit_ = nullptr;
+    wxButton* domain_wizard_button_ = nullptr;
     wxChoice* label_position_choice_ = nullptr;
     wxChoice* cardinality_source_choice_ = nullptr;
     wxChoice* cardinality_target_choice_ = nullptr;

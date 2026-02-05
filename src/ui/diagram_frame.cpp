@@ -22,11 +22,13 @@
 #include "table_designer_frame.h"
 #include "users_roles_frame.h"
 #include "window_manager.h"
+#include "core/project.h"
 
 #include <wx/notebook.h>
 #include <wx/filedlg.h>
 #include <wx/sizer.h>
 #include <wx/msgdlg.h>
+#include <filesystem>
 
 namespace scratchrobin {
 
@@ -130,6 +132,28 @@ void DiagramFrame::OnSaveDiagram(wxCommandEvent&) {
     DiagramPage* page = GetActiveDiagramPage();
     if (!page) return;
     if (page->file_path().empty()) {
+        auto project = ProjectManager::Instance().GetCurrentProject();
+        if (project) {
+            std::filesystem::path dir = project->project_root_path;
+            dir /= project->config.diagrams_path;
+            std::filesystem::create_directories(dir);
+            std::string ext = page->diagram_type() == DiagramType::Erd ? ".sberd" : ".sbdgm";
+            wxString title = notebook_ ? notebook_->GetPageText(notebook_->GetSelection()) : "diagram";
+            std::string filename = title.ToStdString();
+            if (filename.empty()) filename = "diagram";
+            std::filesystem::path path = dir / (filename + ext);
+            std::string error;
+            if (!page->SaveToFile(path.string(), &error)) {
+                wxMessageBox(error.empty() ? "Failed to save diagram" : error,
+                             "Save Diagram", wxOK | wxICON_ERROR, this);
+                return;
+            }
+            page->set_file_path(path.string());
+            if (notebook_) {
+                notebook_->SetPageText(notebook_->GetSelection(), path.filename().string());
+            }
+            return;
+        }
         wxCommandEvent evt;
         OnSaveDiagramAs(evt);
         return;
@@ -145,7 +169,15 @@ void DiagramFrame::OnSaveDiagramAs(wxCommandEvent&) {
     DiagramPage* page = GetActiveDiagramPage();
     if (!page) return;
     wxString wildcard = "Diagram Files (*.sbdgm;*.sberd)|*.sbdgm;*.sberd|All Files|*.*";
-    wxFileDialog dialog(this, "Save Diagram As", "", "", wildcard,
+    wxString default_dir;
+    auto project = ProjectManager::Instance().GetCurrentProject();
+    if (project) {
+        std::filesystem::path dir = project->project_root_path;
+        dir /= project->config.diagrams_path;
+        std::filesystem::create_directories(dir);
+        default_dir = dir.string();
+    }
+    wxFileDialog dialog(this, "Save Diagram As", default_dir, "", wildcard,
                         wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
     if (dialog.ShowModal() != wxID_OK) return;
     std::string error;

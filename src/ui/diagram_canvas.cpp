@@ -322,6 +322,7 @@ DiagramCanvas::DiagramCanvas(wxWindow* parent, DiagramType type)
     Bind(wxEVT_PAINT, &DiagramCanvas::OnPaint, this);
     Bind(wxEVT_LEFT_DOWN, &DiagramCanvas::OnLeftDown, this);
     Bind(wxEVT_LEFT_UP, &DiagramCanvas::OnLeftUp, this);
+    Bind(wxEVT_LEFT_DCLICK, &DiagramCanvas::OnLeftDClick, this);
     Bind(wxEVT_RIGHT_DOWN, &DiagramCanvas::OnRightDown, this);
     Bind(wxEVT_RIGHT_UP, &DiagramCanvas::OnRightUp, this);
     Bind(wxEVT_MOTION, &DiagramCanvas::OnMotion, this);
@@ -509,6 +510,12 @@ void DiagramCanvas::AddNode(const std::string& node_type, const std::string& nam
     } else if (model_.type() == DiagramType::Whiteboard) {
         node.width = 220.0;
         node.height = 140.0;
+        if (node_type == "Table") {
+            node.attributes = {
+                {"Surrogate_Key", "", true, false, false},
+                {"Name", "", false, false, true}
+            };
+        }
     } else if (model_.type() == DiagramType::DataFlow) {
         node.width = 200.0;
         node.height = 120.0;
@@ -650,7 +657,7 @@ void DiagramCanvas::OnLeftDown(wxMouseEvent& event) {
     }
 }
 
-void DiagramCanvas::OnLeftUp(wxMouseEvent&) {
+void DiagramCanvas::OnLeftUp(wxMouseEvent& event) {
     if (HasCapture()) {
         ReleaseMouse();
     }
@@ -671,6 +678,19 @@ void DiagramCanvas::OnLeftUp(wxMouseEvent&) {
         }
         dragging_edge_index_.reset();
         edge_drag_endpoint_ = EdgeDragEndpoint::None;
+        Refresh();
+    }
+}
+
+void DiagramCanvas::OnLeftDClick(wxMouseEvent& event) {
+    if (model_.type() != DiagramType::MindMap) {
+        return;
+    }
+    wxPoint2DDouble world_point_d = ScreenToWorldDouble(event.GetPosition());
+    auto node_hit = HitTestNode(world_point_d);
+    if (node_hit.has_value()) {
+        auto& node = model_.nodes()[*node_hit];
+        node.collapsed = !node.collapsed;
         Refresh();
     }
 }
@@ -819,6 +839,26 @@ void DiagramCanvas::DrawEdges(wxDC& dc) {
     if (model_.edges().empty()) {
         return;
     }
+    if (model_.type() == DiagramType::MindMap) {
+        // Render mind map hierarchy connections based on parent_id
+        for (const auto& node : model_.nodes()) {
+            if (node.parent_id.empty() || !IsNodeVisible(node)) {
+                continue;
+            }
+            auto parent_it = std::find_if(model_.nodes().begin(), model_.nodes().end(),
+                                          [&](const DiagramNode& n) { return n.id == node.parent_id; });
+            if (parent_it == model_.nodes().end() || !IsNodeVisible(*parent_it)) {
+                continue;
+            }
+            wxPoint start = ComputeNodeCenter(*parent_it);
+            wxPoint end = ComputeNodeCenter(node);
+            wxPoint ctrl((start.x + end.x) / 2, start.y);
+            wxPoint points[3] = {start, ctrl, end};
+            dc.SetPen(wxPen(wxColour(180, 180, 200), 2));
+            dc.DrawSpline(3, points);
+            DrawArrow(dc, ctrl, end);
+        }
+    }
     for (size_t index = 0; index < model_.edges().size(); ++index) {
         const auto& edge = model_.edges()[index];
         auto source_it = std::find_if(model_.nodes().begin(), model_.nodes().end(),
@@ -826,6 +866,9 @@ void DiagramCanvas::DrawEdges(wxDC& dc) {
         auto target_it = std::find_if(model_.nodes().begin(), model_.nodes().end(),
                                       [&](const DiagramNode& node) { return node.id == edge.target_id; });
         if (source_it == model_.nodes().end() || target_it == model_.nodes().end()) {
+            continue;
+        }
+        if (!IsNodeVisible(*source_it) || !IsNodeVisible(*target_it)) {
             continue;
         }
         wxColour edge_color = wxColour(190, 190, 190);
@@ -952,6 +995,9 @@ void DiagramCanvas::DrawNodes(wxDC& dc) {
     const auto& nodes = model_.nodes();
     for (size_t i = 0; i < nodes.size(); ++i) {
         const auto& node = nodes[i];
+        if (!IsNodeVisible(node)) {
+            continue;
+        }
         wxRect2DDouble rect = WorldRectForNode(node);
         wxRect draw_rect(static_cast<int>(rect.m_x), static_cast<int>(rect.m_y),
                          static_cast<int>(rect.m_width), static_cast<int>(rect.m_height));
@@ -972,8 +1018,8 @@ void DiagramCanvas::DrawNodes(wxDC& dc) {
                 dc.SetPen(node_border);
             }
 
-            if (model_.type() == DiagramType::MindMap) {
-                dc.DrawEllipse(layer_rect);
+        if (model_.type() == DiagramType::MindMap) {
+            dc.DrawEllipse(layer_rect);
             } else if (model_.type() == DiagramType::DataFlow) {
                 if (node.type == "Process") {
                     dc.DrawRoundedRectangle(layer_rect, 12);
@@ -1045,6 +1091,28 @@ void DiagramCanvas::DrawNodes(wxDC& dc) {
     }
 }
 
+bool DiagramCanvas::IsNodeVisible(const DiagramNode& node) const {
+    if (model_.type() != DiagramType::MindMap) {
+        return true;
+    }
+    if (node.parent_id.empty()) {
+        return true;
+    }
+    const DiagramNode* current = &node;
+    while (!current->parent_id.empty()) {
+        auto parent_it = std::find_if(model_.nodes().begin(), model_.nodes().end(),
+                                      [&](const DiagramNode& n) { return n.id == current->parent_id; });
+        if (parent_it == model_.nodes().end()) {
+            return true;
+        }
+        if (parent_it->collapsed) {
+            return false;
+        }
+        current = &(*parent_it);
+    }
+    return true;
+}
+
 void DiagramCanvas::DrawSelectionHandles(wxDC& dc, const DiagramNode& node) {
     wxRect2DDouble rect = WorldRectForNode(node);
     double x = rect.m_x;
@@ -1091,6 +1159,9 @@ std::optional<size_t> DiagramCanvas::HitTestNode(const wxPoint2DDouble& world_po
     const auto& nodes = model_.nodes();
     for (size_t i = nodes.size(); i-- > 0;) {
         const auto& node = nodes[i];
+        if (!IsNodeVisible(node)) {
+            continue;
+        }
         if (world_point.m_x >= node.x && world_point.m_x <= node.x + node.width &&
             world_point.m_y >= node.y && world_point.m_y <= node.y + node.height) {
             return i;
@@ -1108,6 +1179,9 @@ std::optional<size_t> DiagramCanvas::HitTestEdge(const wxPoint2DDouble& world_po
         auto target_it = std::find_if(model_.nodes().begin(), model_.nodes().end(),
                                       [&](const DiagramNode& node) { return node.id == edge.target_id; });
         if (source_it == model_.nodes().end() || target_it == model_.nodes().end()) {
+            continue;
+        }
+        if (!IsNodeVisible(*source_it) || !IsNodeVisible(*target_it)) {
             continue;
         }
         wxPoint source_center = ComputeNodeCenter(*source_it);

@@ -825,6 +825,47 @@ void MainFrame::OnFilterClear(wxCommandEvent&) {
     }
 }
 
+bool MainFrame::SelectMetadataPath(const std::string& path) {
+    if (!tree_ || path.empty()) {
+        return false;
+    }
+    wxTreeItemId root = tree_->GetRootItem();
+    if (!root.IsOk()) {
+        return false;
+    }
+    wxTreeItemId found;
+    std::function<void(const wxTreeItemId&)> dfs = [&](const wxTreeItemId& item) {
+        if (found.IsOk()) return;
+        auto* data = dynamic_cast<MetadataNodeData*>(tree_->GetItemData(item));
+        if (data) {
+            const MetadataNode* node = data->GetNode();
+            if (node) {
+                if (node->path == path || node->label == path || node->name == path) {
+                    found = item;
+                    return;
+                }
+            }
+        }
+        wxTreeItemIdValue cookie;
+        wxTreeItemId child = tree_->GetFirstChild(item, cookie);
+        while (child.IsOk()) {
+            dfs(child);
+            child = tree_->GetNextChild(item, cookie);
+        }
+    };
+    dfs(root);
+    if (!found.IsOk()) {
+        return false;
+    }
+    tree_->SelectItem(found);
+    tree_->EnsureVisible(found);
+    auto* data = dynamic_cast<MetadataNodeData*>(tree_->GetItemData(found));
+    context_node_ = data ? data->GetNode() : nullptr;
+    UpdateInspector(context_node_);
+    SetStatusText("Selected: " + path);
+    return true;
+}
+
 void MainFrame::OnTreeOpenEditor(wxCommandEvent&) {
     const MetadataNode* node = context_node_ ? context_node_ : GetSelectedNode();
     auto* editor = new SqlEditorFrame(window_manager_, connection_manager_, connections_,

@@ -68,6 +68,7 @@ std::string DiagramSerializer::ToJson(const DiagramModel& model, const DiagramDo
         out << "      \"stack_count\": " << node.stack_count << ",\n";
         out << "      \"ghosted\": " << (node.ghosted ? "true" : "false") << ",\n";
         out << "      \"pinned\": " << (node.pinned ? "true" : "false") << ",\n";
+        out << "      \"collapsed\": " << (node.collapsed ? "true" : "false") << ",\n";
         out << "      \"tags\": ";
         WriteStringArray(out, node.tags);
         out << ",\n";
@@ -163,6 +164,7 @@ bool DiagramSerializer::FromJson(const std::string& json, DiagramModel* model,
                 if (auto val = FindMember(node_val, "stack_count")) node.stack_count = static_cast<int>(val->number_value);
                 if (auto val = FindMember(node_val, "ghosted")) node.ghosted = val->bool_value;
                 if (auto val = FindMember(node_val, "pinned")) node.pinned = val->bool_value;
+                if (auto val = FindMember(node_val, "collapsed")) node.collapsed = val->bool_value;
                 if (auto val = FindMember(node_val, "tags")) node.tags = ReadStringArray(*val);
                 if (auto val = FindMember(node_val, "trace_refs")) node.trace_refs = ReadStringArray(*val);
 
