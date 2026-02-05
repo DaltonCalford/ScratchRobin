@@ -10,8 +10,10 @@
 #include "diagram_page.h"
 
 #include "diagram_template_dialog.h"
+#include "diagram/diagram_serialization.h"
 
 #include <cctype>
+#include <random>
 
 #include <wx/button.h>
 #include <wx/choice.h>
@@ -111,10 +113,41 @@ wxArrayString ToWxArray(const std::vector<std::string>& values) {
     return arr;
 }
 
+std::string GenerateDiagramId() {
+    static const char* kHex = "0123456789abcdef";
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> dist(0, 15);
+    std::string out;
+    for (int i = 0; i < 24; ++i) {
+        out.push_back(kHex[dist(gen)]);
+    }
+    return out;
+}
+
+int DiagramTypeToIndex(DiagramType type) {
+    switch (type) {
+        case DiagramType::Erd:
+            return 0;
+        case DiagramType::Silverston:
+            return 1;
+        case DiagramType::Whiteboard:
+            return 2;
+        case DiagramType::MindMap:
+            return 3;
+        case DiagramType::DataFlow:
+            return 4;
+        default:
+            return 0;
+    }
+}
+
 } // namespace
 
 DiagramPage::DiagramPage(wxWindow* parent)
     : wxPanel(parent, wxID_ANY) {
+    doc_.diagram_id = GenerateDiagramId();
+    doc_.name = "Diagram";
     BuildLayout();
     PopulatePalette();
     PopulateTemplates();
@@ -223,6 +256,12 @@ void DiagramPage::BuildLayout() {
     edge_label_edit_ = new wxTextCtrl(propsPanel, wxID_ANY, "");
     propsSizer->Add(edge_label_edit_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
+    auto* edgeTypeLabel = new wxStaticText(propsPanel, wxID_ANY, "Edge Type");
+    edgeTypeLabel->SetForegroundColour(wxColour(200, 200, 200));
+    propsSizer->Add(edgeTypeLabel, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+    edge_type_edit_ = new wxTextCtrl(propsPanel, wxID_ANY, "");
+    propsSizer->Add(edge_type_edit_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+
     auto* labelPosLabel = new wxStaticText(propsPanel, wxID_ANY, "Label Position");
     labelPosLabel->SetForegroundColour(wxColour(200, 200, 200));
     propsSizer->Add(labelPosLabel, 0, wxLEFT | wxRIGHT | wxTOP, 8);
@@ -246,6 +285,22 @@ void DiagramPage::BuildLayout() {
     identifying_check_->SetForegroundColour(wxColour(200, 200, 200));
     propsSizer->Add(identifying_check_, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
+    auto* parentLabel = new wxStaticText(propsPanel, wxID_ANY, "Parent ID");
+    parentLabel->SetForegroundColour(wxColour(200, 200, 200));
+    propsSizer->Add(parentLabel, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+    parent_id_edit_ = new wxTextCtrl(propsPanel, wxID_ANY, "");
+    propsSizer->Add(parent_id_edit_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+
+    auto* traceLabel = new wxStaticText(propsPanel, wxID_ANY, "Trace Refs");
+    traceLabel->SetForegroundColour(wxColour(200, 200, 200));
+    propsSizer->Add(traceLabel, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+    trace_refs_edit_ = new wxTextCtrl(propsPanel, wxID_ANY, "", wxDefaultPosition,
+                                      wxDefaultSize, wxTE_MULTILINE);
+    propsSizer->Add(trace_refs_edit_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+
+    open_trace_button_ = new wxButton(propsPanel, wxID_ANY, "Open Trace...");
+    propsSizer->Add(open_trace_button_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+
     propsSizer->AddStretchSpacer(1);
     propsPanel->SetSizer(propsSizer);
 
@@ -263,10 +318,14 @@ void DiagramPage::BuildLayout() {
     canvas_->Bind(EVT_DIAGRAM_SELECTION_CHANGED, &DiagramPage::OnSelectionChanged, this);
     name_edit_->Bind(wxEVT_TEXT, &DiagramPage::OnNameEdited, this);
     edge_label_edit_->Bind(wxEVT_TEXT, &DiagramPage::OnEdgeLabelEdited, this);
+    edge_type_edit_->Bind(wxEVT_TEXT, &DiagramPage::OnEdgeTypeEdited, this);
     label_position_choice_->Bind(wxEVT_CHOICE, &DiagramPage::OnLabelPositionChanged, this);
     cardinality_source_choice_->Bind(wxEVT_CHOICE, &DiagramPage::OnCardinalityChanged, this);
     cardinality_target_choice_->Bind(wxEVT_CHOICE, &DiagramPage::OnCardinalityChanged, this);
     identifying_check_->Bind(wxEVT_CHECKBOX, &DiagramPage::OnIdentifyingChanged, this);
+    parent_id_edit_->Bind(wxEVT_TEXT, &DiagramPage::OnParentIdEdited, this);
+    trace_refs_edit_->Bind(wxEVT_TEXT, &DiagramPage::OnTraceRefsEdited, this);
+    open_trace_button_->Bind(wxEVT_BUTTON, &DiagramPage::OnOpenTrace, this);
     canvas_->Bind(wxEVT_CHAR_HOOK, &DiagramPage::OnCanvasKey, this);
 }
 
@@ -302,10 +361,17 @@ void DiagramPage::UpdateProperties() {
         edge_label_edit_->ChangeValue("");
         edge_label_edit_->Enable(false);
         edge_label_label_->Enable(false);
+        edge_type_edit_->ChangeValue("");
+        edge_type_edit_->Enable(false);
         label_position_choice_->Enable(false);
         cardinality_source_choice_->Enable(false);
         cardinality_target_choice_->Enable(false);
         identifying_check_->Enable(false);
+        parent_id_edit_->ChangeValue("");
+        parent_id_edit_->Enable(false);
+        trace_refs_edit_->ChangeValue("");
+        trace_refs_edit_->Enable(false);
+        open_trace_button_->Enable(false);
         return;
     }
 
@@ -320,10 +386,26 @@ void DiagramPage::UpdateProperties() {
         edge_label_edit_->ChangeValue("");
         edge_label_edit_->Enable(false);
         edge_label_label_->Enable(false);
+        edge_type_edit_->ChangeValue("");
+        edge_type_edit_->Enable(false);
         label_position_choice_->Enable(false);
         cardinality_source_choice_->Enable(false);
         cardinality_target_choice_->Enable(false);
         identifying_check_->Enable(false);
+        parent_id_edit_->ChangeValue(selected_node->parent_id);
+        parent_id_edit_->Enable(true);
+        if (!selected_node->trace_refs.empty()) {
+            std::string joined;
+            for (size_t i = 0; i < selected_node->trace_refs.size(); ++i) {
+                joined += selected_node->trace_refs[i];
+                if (i + 1 < selected_node->trace_refs.size()) joined += "\n";
+            }
+            trace_refs_edit_->ChangeValue(joined);
+        } else {
+            trace_refs_edit_->ChangeValue("");
+        }
+        trace_refs_edit_->Enable(true);
+        open_trace_button_->Enable(!selected_node->trace_refs.empty());
         return;
     }
 
@@ -336,6 +418,10 @@ void DiagramPage::UpdateProperties() {
     edge_label_edit_->Enable(true);
     if (edge_label_edit_->GetValue() != selected_edge->label) {
         edge_label_edit_->ChangeValue(selected_edge->label);
+    }
+    edge_type_edit_->Enable(true);
+    if (edge_type_edit_->GetValue() != selected_edge->edge_type) {
+        edge_type_edit_->ChangeValue(selected_edge->edge_type);
     }
     label_position_choice_->Enable(true);
     if (selected_edge->label_offset > 0) {
@@ -354,6 +440,11 @@ void DiagramPage::UpdateProperties() {
         cardinality_target_choice_->SetSelection(CardinalityToIndex(selected_edge->target_cardinality));
         identifying_check_->SetValue(selected_edge->identifying);
     }
+    parent_id_edit_->ChangeValue("");
+    parent_id_edit_->Enable(false);
+    trace_refs_edit_->ChangeValue("");
+    trace_refs_edit_->Enable(false);
+    open_trace_button_->Enable(false);
 }
 
 void DiagramPage::OnDiagramTypeChanged(wxCommandEvent&) {
@@ -599,6 +690,111 @@ void DiagramPage::OnEdgeLabelEdited(wxCommandEvent&) {
     selected->label = value;
     canvas_->Refresh();
     UpdateProperties();
+}
+
+void DiagramPage::OnEdgeTypeEdited(wxCommandEvent&) {
+    auto* selected = canvas_->GetSelectedEdgeMutable();
+    if (!selected) {
+        return;
+    }
+    std::string value = edge_type_edit_->GetValue().ToStdString();
+    if (value == selected->edge_type) {
+        return;
+    }
+    selected->edge_type = value;
+    canvas_->Refresh();
+}
+
+void DiagramPage::OnParentIdEdited(wxCommandEvent&) {
+    auto* selected = canvas_->GetSelectedNodeMutable();
+    if (!selected) {
+        return;
+    }
+    std::string value = parent_id_edit_->GetValue().ToStdString();
+    if (value == selected->parent_id) {
+        return;
+    }
+    selected->parent_id = value;
+}
+
+void DiagramPage::OnTraceRefsEdited(wxCommandEvent&) {
+    auto* selected = canvas_->GetSelectedNodeMutable();
+    if (!selected) {
+        return;
+    }
+    std::string value = trace_refs_edit_->GetValue().ToStdString();
+    std::vector<std::string> refs;
+    std::string current;
+    for (char c : value) {
+        if (c == '\n' || c == '\r' || c == ',') {
+            if (!current.empty()) {
+                refs.push_back(current);
+                current.clear();
+            }
+        } else if (c == '\t') {
+            continue;
+        } else {
+            current.push_back(c);
+        }
+    }
+    if (!current.empty()) refs.push_back(current);
+    selected->trace_refs = refs;
+    open_trace_button_->Enable(!refs.empty());
+}
+
+void DiagramPage::OnOpenTrace(wxCommandEvent&) {
+    const DiagramNode* selected = canvas_->GetSelectedNode();
+    if (!selected || selected->trace_refs.empty()) {
+        return;
+    }
+    wxArrayString choices;
+    for (const auto& ref : selected->trace_refs) {
+        choices.Add(ref);
+    }
+    wxSingleChoiceDialog dialog(this, "Select a trace target", "Open Trace", choices);
+    if (dialog.ShowModal() == wxID_OK) {
+        wxString ref = dialog.GetStringSelection();
+        wxMessageBox("Would open traced object: " + ref, "Trace", wxOK | wxICON_INFORMATION, this);
+    }
+}
+
+void DiagramPage::SyncDocFromCanvas() {
+    doc_.zoom = canvas_->zoom();
+    wxPoint2DDouble pan = canvas_->pan_offset();
+    doc_.pan_x = pan.m_x;
+    doc_.pan_y = pan.m_y;
+}
+
+void DiagramPage::ApplyDocToCanvas() {
+    canvas_->SetView(doc_.zoom, wxPoint2DDouble(doc_.pan_x, doc_.pan_y));
+}
+
+void DiagramPage::SetDiagramTypeInternal(DiagramType type) {
+    diagram_type_ = type;
+    diagram_type_choice_->SetSelection(DiagramTypeToIndex(type));
+    canvas_->SetDiagramType(type);
+    notation_choice_->Enable(type == DiagramType::Erd);
+    PopulatePalette();
+    PopulateTemplates();
+    UpdateProperties();
+}
+
+bool DiagramPage::SaveToFile(const std::string& path, std::string* error) {
+    SyncDocFromCanvas();
+    return diagram::DiagramSerializer::SaveToFile(canvas_->model(), doc_, path, error);
+}
+
+bool DiagramPage::LoadFromFile(const std::string& path, std::string* error) {
+    DiagramModel loaded(DiagramType::Erd);
+    diagram::DiagramDocument loaded_doc;
+    if (!diagram::DiagramSerializer::LoadFromFile(&loaded, &loaded_doc, path, error)) {
+        return false;
+    }
+    doc_ = loaded_doc;
+    SetDiagramTypeInternal(loaded.type());
+    canvas_->model() = loaded;
+    ApplyDocToCanvas();
+    return true;
 }
 
 } // namespace scratchrobin

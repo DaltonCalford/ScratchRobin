@@ -48,6 +48,9 @@ public:
 
     DiagramType diagram_type() const;
     void SetDiagramType(DiagramType type);
+    double zoom() const;
+    wxPoint2DDouble pan_offset() const;
+    void SetView(double zoom, const wxPoint2DDouble& pan);
     
     // ERD Notation support (Phase 3.2)
     ErdNotation notation() const;

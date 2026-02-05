@@ -24,12 +24,17 @@
 #include "window_manager.h"
 
 #include <wx/notebook.h>
+#include <wx/filedlg.h>
 #include <wx/sizer.h>
+#include <wx/msgdlg.h>
 
 namespace scratchrobin {
 
 wxBEGIN_EVENT_TABLE(DiagramFrame, wxFrame)
     EVT_MENU(ID_MENU_NEW_DIAGRAM, DiagramFrame::OnNewDiagram)
+    EVT_MENU(ID_MENU_DIAGRAM_OPEN, DiagramFrame::OnOpenDiagram)
+    EVT_MENU(ID_MENU_DIAGRAM_SAVE, DiagramFrame::OnSaveDiagram)
+    EVT_MENU(ID_MENU_DIAGRAM_SAVE_AS, DiagramFrame::OnSaveDiagramAs)
     EVT_MENU(ID_MENU_NEW_SQL_EDITOR, DiagramFrame::OnNewSqlEditor)
     EVT_MENU(ID_MENU_MONITORING, DiagramFrame::OnOpenMonitoring)
     EVT_MENU(ID_MENU_USERS_ROLES, DiagramFrame::OnOpenUsersRoles)
@@ -60,6 +65,13 @@ DiagramFrame::DiagramFrame(WindowManager* windowManager, const AppConfig* config
         options.includeConnections = chrome.replicateMenu;
         auto* menu_bar = BuildMenuBar(options, window_manager_, this);
         SetMenuBar(menu_bar);
+        if (menu_bar) {
+            auto* diagram_menu = new wxMenu();
+            diagram_menu->Append(ID_MENU_DIAGRAM_OPEN, "Open Diagram...");
+            diagram_menu->Append(ID_MENU_DIAGRAM_SAVE, "Save Diagram");
+            diagram_menu->Append(ID_MENU_DIAGRAM_SAVE_AS, "Save Diagram As...");
+            menu_bar->Append(diagram_menu, "Diagram");
+        }
     }
 
     if (chrome.showIconBar) {
@@ -87,8 +99,63 @@ void DiagramFrame::AddDiagramTab(const wxString& title) {
     notebook_->AddPage(new DiagramPage(notebook_), label, true);
 }
 
+DiagramPage* DiagramFrame::GetActiveDiagramPage() const {
+    if (!notebook_) return nullptr;
+    auto* page = notebook_->GetCurrentPage();
+    return dynamic_cast<DiagramPage*>(page);
+}
+
 void DiagramFrame::OnNewDiagram(wxCommandEvent&) {
     AddDiagramTab(wxString::Format("Diagram %d", diagram_counter_ + 1));
+}
+
+void DiagramFrame::OnOpenDiagram(wxCommandEvent&) {
+    DiagramPage* page = GetActiveDiagramPage();
+    if (!page) return;
+    wxFileDialog dialog(this, "Open Diagram", "", "",
+                        "Diagram Files (*.sbdgm;*.sberd)|*.sbdgm;*.sberd|All Files|*.*",
+                        wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+    if (dialog.ShowModal() != wxID_OK) return;
+    std::string error;
+    if (!page->LoadFromFile(dialog.GetPath().ToStdString(), &error)) {
+        wxMessageBox(error.empty() ? "Failed to open diagram" : error,
+                     "Open Diagram", wxOK | wxICON_ERROR, this);
+        return;
+    }
+    page->set_file_path(dialog.GetPath().ToStdString());
+    notebook_->SetPageText(notebook_->GetSelection(), dialog.GetFilename());
+}
+
+void DiagramFrame::OnSaveDiagram(wxCommandEvent&) {
+    DiagramPage* page = GetActiveDiagramPage();
+    if (!page) return;
+    if (page->file_path().empty()) {
+        wxCommandEvent evt;
+        OnSaveDiagramAs(evt);
+        return;
+    }
+    std::string error;
+    if (!page->SaveToFile(page->file_path(), &error)) {
+        wxMessageBox(error.empty() ? "Failed to save diagram" : error,
+                     "Save Diagram", wxOK | wxICON_ERROR, this);
+    }
+}
+
+void DiagramFrame::OnSaveDiagramAs(wxCommandEvent&) {
+    DiagramPage* page = GetActiveDiagramPage();
+    if (!page) return;
+    wxString wildcard = "Diagram Files (*.sbdgm;*.sberd)|*.sbdgm;*.sberd|All Files|*.*";
+    wxFileDialog dialog(this, "Save Diagram As", "", "", wildcard,
+                        wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+    if (dialog.ShowModal() != wxID_OK) return;
+    std::string error;
+    if (!page->SaveToFile(dialog.GetPath().ToStdString(), &error)) {
+        wxMessageBox(error.empty() ? "Failed to save diagram" : error,
+                     "Save Diagram", wxOK | wxICON_ERROR, this);
+        return;
+    }
+    page->set_file_path(dialog.GetPath().ToStdString());
+    notebook_->SetPageText(notebook_->GetSelection(), dialog.GetFilename());
 }
 
 void DiagramFrame::OnNewSqlEditor(wxCommandEvent&) {

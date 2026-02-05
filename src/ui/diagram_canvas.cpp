@@ -343,6 +343,20 @@ void DiagramCanvas::SetDiagramType(DiagramType type) {
     Refresh();
 }
 
+double DiagramCanvas::zoom() const {
+    return zoom_;
+}
+
+wxPoint2DDouble DiagramCanvas::pan_offset() const {
+    return pan_offset_;
+}
+
+void DiagramCanvas::SetView(double zoom, const wxPoint2DDouble& pan) {
+    zoom_ = std::clamp(zoom, kMinZoom, kMaxZoom);
+    pan_offset_ = pan;
+    Refresh();
+}
+
 ErdNotation DiagramCanvas::notation() const {
     return model_.notation();
 }
@@ -523,6 +537,15 @@ void DiagramCanvas::AddEdge(const std::string& source_id, const std::string& tar
     edge.source_id = source_id;
     edge.target_id = target_id;
     edge.label = label;
+    if (model_.type() == DiagramType::Silverston) {
+        edge.edge_type = "dependency";
+    } else if (model_.type() == DiagramType::DataFlow) {
+        edge.edge_type = "data_flow";
+    } else if (model_.type() == DiagramType::MindMap || model_.type() == DiagramType::Whiteboard) {
+        edge.edge_type = "link";
+    } else {
+        edge.edge_type = "relationship";
+    }
     edge.directed = (model_.type() == DiagramType::Silverston ||
                      model_.type() == DiagramType::DataFlow ||
                      model_.type() == DiagramType::MindMap);

@@ -25,9 +25,13 @@ class DiagramFrame : public wxFrame {
 public:
     DiagramFrame(WindowManager* windowManager, const AppConfig* config);
     void AddDiagramTab(const wxString& title = "Diagram");
+    DiagramPage* GetActiveDiagramPage() const;
 
 private:
     void OnNewDiagram(wxCommandEvent& event);
+    void OnOpenDiagram(wxCommandEvent& event);
+    void OnSaveDiagram(wxCommandEvent& event);
+    void OnSaveDiagramAs(wxCommandEvent& event);
     void OnNewSqlEditor(wxCommandEvent& event);
     void OnOpenMonitoring(wxCommandEvent& event);
     void OnOpenUsersRoles(wxCommandEvent& event);

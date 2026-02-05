@@ -11,6 +11,7 @@
 #define SCRATCHROBIN_DIAGRAM_PAGE_H
 
 #include "diagram_canvas.h"
+#include "diagram/diagram_serialization.h"
 
 #include <vector>
 
@@ -28,6 +29,10 @@ namespace scratchrobin {
 class DiagramPage : public wxPanel {
 public:
     explicit DiagramPage(wxWindow* parent);
+    bool SaveToFile(const std::string& path, std::string* error);
+    bool LoadFromFile(const std::string& path, std::string* error);
+    const std::string& file_path() const { return file_path_; }
+    void set_file_path(const std::string& path) { file_path_ = path; }
 
 private:
     void BuildLayout();
@@ -44,12 +49,19 @@ private:
     void OnSelectionChanged(wxCommandEvent& event);
     void OnNameEdited(wxCommandEvent& event);
     void OnEdgeLabelEdited(wxCommandEvent& event);
+    void OnEdgeTypeEdited(wxCommandEvent& event);
+    void OnParentIdEdited(wxCommandEvent& event);
+    void OnTraceRefsEdited(wxCommandEvent& event);
+    void OnOpenTrace(wxCommandEvent& event);
     void OnCardinalityChanged(wxCommandEvent& event);
     void OnIdentifyingChanged(wxCommandEvent& event);
     void OnLabelPositionChanged(wxCommandEvent& event);
     void OnCanvasKey(wxKeyEvent& event);
 
     void StartRelationshipMode();
+    void SyncDocFromCanvas();
+    void ApplyDocToCanvas();
+    void SetDiagramTypeInternal(DiagramType type);
 
     DiagramType diagram_type_ = DiagramType::Erd;
     bool relationship_mode_ = false;
@@ -66,15 +78,21 @@ private:
     wxStaticText* selection_label_ = nullptr;
     wxTextCtrl* name_edit_ = nullptr;
     wxTextCtrl* edge_label_edit_ = nullptr;
+    wxTextCtrl* edge_type_edit_ = nullptr;
     wxStaticText* edge_label_label_ = nullptr;
     wxChoice* label_position_choice_ = nullptr;
     wxChoice* cardinality_source_choice_ = nullptr;
     wxChoice* cardinality_target_choice_ = nullptr;
     wxCheckBox* identifying_check_ = nullptr;
+    wxTextCtrl* parent_id_edit_ = nullptr;
+    wxTextCtrl* trace_refs_edit_ = nullptr;
+    wxButton* open_trace_button_ = nullptr;
     wxStaticText* type_value_ = nullptr;
     wxStaticText* id_value_ = nullptr;
     std::vector<std::string> palette_types_;
     std::vector<std::string> template_keys_;
+    diagram::DiagramDocument doc_;
+    std::string file_path_;
 };
 
 } // namespace scratchrobin

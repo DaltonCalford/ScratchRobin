@@ -16,6 +16,9 @@ namespace scratchrobin {
 
 constexpr int ID_MENU_NEW_SQL_EDITOR = wxID_HIGHEST + 500;
 constexpr int ID_MENU_NEW_DIAGRAM = wxID_HIGHEST + 501;
+constexpr int ID_MENU_DIAGRAM_OPEN = wxID_HIGHEST + 502;
+constexpr int ID_MENU_DIAGRAM_SAVE = wxID_HIGHEST + 503;
+constexpr int ID_MENU_DIAGRAM_SAVE_AS = wxID_HIGHEST + 504;
 constexpr int ID_MENU_MONITORING = wxID_HIGHEST + 502;
 constexpr int ID_MENU_USERS_ROLES = wxID_HIGHEST + 503;
 constexpr int ID_MENU_JOB_SCHEDULER = wxID_HIGHEST + 504;
