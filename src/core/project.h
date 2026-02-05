@@ -11,6 +11,7 @@
 #define SCRATCHROBIN_PROJECT_H
 
 #include <ctime>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -321,7 +322,18 @@ public:
     // State operations
     bool ApproveObject(const UUID& id, const std::string& approver);
     bool RejectObject(const UUID& id, const std::string& reason);
-    
+
+    // Status reporting
+    struct StatusEvent {
+        std::time_t timestamp = 0;
+        std::string message;
+        bool is_error = false;
+    };
+    using StatusCallback = std::function<void(const StatusEvent&)>;
+    void SetStatusCallback(StatusCallback callback);
+    void ClearStatusCallback();
+    std::vector<StatusEvent> GetStatusEvents() const;
+
     // Git operations
     bool SyncToDatabase();
     bool SyncFromDatabase();
@@ -352,11 +364,14 @@ public:
     using ObjectChangedCallback = std::function<void(const UUID&, const std::string& action)>;
     void AddObserver(ObjectChangedCallback callback);
     void RemoveObserver(ObjectChangedCallback callback);
+    void EmitStatus(const std::string& message, bool is_error = false);
     
 private:
     bool is_modified_ = false;
     bool is_open_ = false;
     std::vector<ObjectChangedCallback> observers_;
+    StatusCallback status_callback_;
+    std::vector<StatusEvent> status_events_;
     
     void NotifyObjectChanged(const UUID& id, const std::string& action);
     bool SaveProjectFile();

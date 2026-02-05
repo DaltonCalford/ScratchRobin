@@ -677,6 +677,33 @@ void Project::RemoveObserver(ObjectChangedCallback callback) {
         observers_.end());
 }
 
+void Project::SetStatusCallback(StatusCallback callback) {
+    status_callback_ = std::move(callback);
+}
+
+void Project::ClearStatusCallback() {
+    status_callback_ = nullptr;
+}
+
+std::vector<Project::StatusEvent> Project::GetStatusEvents() const {
+    return status_events_;
+}
+
+void Project::EmitStatus(const std::string& message, bool is_error) {
+    StatusEvent evt;
+    evt.timestamp = std::time(nullptr);
+    evt.message = message;
+    evt.is_error = is_error;
+    status_events_.push_back(evt);
+    if (status_events_.size() > 200) {
+        status_events_.erase(status_events_.begin(),
+                             status_events_.begin() + (status_events_.size() - 200));
+    }
+    if (status_callback_) {
+        status_callback_(evt);
+    }
+}
+
 // File I/O
 bool Project::SaveProjectFile() {
     if (project_file_path.empty()) {
@@ -716,6 +743,7 @@ bool Project::LoadObjectFiles() {
 // Git sync implementations using GitClient
 bool Project::SyncToDatabase() {
     if (!config.git.enabled) {
+        EmitStatus("Git sync disabled for project", true);
         return false;
     }
 
@@ -725,6 +753,7 @@ bool Project::SyncToDatabase() {
                                              config.git.repo_url.empty()
                                                  ? std::nullopt
                                                  : std::optional<std::string>(config.git.repo_url))) {
+            EmitStatus("Failed to initialize Git repository", true);
             return false;
         }
     }
@@ -733,6 +762,7 @@ bool Project::SyncToDatabase() {
     SaveObjectFiles();
 
     if (!git.SyncDesignToRepository(config.designs_path)) {
+        EmitStatus("Failed to sync project changes to repository", true);
         return false;
     }
 
@@ -748,20 +778,24 @@ bool Project::SyncToDatabase() {
     }
 
     is_modified_ = true;
+    EmitStatus("Sync to repository completed", false);
     return true;
 }
 
 bool Project::SyncFromDatabase() {
     if (!config.git.enabled) {
+        EmitStatus("Git sync disabled for project", true);
         return false;
     }
 
     auto& git = ProjectGitManager::Instance();
     if (!git.OpenProjectRepository(project_root_path)) {
+        EmitStatus("Git repository not open", true);
         return false;
     }
 
     if (!git.SyncRepositoryToDesign(config.designs_path)) {
+        EmitStatus("Failed to pull repository changes", true);
         return false;
     }
 
@@ -777,17 +811,25 @@ bool Project::SyncFromDatabase() {
     }
 
     is_modified_ = true;
+    EmitStatus("Sync from repository completed", false);
     return true;
 }
 
 bool Project::ResolveConflict(const UUID& id, const std::string& resolution) {
     auto obj = GetObject(id);
-    if (!obj || obj->design_file_path.empty()) return false;
+    if (!obj || obj->design_file_path.empty()) {
+        EmitStatus("Conflict resolution failed: missing design file", true);
+        return false;
+    }
 
-    if (!config.git.enabled) return false;
+    if (!config.git.enabled) {
+        EmitStatus("Conflict resolution failed: Git sync disabled", true);
+        return false;
+    }
 
     auto& git = ProjectGitManager::Instance();
     if (!git.OpenProjectRepository(project_root_path)) {
+        EmitStatus("Conflict resolution failed: Git repository not open", true);
         return false;
     }
 
@@ -797,6 +839,11 @@ bool Project::ResolveConflict(const UUID& id, const std::string& resolution) {
 
     bool keep_project = (lower == "ours" || lower == "project" || lower == "keep_project");
     bool keep_database = (lower == "theirs" || lower == "database" || lower == "keep_database");
+
+    if (!git.ResolveObjectConflict(obj->design_file_path, resolution)) {
+        EmitStatus("Conflict resolution failed in Git", true);
+        return false;
+    }
 
     if (keep_project) {
         std::string full_path = project_root_path + "/" + obj->design_file_path;
@@ -818,10 +865,6 @@ bool Project::ResolveConflict(const UUID& id, const std::string& resolution) {
         obj->schema_name = incoming->schema_name;
     }
 
-    if (!git.ResolveObjectConflict(obj->design_file_path, resolution)) {
-        return false;
-    }
-
     obj->SetState(ObjectState::MODIFIED, "Resolved conflict", "git_sync");
     sync_state.pending.conflicts.erase(
         std::remove(sync_state.pending.conflicts.begin(),
@@ -829,6 +872,7 @@ bool Project::ResolveConflict(const UUID& id, const std::string& resolution) {
                     obj->design_file_path),
         sync_state.pending.conflicts.end());
     is_modified_ = true;
+    EmitStatus("Conflict resolved for " + obj->name, false);
     return true;
 }
 
@@ -840,6 +884,7 @@ bool Project::ExtractFromDatabase(const DatabaseConnection& conn,
 
     if (IsFixtureConnection(conn, &fixture_path)) {
         if (!model.LoadFromFixture(fixture_path, &error)) {
+            EmitStatus("Failed to load fixture: " + error, true);
             return false;
         }
     } else {
@@ -867,6 +912,7 @@ bool Project::ExtractFromDatabase(const DatabaseConnection& conn,
     }
 
     is_modified_ = true;
+    EmitStatus("Extraction completed", false);
     return true;
 }
 

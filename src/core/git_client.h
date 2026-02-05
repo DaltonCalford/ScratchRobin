@@ -110,6 +110,8 @@ public:
 
     // Conflict resolution
     std::vector<std::string> GetConflictedFiles();
+    GitOperationResult CheckoutOurs(const std::string& path);
+    GitOperationResult CheckoutTheirs(const std::string& path);
     GitOperationResult MarkResolved(const std::string& path);
 
     // Utility

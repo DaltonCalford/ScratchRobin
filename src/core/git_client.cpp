@@ -9,6 +9,8 @@
  */
 #include "git_client.h"
 
+#include <algorithm>
+#include <cctype>
 #include <array>
 #include <cstdio>
 #include <cstring>
@@ -824,6 +826,30 @@ std::vector<std::string> GitClient::GetConflictedFiles() {
     return files;
 }
 
+GitOperationResult GitClient::CheckoutOurs(const std::string& path) {
+    GitOperationResult result;
+    if (!IsOpen()) {
+        result.errorMessage = "No repository open";
+        return result;
+    }
+
+    auto output = ExecuteCommand("cd \"" + repoPath_ + "\" && git checkout --ours \"" + path + "\"");
+    result.success = output.has_value();
+    return result;
+}
+
+GitOperationResult GitClient::CheckoutTheirs(const std::string& path) {
+    GitOperationResult result;
+    if (!IsOpen()) {
+        result.errorMessage = "No repository open";
+        return result;
+    }
+
+    auto output = ExecuteCommand("cd \"" + repoPath_ + "\" && git checkout --theirs \"" + path + "\"");
+    result.success = output.has_value();
+    return result;
+}
+
 GitOperationResult GitClient::MarkResolved(const std::string& path) {
     GitOperationResult result;
     if (!IsOpen()) {
@@ -1106,7 +1132,18 @@ bool ProjectGitManager::ResolveObjectConflict(const std::string& objectPath,
                                                const std::string& resolution) {
     if (!IsProjectRepositoryOpen()) return false;
 
-    // For now, just mark as resolved
+    std::string normalized = resolution;
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    if (normalized == "ours" || normalized == "project" || normalized == "keep_project") {
+        auto res = git_.CheckoutOurs(objectPath);
+        if (!res.success) return false;
+    } else if (normalized == "theirs" || normalized == "database" || normalized == "keep_database") {
+        auto res = git_.CheckoutTheirs(objectPath);
+        if (!res.success) return false;
+    }
+
     git_.MarkResolved(objectPath);
 
     // Commit the resolution

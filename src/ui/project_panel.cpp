@@ -138,6 +138,8 @@ void ProjectPanel::BuildStatsPanel() {
 void ProjectPanel::SetProject(std::shared_ptr<Project> project) {
     if (project_) {
         // Remove old observer
+        project_->RemoveObserver(object_changed_callback_);
+        project_->ClearStatusCallback();
     }
     
     project_ = project;
@@ -148,6 +150,11 @@ void ProjectPanel::SetProject(std::shared_ptr<Project> project) {
             OnProjectObjectChanged(id, action);
         };
         project_->AddObserver(object_changed_callback_);
+        project_->SetStatusCallback([this](const Project::StatusEvent& evt) {
+            if (evt.is_error) {
+                wxMessageBox(evt.message, "Project Sync", wxOK | wxICON_ERROR, this);
+            }
+        });
         
         PopulateTree();
         UpdateStatsDisplay();
@@ -335,13 +342,19 @@ void ProjectPanel::OnRefresh(wxCommandEvent&) {
 
 void ProjectPanel::OnSyncToDb(wxCommandEvent&) {
     if (project_) {
-        project_->SyncToDatabase();
+        bool ok = project_->SyncToDatabase();
+        if (ok) {
+            wxMessageBox("Sync to repository completed.", "Sync", wxOK | wxICON_INFORMATION, this);
+        }
     }
 }
 
 void ProjectPanel::OnSyncFromDb(wxCommandEvent&) {
     if (project_) {
-        project_->SyncFromDatabase();
+        bool ok = project_->SyncFromDatabase();
+        if (ok) {
+            wxMessageBox("Sync from repository completed.", "Sync", wxOK | wxICON_INFORMATION, this);
+        }
     }
 }
 
