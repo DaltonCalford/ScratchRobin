@@ -1,16 +1,10 @@
 /*
  * ScratchRobin
  * Copyright (c) 2025-2026 Dalton Calford
- *
- * Licensed under the Initial Developer's Public License Version 1.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at:
- * https://www.firebirdsql.org/en/initial-developer-s-public-license-version-1-0/
  */
 
 #include "ui/git_integration_frame.h"
 #include <wx/wx.h>
-
 #include <wx/panel.h>
 #include <wx/sizer.h>
 #include <wx/stattext.h>
@@ -20,350 +14,586 @@
 #include <wx/treectrl.h>
 #include <wx/listctrl.h>
 #include <wx/splitter.h>
+#include <wx/textctrl.h>
+#include <wx/combobox.h>
+#include <wx/filedlg.h>
+#include <wx/dirdlg.h>
+#include <wx/msgdlg.h>
+#include <wx/textdlg.h>
+#include <wx/filename.h>
+#include <wx/artprov.h>
 
 #include "ui/window_manager.h"
 #include "core/connection_manager.h"
 #include "core/config.h"
+#include "core/git_client.h"
 
 namespace scratchrobin {
 
 enum {
-    ID_SHOW_DOCUMENTATION = wxID_HIGHEST + 1,
-    ID_JOIN_BETA
+    ID_INIT_REPO = wxID_HIGHEST + 1,
+    ID_CLONE_REPO,
+    ID_OPEN_REPO,
+    ID_COMMIT,
+    ID_PUSH,
+    ID_PULL,
+    ID_FETCH,
+    ID_REFRESH,
+    ID_CREATE_BRANCH,
+    ID_CHECKOUT_BRANCH,
+    ID_MERGE_BRANCH,
+    ID_DELETE_BRANCH,
+    ID_ADD_REMOTE,
+    ID_CHANGED_FILES,
+    ID_COMMIT_LIST,
+    ID_BRANCH_LIST,
+    ID_TIMER_REFRESH,
+    ID_SHOW_DOCUMENTATION
 };
 
 wxBEGIN_EVENT_TABLE(GitIntegrationFrame, wxFrame)
     EVT_CLOSE(GitIntegrationFrame::OnClose)
-    EVT_BUTTON(ID_SHOW_DOCUMENTATION, GitIntegrationFrame::OnShowDocumentation)
-    EVT_BUTTON(ID_JOIN_BETA, GitIntegrationFrame::OnJoinBeta)
+    EVT_BUTTON(ID_INIT_REPO, GitIntegrationFrame::OnInitRepository)
+    EVT_BUTTON(ID_CLONE_REPO, GitIntegrationFrame::OnCloneRepository)
+    EVT_BUTTON(ID_OPEN_REPO, GitIntegrationFrame::OnOpenRepository)
+    EVT_BUTTON(ID_COMMIT, GitIntegrationFrame::OnCommit)
+    EVT_BUTTON(ID_PUSH, GitIntegrationFrame::OnPush)
+    EVT_BUTTON(ID_PULL, GitIntegrationFrame::OnPull)
+    EVT_BUTTON(ID_FETCH, GitIntegrationFrame::OnFetch)
+    EVT_BUTTON(ID_REFRESH, GitIntegrationFrame::OnRefresh)
+    EVT_BUTTON(ID_CREATE_BRANCH, GitIntegrationFrame::OnCreateBranch)
+    EVT_BUTTON(ID_CHECKOUT_BRANCH, GitIntegrationFrame::OnCheckoutBranch)
+    EVT_BUTTON(ID_MERGE_BRANCH, GitIntegrationFrame::OnMergeBranch)
+    EVT_BUTTON(ID_DELETE_BRANCH, GitIntegrationFrame::OnDeleteBranch)
+    EVT_LIST_ITEM_SELECTED(ID_CHANGED_FILES, GitIntegrationFrame::OnFileSelected)
+    EVT_LIST_ITEM_SELECTED(ID_COMMIT_LIST, GitIntegrationFrame::OnCommitSelected)
+    EVT_LIST_ITEM_SELECTED(ID_BRANCH_LIST, GitIntegrationFrame::OnBranchSelected)
+    EVT_TIMER(ID_TIMER_REFRESH, GitIntegrationFrame::OnTimer)
+    EVT_MENU(ID_SHOW_DOCUMENTATION, GitIntegrationFrame::OnShowDocumentation)
 wxEND_EVENT_TABLE()
 
 GitIntegrationFrame::GitIntegrationFrame(WindowManager* windowManager,
                                          ConnectionManager* connectionManager,
                                          const std::vector<ConnectionProfile>* connections,
                                          const AppConfig* appConfig)
-    : wxFrame(nullptr, wxID_ANY, _("Git Integration [Beta Preview]"),
-              wxDefaultPosition, wxSize(1000, 700),
+    : wxFrame(nullptr, wxID_ANY, _("Git Integration"),
+              wxDefaultPosition, wxSize(1200, 800),
               wxDEFAULT_FRAME_STYLE | wxFRAME_FLOAT_ON_PARENT)
     , window_manager_(windowManager)
     , connection_manager_(connectionManager)
     , connections_(connections)
-    , app_config_(appConfig) {
-    
-    SetBackgroundColour(wxColour(250, 250, 250));
+    , app_config_(appConfig)
+    , git_(std::make_unique<GitClient>())
+    , refresh_timer_(this, ID_TIMER_REFRESH) {
     
     BuildMenu();
+    BuildToolbar();
     BuildLayout();
-    
     CentreOnScreen();
+    refresh_timer_.Start(5000);
 }
 
 GitIntegrationFrame::~GitIntegrationFrame() = default;
+
+void GitIntegrationFrame::SetProjectPath(const std::string& path) {
+    project_path_ = path;
+    if (git_->IsRepository(path)) {
+        has_repository_ = git_->OpenRepository(path);
+    } else {
+        has_repository_ = false;
+    }
+    RefreshStatus();
+    RefreshHistory();
+    RefreshBranches();
+}
 
 void GitIntegrationFrame::BuildMenu() {
     auto* menu_bar = new wxMenuBar();
     
     auto* file_menu = new wxMenu();
-    file_menu->Append(wxID_CLOSE, _("&Close") + wxT("\tCtrl+W"));
+    file_menu->Append(ID_INIT_REPO, _("&Initialize Repository..."));
+    file_menu->Append(ID_CLONE_REPO, _("&Clone Repository..."));
+    file_menu->Append(ID_OPEN_REPO, _("&Open Repository..."));
+    file_menu->AppendSeparator();
+    file_menu->Append(wxID_CLOSE, _("&Close\tCtrl+W"));
     menu_bar->Append(file_menu, _("&File"));
+    
+    auto* git_menu = new wxMenu();
+    git_menu->Append(ID_COMMIT, _("&Commit...\tCtrl+Enter"));
+    git_menu->AppendSeparator();
+    git_menu->Append(ID_PULL, _("&Pull\tCtrl+Shift+Down"));
+    git_menu->Append(ID_PUSH, _("&Push\tCtrl+Shift+Up"));
+    git_menu->Append(ID_FETCH, _("&Fetch\tCtrl+Shift+F"));
+    git_menu->AppendSeparator();
+    git_menu->Append(ID_REFRESH, _("&Refresh\tF5"));
+    menu_bar->Append(git_menu, _("&Git"));
+    
+    auto* branch_menu = new wxMenu();
+    branch_menu->Append(ID_CREATE_BRANCH, _("&New Branch...\tCtrl+B"));
+    branch_menu->Append(ID_CHECKOUT_BRANCH, _("&Checkout..."));
+    branch_menu->Append(ID_MERGE_BRANCH, _("&Merge..."));
+    branch_menu->Append(ID_DELETE_BRANCH, _("&Delete..."));
+    menu_bar->Append(branch_menu, _("&Branch"));
     
     auto* help_menu = new wxMenu();
     help_menu->Append(ID_SHOW_DOCUMENTATION, _("&Documentation..."));
-    help_menu->AppendSeparator();
-    help_menu->Append(ID_JOIN_BETA, _("&Join Beta Program..."));
     menu_bar->Append(help_menu, _("&Help"));
     
     SetMenuBar(menu_bar);
 }
 
+void GitIntegrationFrame::BuildToolbar() {
+    auto* toolbar = CreateToolBar(wxTB_HORIZONTAL | wxTB_FLAT);
+    toolbar->AddTool(ID_INIT_REPO, _("Init"), wxArtProvider::GetBitmap(wxART_NEW_DIR));
+    toolbar->AddTool(ID_CLONE_REPO, _("Clone"), wxArtProvider::GetBitmap(wxART_COPY));
+    toolbar->AddSeparator();
+    toolbar->AddTool(ID_COMMIT, _("Commit"), wxArtProvider::GetBitmap(wxART_FILE_SAVE));
+    toolbar->AddSeparator();
+    toolbar->AddTool(ID_PULL, _("Pull"), wxArtProvider::GetBitmap(wxART_GO_DOWN));
+    toolbar->AddTool(ID_PUSH, _("Push"), wxArtProvider::GetBitmap(wxART_GO_UP));
+    toolbar->AddTool(ID_FETCH, _("Fetch"), wxArtProvider::GetBitmap(wxART_REDO));
+    toolbar->AddSeparator();
+    toolbar->AddTool(ID_REFRESH, _("Refresh"), wxArtProvider::GetBitmap(wxART_REFRESH));
+    toolbar->Realize();
+}
+
 void GitIntegrationFrame::BuildLayout() {
     auto* main_sizer = new wxBoxSizer(wxVERTICAL);
     
-    // Beta banner
-    auto* banner_panel = new wxPanel(this, wxID_ANY);
-    banner_panel->SetBackgroundColour(wxColour(100, 100, 140));  // Purple-gray
-    auto* banner_sizer = new wxBoxSizer(wxHORIZONTAL);
+    // Info bar
+    auto* info_panel = new wxPanel(this, wxID_ANY);
+    info_panel->SetBackgroundColour(wxColour(60, 60, 60));
+    auto* info_sizer = new wxBoxSizer(wxHORIZONTAL);
     
-    auto* banner_text = new wxStaticText(banner_panel, wxID_ANY,
-        _("BETA FEATURE PREVIEW - Git Integration coming in Beta release"));
-    banner_text->SetForegroundColour(*wxWHITE);
-    banner_text->SetFont(wxFont(wxFontInfo(11).Bold()));
-    banner_sizer->Add(banner_text, 0, wxALL | wxALIGN_CENTER_VERTICAL, 10);
-    banner_panel->SetSizer(banner_sizer);
+    lbl_repo_name_ = new wxStaticText(info_panel, wxID_ANY, _("No repository"));
+    lbl_repo_name_->SetForegroundColour(*wxWHITE);
+    lbl_repo_name_->SetFont(wxFont(wxFontInfo(11).Bold()));
+    info_sizer->Add(lbl_repo_name_, 0, wxALL | wxALIGN_CENTER_VERTICAL, 8);
+    info_sizer->AddSpacer(20);
     
-    main_sizer->Add(banner_panel, 0, wxEXPAND);
+    lbl_branch_ = new wxStaticText(info_panel, wxID_ANY, wxEmptyString);
+    lbl_branch_->SetForegroundColour(wxColour(200, 200, 200));
+    info_sizer->Add(lbl_branch_, 0, wxALL | wxALIGN_CENTER_VERTICAL, 8);
+    info_sizer->AddStretchSpacer(1);
     
-    // Content area
-    auto* content_sizer = new wxBoxSizer(wxHORIZONTAL);
+    lbl_ahead_behind_ = new wxStaticText(info_panel, wxID_ANY, wxEmptyString);
+    lbl_ahead_behind_->SetForegroundColour(wxColour(200, 200, 200));
+    info_sizer->Add(lbl_ahead_behind_, 0, wxALL | wxALIGN_CENTER_VERTICAL, 8);
     
-    // Left panel: Info
-    auto* left_panel = new wxPanel(this, wxID_ANY);
-    auto* left_sizer = new wxBoxSizer(wxVERTICAL);
+    info_panel->SetSizer(info_sizer);
+    main_sizer->Add(info_panel, 0, wxEXPAND);
     
-    auto* title = new wxStaticText(left_panel, wxID_ANY, _("Git Integration"));
-    title->SetFont(wxFont(wxFontInfo(16).Bold()));
-    left_sizer->Add(title, 0, wxALL, 15);
+    // Notebook
+    auto* notebook = new wxNotebook(this, wxID_ANY);
     
-    auto* desc = new wxStaticText(left_panel, wxID_ANY,
-        _("Version control for your database schema and migration scripts. "
-          "Track changes, collaborate with team members, and deploy with "
-          "confidence using Git-based workflows."));
-    desc->Wrap(350);
-    left_sizer->Add(desc, 0, wxLEFT | wxRIGHT | wxBOTTOM, 15);
-    
-    // Features
-    auto* features_box = new wxStaticBox(left_panel, wxID_ANY, _("Planned Features"));
-    auto* features_sizer = new wxStaticBoxSizer(features_box, wxVERTICAL);
-    
-    wxArrayString features;
-    features.Add(_("• Schema versioning with Git"));
-    features.Add(_("• Automatic DDL generation"));
-    features.Add(_("• Migration script management"));
-    features.Add(_("• Visual diff for schema changes"));
-    features.Add(_("• Branch-based workflows"));
-    features.Add(_("• Pull request integration"));
-    features.Add(_("• CI/CD pipeline hooks"));
-    features.Add(_("• Code review for DB changes"));
-    features.Add(_("• Deployment tracking"));
-    
-    for (size_t i = 0; i < features.size(); ++i) {
-        features_sizer->Add(new wxStaticText(left_panel, wxID_ANY, features[i]),
-                           0, wxALL, 5);
-    }
-    
-    left_sizer->Add(features_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 15);
-    
-    // Workflow
-    auto* workflow_box = new wxStaticBox(left_panel, wxID_ANY, _("Supported Workflows"));
-    auto* workflow_sizer = new wxStaticBoxSizer(workflow_box, wxVERTICAL);
-    
-    workflow_sizer->Add(new wxStaticText(left_panel, wxID_ANY,
-        _("• GitFlow for database projects\n"
-          "• Trunk-based development\n"
-          "• Environment promotion\n"
-          "• Feature branch deployments\n"
-          "• Hotfix management")), 0, wxALL, 10);
-    
-    left_sizer->Add(workflow_box, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 15);
-    
-    // Buttons
-    auto* button_sizer = new wxBoxSizer(wxHORIZONTAL);
-    docs_button_ = new wxButton(left_panel, ID_SHOW_DOCUMENTATION, _("View Documentation"));
-    beta_signup_button_ = new wxButton(left_panel, ID_JOIN_BETA, _("Join Beta Program"));
-    beta_signup_button_->SetDefault();
-    
-    button_sizer->Add(docs_button_, 0, wxRIGHT, 10);
-    button_sizer->Add(beta_signup_button_, 0);
-    left_sizer->Add(button_sizer, 0, wxLEFT | wxRIGHT | wxBOTTOM, 15);
-    
-    left_panel->SetSizer(left_sizer);
-    content_sizer->Add(left_panel, 0, wxEXPAND);
-    
-    // Right panel: Git mockup
-    auto* right_panel = new wxPanel(this, wxID_ANY);
-    right_panel->SetBackgroundColour(wxColour(245, 245, 245));
-    auto* right_sizer = new wxBoxSizer(wxVERTICAL);
-    
-    notebook_ = new wxNotebook(right_panel, wxID_ANY);
-    
-    // Tab 1: Repository Status
-    auto* status_panel = new wxPanel(notebook_, wxID_ANY);
+    // Status Tab
+    auto* status_panel = new wxPanel(notebook, wxID_ANY);
     auto* status_sizer = new wxBoxSizer(wxVERTICAL);
     
-    auto* status_title = new wxStaticText(status_panel, wxID_ANY, _("Repository Status"));
-    status_title->SetFont(wxFont(wxFontInfo(12).Bold()));
-    status_sizer->Add(status_title, 0, wxALL, 10);
+    auto* files_label = new wxStaticText(status_panel, wxID_ANY, _("Changed Files:"));
+    files_label->SetFont(wxFont(wxFontInfo(10).Bold()));
+    status_sizer->Add(files_label, 0, wxALL, 5);
     
-    auto* status_mockup = new wxStaticText(status_panel, wxID_ANY, wxT(R"(
-Repository: myproject-db
-Branch: feature/add-user-table
-Remote: origin (github.com:acme/myproject-db.git)
-
-Status:
-  Modified:  schema/tables/public/users.sql
-  Modified:  migrations/V003__add_user_table.sql
-  Staged:    (none)
-  Untracked: (none)
-
-Ahead: 3 commits | Behind: 0 commits
-
-Last Commit:
-  abc1234 Add users table schema
-  Author: Jane Developer <jane@example.com>
-  Date:   2026-02-03 10:45:23
-)"));
-    status_mockup->SetFont(wxFont(9, wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL));
-    status_sizer->Add(status_mockup, 1, wxEXPAND | wxALL, 10);
+    list_changed_files_ = new wxListCtrl(status_panel, ID_CHANGED_FILES,
+                                          wxDefaultPosition, wxDefaultSize,
+                                          wxLC_REPORT | wxLC_SINGLE_SEL);
+    list_changed_files_->AppendColumn(_("Status"), wxLIST_FORMAT_LEFT, 80);
+    list_changed_files_->AppendColumn(_("File"), wxLIST_FORMAT_LEFT, 500);
+    status_sizer->Add(list_changed_files_, 1, wxEXPAND | wxALL, 5);
+    
+    auto* msg_label = new wxStaticText(status_panel, wxID_ANY, _("Commit Message:"));
+    status_sizer->Add(msg_label, 0, wxLEFT | wxRIGHT | wxTOP, 5);
+    
+    txt_commit_message_ = new wxTextCtrl(status_panel, wxID_ANY, wxEmptyString,
+                                          wxDefaultPosition, wxSize(-1, 60),
+                                          wxTE_MULTILINE);
+    status_sizer->Add(txt_commit_message_, 0, wxEXPAND | wxALL, 5);
+    
+    btn_commit_ = new wxButton(status_panel, ID_COMMIT, _("Commit Changes"));
+    status_sizer->Add(btn_commit_, 0, wxALIGN_RIGHT | wxALL, 5);
     
     status_panel->SetSizer(status_sizer);
-    notebook_->AddPage(status_panel, _("Status"));
+    notebook->AddPage(status_panel, _("Status"));
     
-    // Tab 2: Commit History
-    auto* history_panel = new wxPanel(notebook_, wxID_ANY);
+    // History Tab
+    auto* history_panel = new wxPanel(notebook, wxID_ANY);
     auto* history_sizer = new wxBoxSizer(wxVERTICAL);
     
-    auto* history_title = new wxStaticText(history_panel, wxID_ANY, _("Commit History"));
-    history_title->SetFont(wxFont(wxFontInfo(12).Bold()));
-    history_sizer->Add(history_title, 0, wxALL, 10);
-    
-    auto* history_mockup = new wxStaticText(history_panel, wxID_ANY, wxT(R"(
-abc1234 Add users table schema                        (HEAD -> feature/add-user-table)
-        Jane Developer, 2026-02-03 10:45
-        
-def5678 Update indexes for performance
-        John Smith, 2026-02-02 16:30
-        
-789abcd Add foreign key constraints
-        Jane Developer, 2026-02-02 14:15
-        
-ef0123a Initial schema import
-        John Smith, 2026-02-01 09:00
-
-[main --------------------------------------------------------------------------]
-        
-456cdef Create orders table
-        Jane Developer, 2026-02-03 11:20
-        
-1234abc Add customer table
-        John Smith, 2026-02-03 09:30
-)"));
-    history_mockup->SetFont(wxFont(9, wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL));
-    history_sizer->Add(history_mockup, 1, wxEXPAND | wxALL, 10);
+    list_commits_ = new wxListCtrl(history_panel, ID_COMMIT_LIST,
+                                    wxDefaultPosition, wxDefaultSize,
+                                    wxLC_REPORT | wxLC_SINGLE_SEL);
+    list_commits_->AppendColumn(_("Commit"), wxLIST_FORMAT_LEFT, 80);
+    list_commits_->AppendColumn(_("Message"), wxLIST_FORMAT_LEFT, 350);
+    list_commits_->AppendColumn(_("Author"), wxLIST_FORMAT_LEFT, 150);
+    list_commits_->AppendColumn(_("Date"), wxLIST_FORMAT_LEFT, 150);
+    history_sizer->Add(list_commits_, 1, wxEXPAND | wxALL, 5);
     
     history_panel->SetSizer(history_sizer);
-    notebook_->AddPage(history_panel, _("History"));
+    notebook->AddPage(history_panel, _("History"));
     
-    // Tab 3: Schema Diff
-    auto* diff_panel = new wxPanel(notebook_, wxID_ANY);
+    // Diff Tab
+    auto* diff_panel = new wxPanel(notebook, wxID_ANY);
     auto* diff_sizer = new wxBoxSizer(wxVERTICAL);
     
-    auto* diff_title = new wxStaticText(diff_panel, wxID_ANY, _("Schema Changes"));
-    diff_title->SetFont(wxFont(wxFontInfo(12).Bold()));
-    diff_sizer->Add(diff_title, 0, wxALL, 10);
+    list_diff_files_ = new wxListCtrl(diff_panel, wxID_ANY,
+                                       wxDefaultPosition, wxSize(-1, 150),
+                                       wxLC_REPORT | wxLC_SINGLE_SEL);
+    list_diff_files_->AppendColumn(_("File"), wxLIST_FORMAT_LEFT, 400);
+    list_diff_files_->AppendColumn(_("Changes"), wxLIST_FORMAT_LEFT, 100);
+    diff_sizer->Add(list_diff_files_, 0, wxEXPAND | wxALL, 5);
     
-    auto* diff_mockup = new wxStaticText(diff_panel, wxID_ANY, wxT(R"(
-File: schema/tables/public/users.sql
-=====================================
-
-@@ -10,6 +10,8 @@ CREATE TABLE users (
-     id          SERIAL PRIMARY KEY,
-     username    VARCHAR(50) NOT NULL UNIQUE,
-     email       VARCHAR(255) NOT NULL,
-+    created_at  TIMESTAMP DEFAULT NOW(),
-+    status      VARCHAR(20) DEFAULT 'active',
-     password_hash VARCHAR(255) NOT NULL
- );
- 
-@@ -18,5 +20,6 @@ CREATE TABLE users (
- CREATE INDEX idx_users_username ON users(username);
- CREATE INDEX idx_users_email ON users(email);
-+CREATE INDEX idx_users_status ON users(status);
- 
- )"));
-    diff_mockup->SetFont(wxFont(9, wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL));
-    diff_sizer->Add(diff_mockup, 1, wxEXPAND | wxALL, 10);
+    txt_diff_content_ = new wxTextCtrl(diff_panel, wxID_ANY, wxEmptyString,
+                                        wxDefaultPosition, wxDefaultSize,
+                                        wxTE_MULTILINE | wxTE_READONLY);
+    txt_diff_content_->SetFont(wxFont(9, wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL));
+    diff_sizer->Add(txt_diff_content_, 1, wxEXPAND | wxALL, 5);
     
     diff_panel->SetSizer(diff_sizer);
-    notebook_->AddPage(diff_panel, _("Diff"));
+    notebook->AddPage(diff_panel, _("Diff"));
     
-    // Tab 4: Migrations
-    auto* migration_panel = new wxPanel(notebook_, wxID_ANY);
-    auto* migration_sizer = new wxBoxSizer(wxVERTICAL);
-    
-    auto* migration_title = new wxStaticText(migration_panel, wxID_ANY,
-                                             _("Migration Scripts"));
-    migration_title->SetFont(wxFont(wxFontInfo(12).Bold()));
-    migration_sizer->Add(migration_title, 0, wxALL, 10);
-    
-    auto* migration_mockup = new wxStaticText(migration_panel, wxID_ANY, wxT(R"(
-Version | Description                    | Type     | Status    | Applied
---------+--------------------------------+----------+-----------+------------------
-1.0.0   | Initial schema                 | Baseline | Applied   | 2026-01-15 09:00
-1.0.1   | Add indexes on foreign keys    | Upgrade  | Applied   | 2026-01-16 14:30
-1.0.2   | Create audit log table         | Upgrade  | Applied   | 2026-01-20 11:45
-1.0.3   | Add users table                | Upgrade  | Pending   | -
-1.0.4   | Add orders table               | Upgrade  | Pending   | -
-
-[Pending Migrations: 2]  [Apply All]  [Apply Selected]  [Generate Rollback]
-)"));
-    migration_mockup->SetFont(wxFont(9, wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL));
-    migration_sizer->Add(migration_mockup, 1, wxEXPAND | wxALL, 10);
-    
-    migration_panel->SetSizer(migration_sizer);
-    notebook_->AddPage(migration_panel, _("Migrations"));
-    
-    // Tab 5: Branches
-    auto* branch_panel = new wxPanel(notebook_, wxID_ANY);
+    // Branches Tab
+    auto* branch_panel = new wxPanel(notebook, wxID_ANY);
     auto* branch_sizer = new wxBoxSizer(wxVERTICAL);
     
-    auto* branch_title = new wxStaticText(branch_panel, wxID_ANY, _("Branches"));
-    branch_title->SetFont(wxFont(wxFontInfo(12).Bold()));
-    branch_sizer->Add(branch_title, 0, wxALL, 10);
+    list_branches_ = new wxListCtrl(branch_panel, ID_BRANCH_LIST,
+                                     wxDefaultPosition, wxDefaultSize,
+                                     wxLC_REPORT | wxLC_SINGLE_SEL);
+    list_branches_->AppendColumn(_("Name"), wxLIST_FORMAT_LEFT, 200);
+    list_branches_->AppendColumn(_("Commit"), wxLIST_FORMAT_LEFT, 80);
+    list_branches_->AppendColumn(_("Last Commit"), wxLIST_FORMAT_LEFT, 350);
+    branch_sizer->Add(list_branches_, 1, wxEXPAND | wxALL, 5);
     
-    auto* branch_mockup = new wxStaticText(branch_panel, wxID_ANY, wxT(R"(
-Local Branches:
-* feature/add-user-table    abc1234  [ahead 3]  Add users table schema
-  feature/orders-module     456cdef  [ahead 2]  Create orders table
-  main                      ef0123a  [origin/main]  Initial schema import
-  develop                   7890abc  [ahead 5, behind 2]  Merge branch 'feature/...
-
-Remote Branches:
-  origin/main               ef0123a  Last fetched: 2 hours ago
-  origin/develop            7890abc  
-  origin/release/v1.0       abcde12  
-
-[Create Branch]  [Checkout]  [Merge]  [Delete]  [Push]  [Pull]
-)"));
-    branch_mockup->SetFont(wxFont(9, wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL));
-    branch_sizer->Add(branch_mockup, 1, wxEXPAND | wxALL, 10);
+    auto* btn_sizer = new wxBoxSizer(wxHORIZONTAL);
+    btn_new_branch_ = new wxButton(branch_panel, ID_CREATE_BRANCH, _("New Branch"));
+    btn_checkout_ = new wxButton(branch_panel, ID_CHECKOUT_BRANCH, _("Checkout"));
+    btn_merge_ = new wxButton(branch_panel, ID_MERGE_BRANCH, _("Merge"));
+    btn_delete_branch_ = new wxButton(branch_panel, ID_DELETE_BRANCH, _("Delete"));
+    
+    btn_sizer->Add(btn_new_branch_, 0, wxRIGHT, 5);
+    btn_sizer->Add(btn_checkout_, 0, wxRIGHT, 5);
+    btn_sizer->Add(btn_merge_, 0, wxRIGHT, 5);
+    btn_sizer->Add(btn_delete_branch_, 0);
+    branch_sizer->Add(btn_sizer, 0, wxALL, 5);
     
     branch_panel->SetSizer(branch_sizer);
-    notebook_->AddPage(branch_panel, _("Branches"));
+    notebook->AddPage(branch_panel, _("Branches"));
     
-    right_sizer->Add(notebook_, 1, wxEXPAND | wxALL, 10);
-    right_panel->SetSizer(right_sizer);
-    content_sizer->Add(right_panel, 1, wxEXPAND);
+    // Remotes Tab
+    auto* remote_panel = new wxPanel(notebook, wxID_ANY);
+    auto* remote_sizer = new wxBoxSizer(wxVERTICAL);
     
-    main_sizer->Add(content_sizer, 1, wxEXPAND);
+    list_remotes_ = new wxListCtrl(remote_panel, wxID_ANY,
+                                    wxDefaultPosition, wxDefaultSize,
+                                    wxLC_REPORT);
+    list_remotes_->AppendColumn(_("Name"), wxLIST_FORMAT_LEFT, 100);
+    list_remotes_->AppendColumn(_("URL"), wxLIST_FORMAT_LEFT, 500);
+    remote_sizer->Add(list_remotes_, 1, wxEXPAND | wxALL, 5);
+    
+    btn_add_remote_ = new wxButton(remote_panel, ID_ADD_REMOTE, _("Add Remote"));
+    remote_sizer->Add(btn_add_remote_, 0, wxALIGN_RIGHT | wxALL, 5);
+    
+    remote_panel->SetSizer(remote_sizer);
+    notebook->AddPage(remote_panel, _("Remotes"));
+    
+    main_sizer->Add(notebook, 1, wxEXPAND | wxALL, 5);
     SetSizer(main_sizer);
 }
 
-void GitIntegrationFrame::OnClose(wxCloseEvent& event) {
-    if (window_manager_) {
-        window_manager_->UnregisterWindow(this);
+// Git Operations
+void GitIntegrationFrame::OnInitRepository(wxCommandEvent& /*event*/) {
+    wxDirDialog dialog(this, _("Select directory to initialize"),
+                       project_path_.empty() ? wxGetHomeDir() : wxString(project_path_));
+    if (dialog.ShowModal() == wxID_OK) {
+        if (git_->InitRepository(dialog.GetPath().ToStdString())) {
+            has_repository_ = git_->OpenRepository(dialog.GetPath().ToStdString());
+            project_path_ = dialog.GetPath().ToStdString();
+            wxMessageBox(_("Repository initialized!"), _("Success"));
+            RefreshStatus();
+            RefreshHistory();
+            RefreshBranches();
+        } else {
+            wxMessageBox(_("Failed to initialize repository."), _("Error"), wxOK | wxICON_ERROR);
+        }
     }
+}
+
+void GitIntegrationFrame::OnCloneRepository(wxCommandEvent& /*event*/) {
+    wxString url = wxGetTextFromUser(_("Repository URL:"), _("Clone Repository"));
+    if (url.IsEmpty()) return;
+    
+    wxDirDialog dialog(this, _("Select destination"), wxGetHomeDir());
+    if (dialog.ShowModal() != wxID_OK) return;
+    
+    wxString dest = dialog.GetPath() + wxFileName::GetPathSeparator() + wxFileName(url).GetName();
+    if (git_->CloneRepository(url.ToStdString(), dest.ToStdString())) {
+        has_repository_ = git_->OpenRepository(dest.ToStdString());
+        project_path_ = dest.ToStdString();
+        wxMessageBox(_("Repository cloned!"), _("Success"));
+        RefreshStatus();
+        RefreshHistory();
+        RefreshBranches();
+    } else {
+        wxMessageBox(_("Clone failed."), _("Error"), wxOK | wxICON_ERROR);
+    }
+}
+
+void GitIntegrationFrame::OnOpenRepository(wxCommandEvent& /*event*/) {
+    wxDirDialog dialog(this, _("Select repository"),
+                       project_path_.empty() ? wxGetHomeDir() : wxString(project_path_));
+    if (dialog.ShowModal() == wxID_OK) {
+        if (git_->IsRepository(dialog.GetPath().ToStdString())) {
+            has_repository_ = git_->OpenRepository(dialog.GetPath().ToStdString());
+            project_path_ = dialog.GetPath().ToStdString();
+            RefreshStatus();
+            RefreshHistory();
+            RefreshBranches();
+        } else {
+            wxMessageBox(_("Not a valid Git repository."), _("Error"), wxOK | wxICON_ERROR);
+        }
+    }
+}
+
+void GitIntegrationFrame::OnCommit(wxCommandEvent& /*event*/) {
+    if (!has_repository_) {
+        wxMessageBox(_("No repository open."), _("Error"), wxOK | wxICON_ERROR);
+        return;
+    }
+    
+    wxString msg = txt_commit_message_->GetValue();
+    if (msg.IsEmpty()) {
+        msg = wxGetTextFromUser(_("Commit message:"), _("Commit"));
+    }
+    if (msg.IsEmpty()) return;
+    
+    git_->AddAll();
+    auto result = git_->Commit(msg.ToStdString());
+    if (result.success) {
+        txt_commit_message_->Clear();
+        wxMessageBox(_("Committed successfully!"), _("Success"));
+        RefreshStatus();
+        RefreshHistory();
+    } else {
+        wxMessageBox(_("Commit failed."), _("Error"), wxOK | wxICON_ERROR);
+    }
+}
+
+void GitIntegrationFrame::OnPush(wxCommandEvent& /*event*/) {
+    if (!has_repository_) return;
+    auto result = git_->Push();
+    wxMessageBox(result.success ? _("Push successful!") : _("Push failed."),
+                 result.success ? _("Success") : _("Error"),
+                 wxOK | (result.success ? wxICON_INFORMATION : wxICON_ERROR));
+    if (result.success) RefreshStatus();
+}
+
+void GitIntegrationFrame::OnPull(wxCommandEvent& /*event*/) {
+    if (!has_repository_) return;
+    auto result = git_->Pull();
+    wxMessageBox(result.success ? _("Pull successful!") : _("Pull failed."),
+                 result.success ? _("Success") : _("Error"),
+                 wxOK | (result.success ? wxICON_INFORMATION : wxICON_ERROR));
+    if (result.success) {
+        RefreshStatus();
+        RefreshHistory();
+    }
+}
+
+void GitIntegrationFrame::OnFetch(wxCommandEvent& /*event*/) {
+    if (!has_repository_) return;
+    auto result = git_->Fetch();
+    wxMessageBox(result.success ? _("Fetch successful!") : _("Fetch failed."),
+                 result.success ? _("Success") : _("Error"),
+                 wxOK | (result.success ? wxICON_INFORMATION : wxICON_ERROR));
+    if (result.success) RefreshStatus();
+}
+
+void GitIntegrationFrame::OnRefresh(wxCommandEvent& /*event*/) {
+    RefreshStatus();
+    RefreshHistory();
+    RefreshBranches();
+}
+
+// Branch Operations
+void GitIntegrationFrame::OnCreateBranch(wxCommandEvent& /*event*/) {
+    if (!has_repository_) return;
+    wxString name = wxGetTextFromUser(_("Branch name:"), _("New Branch"));
+    if (name.IsEmpty()) return;
+    
+    auto result = git_->CreateBranch(name.ToStdString());
+    wxMessageBox(result.success ? _("Branch created!") : _("Failed to create branch."),
+                 result.success ? _("Success") : _("Error"),
+                 wxOK | (result.success ? wxICON_INFORMATION : wxICON_ERROR));
+    if (result.success) RefreshBranches();
+}
+
+void GitIntegrationFrame::OnCheckoutBranch(wxCommandEvent& /*event*/) {
+    if (!has_repository_) return;
+    long sel = list_branches_->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+    if (sel == -1) {
+        wxMessageBox(_("Select a branch first."), _("Info"), wxOK | wxICON_INFORMATION);
+        return;
+    }
+    
+    wxString name = list_branches_->GetItemText(sel, 0);
+    name.Replace("* ", "");
+    
+    auto result = git_->CheckoutBranch(name.ToStdString());
+    wxMessageBox(result.success ? _("Checked out!") : _("Checkout failed."),
+                 result.success ? _("Success") : _("Error"),
+                 wxOK | (result.success ? wxICON_INFORMATION : wxICON_ERROR));
+    if (result.success) {
+        RefreshStatus();
+        RefreshHistory();
+    }
+}
+
+void GitIntegrationFrame::OnMergeBranch(wxCommandEvent& /*event*/) {
+    if (!has_repository_) return;
+    long sel = list_branches_->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+    if (sel == -1) {
+        wxMessageBox(_("Select a branch to merge."), _("Info"), wxOK | wxICON_INFORMATION);
+        return;
+    }
+    
+    wxString name = list_branches_->GetItemText(sel, 0);
+    name.Replace("* ", "");
+    
+    if (wxMessageBox(_("Merge '") + name + _("' into current branch?"),
+                     _("Confirm"), wxYES_NO | wxICON_QUESTION) == wxYES) {
+        auto result = git_->MergeBranch(name.ToStdString());
+        if (result.success) {
+            wxMessageBox(_("Merge successful!"), _("Success"));
+            RefreshStatus();
+            RefreshHistory();
+        } else if (git_->IsMergeInProgress()) {
+            wxMessageBox(_("Merge has conflicts. Resolve manually."), _("Conflict"), wxOK | wxICON_WARNING);
+        } else {
+            wxMessageBox(_("Merge failed."), _("Error"), wxOK | wxICON_ERROR);
+        }
+    }
+}
+
+void GitIntegrationFrame::OnDeleteBranch(wxCommandEvent& /*event*/) {
+    if (!has_repository_) return;
+    long sel = list_branches_->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+    if (sel == -1) return;
+    
+    wxString name = list_branches_->GetItemText(sel, 0);
+    name.Replace("* ", "");
+    
+    if (wxMessageBox(_("Delete branch '") + name + _("'?"),
+                     _("Confirm"), wxYES_NO | wxICON_QUESTION) == wxYES) {
+        auto result = git_->DeleteBranch(name.ToStdString());
+        wxMessageBox(result.success ? _("Branch deleted.") : _("Delete failed."),
+                     result.success ? _("Success") : _("Error"),
+                     wxOK | (result.success ? wxICON_INFORMATION : wxICON_ERROR));
+        if (result.success) RefreshBranches();
+    }
+}
+
+// UI Updates
+void GitIntegrationFrame::RefreshStatus() {
+    if (!has_repository_ || !git_->IsOpen()) {
+        lbl_repo_name_->SetLabel(_("No repository"));
+        lbl_branch_->SetLabel(wxEmptyString);
+        lbl_ahead_behind_->SetLabel(wxEmptyString);
+        list_changed_files_->DeleteAllItems();
+        return;
+    }
+    
+    lbl_repo_name_->SetLabel(wxFileName(project_path_).GetName());
+    
+    auto current = git_->GetCurrentBranch();
+    if (current) {
+        lbl_branch_->SetLabel("  " + wxString(current->name));
+        int ahead = git_->GetAheadCount();
+        int behind = git_->GetBehindCount();
+        if (ahead > 0 || behind > 0) {
+            lbl_ahead_behind_->SetLabel(wxString::Format("  %d ahead | %d behind", ahead, behind));
+        } else {
+            lbl_ahead_behind_->SetLabel(wxEmptyString);
+        }
+    }
+    
+    list_changed_files_->DeleteAllItems();
+    auto files = git_->GetChangedFiles();
+    for (size_t i = 0; i < files.size(); ++i) {
+        const auto& f = files[i];
+        wxString status;
+        switch (f.status) {
+            case FileChangeStatus::Modified: status = _("M"); break;
+            case FileChangeStatus::Staged: status = _("A"); break;
+            case FileChangeStatus::Deleted: status = _("D"); break;
+            case FileChangeStatus::Untracked: status = _("?"); break;
+            case FileChangeStatus::Conflicted: status = _("C"); break;
+            default: status = _(" ");
+        }
+        long idx = list_changed_files_->InsertItem(i, status);
+        list_changed_files_->SetItem(idx, 1, f.path);
+    }
+}
+
+void GitIntegrationFrame::RefreshHistory() {
+    if (!has_repository_ || !git_->IsOpen()) {
+        list_commits_->DeleteAllItems();
+        return;
+    }
+    
+    list_commits_->DeleteAllItems();
+    auto commits = git_->GetCommitHistory(50);
+    for (size_t i = 0; i < commits.size(); ++i) {
+        const auto& c = commits[i];
+        long idx = list_commits_->InsertItem(i, c.shortHash);
+        list_commits_->SetItem(idx, 1, c.message);
+        list_commits_->SetItem(idx, 2, c.authorName);
+        auto time = std::chrono::system_clock::to_time_t(c.authorDate);
+        wxString date = wxString::Format("%s", std::ctime(&time));
+        date.Trim();
+        list_commits_->SetItem(idx, 3, date);
+    }
+}
+
+void GitIntegrationFrame::RefreshBranches() {
+    if (!has_repository_ || !git_->IsOpen()) {
+        list_branches_->DeleteAllItems();
+        list_remotes_->DeleteAllItems();
+        return;
+    }
+    
+    list_branches_->DeleteAllItems();
+    auto branches = git_->GetBranches();
+    for (size_t i = 0; i < branches.size(); ++i) {
+        const auto& b = branches[i];
+        wxString name = b.isCurrent ? "* " + b.name : b.name;
+        long idx = list_branches_->InsertItem(i, name);
+        list_branches_->SetItem(idx, 1, b.commitHash);
+        list_branches_->SetItem(idx, 2, b.commitMessage);
+    }
+    
+    list_remotes_->DeleteAllItems();
+    auto remotes = git_->GetRemotes();
+    for (size_t i = 0; i < remotes.size(); ++i) {
+        long idx = list_remotes_->InsertItem(i, remotes[i].name);
+        list_remotes_->SetItem(idx, 1, remotes[i].fetchUrl);
+    }
+}
+
+void GitIntegrationFrame::OnTimer(wxTimerEvent& /*event*/) {
+    if (has_repository_) RefreshStatus();
+}
+
+void GitIntegrationFrame::OnFileSelected(wxListEvent& /*event*/) {}
+void GitIntegrationFrame::OnCommitSelected(wxListEvent& /*event*/) {}
+void GitIntegrationFrame::OnBranchSelected(wxListEvent& /*event*/) {}
+
+void GitIntegrationFrame::OnClose(wxCloseEvent& event) {
+    refresh_timer_.Stop();
+    if (window_manager_) window_manager_->UnregisterWindow(this);
     Destroy();
 }
 
 void GitIntegrationFrame::OnShowDocumentation(wxCommandEvent& /*event*/) {
-    wxMessageBox(
-        _("Full documentation for Git Integration will be available "
-          "when the Beta release is launched.\n\n"
-          "Planned topics include:\n"
-          "• Setting up Git for database projects\n"
-          "• Schema versioning workflows\n"
-          "• Migration script management\n"
-          "• Branch-based database development\n"
-          "• CI/CD integration for DB changes\n"
-          "• Code review practices for DDL\n"
-          "• Deployment automation"),
-        _("Git Integration Documentation"),
-        wxOK | wxICON_INFORMATION,
-        this
-    );
-}
-
-void GitIntegrationFrame::OnJoinBeta(wxCommandEvent& /*event*/) {
-    wxMessageBox(
-        _("Thank you for your interest in the ScratchRobin Beta Program!\n\n"
-          "To join the Beta and get early access to Git Integration:\n\n"
-          "1. Visit: https://scratchbird.dev/beta\n"
-          "2. Sign up with your email\n"
-          "3. We'll notify you when Beta access is available"),
-        _("Join Beta Program"),
-        wxOK | wxICON_INFORMATION,
-        this
-    );
+    wxLaunchDefaultBrowser("https://scratchbird.dev/docs/git-integration");
 }
 
 } // namespace scratchrobin

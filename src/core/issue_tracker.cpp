@@ -13,6 +13,7 @@
 #include "issue_tracker_gitlab.h"
 
 #include <algorithm>
+#include <fstream>
 #include <sstream>
 
 namespace scratchrobin {
@@ -179,6 +180,14 @@ bool IssueLinkManager::LinkObject(const ObjectReference& obj, const IssueReferen
     
     links_[link.link_id] = link;
     return true;
+}
+
+bool IssueLinkManager::CreateLink(const ObjectReference& obj, const IssueReference& issue) {
+    return LinkObject(obj, issue, LinkType::MANUAL);
+}
+
+IssueTrackerAdapter* IssueLinkManager::GetAdapter(const std::string& name) {
+    return GetTracker(name);
 }
 
 bool IssueLinkManager::UnlinkObject(const ObjectReference& obj, const std::string& issue_id) {

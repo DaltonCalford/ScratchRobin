@@ -5,230 +5,240 @@
 
 #include <gtest/gtest.h>
 #include "core/capability_detector.h"
+#include "core/connection_backend.h"
 
 using namespace scratchrobin;
 
 class CapabilityDetectorTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        detector_ = std::make_unique<CapabilityDetector>();
+        // CapabilityDetector uses static methods
     }
-    
-    std::unique_ptr<CapabilityDetector> detector_;
 };
 
-TEST_F(CapabilityDetectorTest, DetectPostgresqlCapabilities) {
-    // Simulate PostgreSQL version info
-    std::map<std::string, std::string> server_info = {
-        {"server_version", "15.2"},
-        {"server_version_num", "150002"},
-    };
+TEST_F(CapabilityDetectorTest, ParseVersionSimple) {
+    int major = 0, minor = 0, patch = 0;
     
-    auto caps = detector_->DetectCapabilities(
-        BackendType::PostgreSQL,
-        server_info
-    );
-    
-    EXPECT_EQ(caps.backend_type, BackendType::PostgreSQL);
-    EXPECT_EQ(caps.server_version, "15.2");
-    EXPECT_TRUE(caps.supports_transactions);
-    EXPECT_TRUE(caps.supports_savepoints);
-    EXPECT_TRUE(caps.supports_prepared_statements);
-    EXPECT_TRUE(caps.supports_cte);
-    EXPECT_TRUE(caps.supports_window_functions);
-    EXPECT_TRUE(caps.supports_json);
+    EXPECT_TRUE(CapabilityDetector::ParseVersion("13.4", &major, &minor, &patch));
+    EXPECT_EQ(major, 13);
+    EXPECT_EQ(minor, 4);
+    EXPECT_EQ(patch, 0);
 }
 
-TEST_F(CapabilityDetectorTest, DetectOldPostgresqlCapabilities) {
-    std::map<std::string, std::string> server_info = {
-        {"server_version", "9.5"},
-        {"server_version_num", "90500"},
-    };
+TEST_F(CapabilityDetectorTest, ParseVersionWithPatch) {
+    int major = 0, minor = 0, patch = 0;
     
-    auto caps = detector_->DetectCapabilities(
-        BackendType::PostgreSQL,
-        server_info
-    );
-    
-    // Older versions may not support some features
-    EXPECT_TRUE(caps.supports_transactions);
-    EXPECT_FALSE(caps.supports_jsonb);  // JSONB added in 9.4
+    EXPECT_TRUE(CapabilityDetector::ParseVersion("8.0.25", &major, &minor, &patch));
+    EXPECT_EQ(major, 8);
+    EXPECT_EQ(minor, 0);
+    EXPECT_EQ(patch, 25);
 }
 
-TEST_F(CapabilityDetectorTest, DetectMysqlCapabilities) {
-    std::map<std::string, std::string> server_info = {
-        {"version", "8.0.32"},
-        {"version_comment", "MySQL Community Server"},
-    };
+TEST_F(CapabilityDetectorTest, ParseVersionWithSuffix) {
+    int major = 0, minor = 0, patch = 0;
     
-    auto caps = detector_->DetectCapabilities(
-        BackendType::MySQL,
-        server_info
-    );
-    
-    EXPECT_EQ(caps.backend_type, BackendType::MySQL);
-    EXPECT_TRUE(caps.supports_transactions);
-    EXPECT_TRUE(caps.supports_json);  // MySQL 5.7+
-    EXPECT_TRUE(caps.supports_cte);   // MySQL 8.0+
+    EXPECT_TRUE(CapabilityDetector::ParseVersion("15.2 (Debian 15.2-1)", &major, &minor, &patch));
+    EXPECT_EQ(major, 15);
+    EXPECT_EQ(minor, 2);
 }
 
-TEST_F(CapabilityDetectorTest, DetectOldMysqlCapabilities) {
-    std::map<std::string, std::string> server_info = {
-        {"version", "5.6.40"},
-    };
+TEST_F(CapabilityDetectorTest, ParseVersionInvalid) {
+    int major = 0, minor = 0, patch = 0;
     
-    auto caps = detector_->DetectCapabilities(
-        BackendType::MySQL,
-        server_info
-    );
-    
-    EXPECT_FALSE(caps.supports_json);  // JSON added in 5.7
-    EXPECT_FALSE(caps.supports_cte);   // CTE added in 8.0
+    EXPECT_FALSE(CapabilityDetector::ParseVersion("", &major, &minor, &patch));
+    EXPECT_FALSE(CapabilityDetector::ParseVersion("not a version", &major, &minor, &patch));
 }
 
-TEST_F(CapabilityDetectorTest, DetectFirebirdCapabilities) {
-    std::map<std::string, std::string> server_info = {
-        {"version", "4.0.2"},
-        {"ods_version", "13.0"},
-    };
-    
-    auto caps = detector_->DetectCapabilities(
-        BackendType::Firebird,
-        server_info
-    );
-    
-    EXPECT_EQ(caps.backend_type, BackendType::Firebird);
-    EXPECT_TRUE(caps.supports_transactions);
-    EXPECT_TRUE(caps.supports_savepoints);
+TEST_F(CapabilityDetectorTest, ParseVersionNullPointer) {
+    // Should handle null pointers gracefully
+    EXPECT_FALSE(CapabilityDetector::ParseVersion("1.0", nullptr, nullptr, nullptr));
 }
 
-TEST_F(CapabilityDetectorTest, DetectScratchBirdCapabilities) {
-    std::map<std::string, std::string> server_info = {
-        {"version", "0.1.0"},
-        {"supports_jobs", "true"},
-        {"supports_domains", "true"},
-        {"supports_vectors", "true"},
-    };
+TEST_F(CapabilityDetectorTest, GetStaticCapabilitiesPostgreSQL) {
+    auto caps = CapabilityDetector::GetStaticCapabilities("postgresql");
     
-    auto caps = detector_->DetectCapabilities(
-        BackendType::ScratchBird,
-        server_info
-    );
-    
-    EXPECT_TRUE(caps.supports_jobs);
-    EXPECT_TRUE(caps.supports_domains);
-    EXPECT_TRUE(caps.supports_vectors);
+    EXPECT_TRUE(caps.supportsTransactions);
+    EXPECT_TRUE(caps.supportsPaging);
+    EXPECT_TRUE(caps.supportsExplain);
+    EXPECT_TRUE(caps.supportsDomains);
+    EXPECT_TRUE(caps.supportsSequences);
+    EXPECT_TRUE(caps.supportsTriggers);
+    EXPECT_TRUE(caps.supportsProcedures);
+    EXPECT_TRUE(caps.supportsUserAdmin);
+    EXPECT_TRUE(caps.supportsRoleAdmin);
+    EXPECT_TRUE(caps.supportsSchemas);
+    EXPECT_TRUE(caps.supportsTablespaces);
+    EXPECT_TRUE(caps.supportsMultipleDatabases);
+    EXPECT_TRUE(caps.supportsSavepoints);
 }
 
-TEST_F(CapabilityDetectorTest, CheckFeatureSupport) {
-    CapabilityInfo caps;
-    caps.supports_transactions = true;
-    caps.supports_json = false;
-    caps.server_version = "10.0";
+TEST_F(CapabilityDetectorTest, GetStaticCapabilitiesMySQL) {
+    auto caps = CapabilityDetector::GetStaticCapabilities("mysql");
     
-    EXPECT_TRUE(caps.Supports(Feature::Transactions));
-    EXPECT_FALSE(caps.Supports(Feature::Json));
+    EXPECT_TRUE(caps.supportsTransactions);
+    EXPECT_TRUE(caps.supportsPaging);
+    EXPECT_TRUE(caps.supportsExplain);
+    EXPECT_TRUE(caps.supportsTriggers);
+    EXPECT_TRUE(caps.supportsProcedures);
+    EXPECT_TRUE(caps.supportsUserAdmin);
+    EXPECT_TRUE(caps.supportsMultipleDatabases);
+    EXPECT_TRUE(caps.supportsSavepoints);
+    
+    // MySQL specific
+    EXPECT_FALSE(caps.supportsRoleAdmin);  // Only MySQL 8.0+
+    EXPECT_FALSE(caps.supportsDomains);
 }
 
-TEST_F(CapabilityDetectorTest, VersionComparison) {
-    EXPECT_TRUE(detector_->IsVersionAtLeast("10.0", "9.5"));
-    EXPECT_TRUE(detector_->IsVersionAtLeast("10.0", "10.0"));
-    EXPECT_FALSE(detector_->IsVersionAtLeast("9.5", "10.0"));
+TEST_F(CapabilityDetectorTest, GetStaticCapabilitiesMariaDB) {
+    auto caps = CapabilityDetector::GetStaticCapabilities("mariadb");
     
-    // Multi-part versions
-    EXPECT_TRUE(detector_->IsVersionAtLeast("15.2.1", "15.2"));
-    EXPECT_TRUE(detector_->IsVersionAtLeast("15.2.1", "15.2.0"));
+    EXPECT_TRUE(caps.supportsTransactions);
+    EXPECT_TRUE(caps.supportsPaging);
+    EXPECT_TRUE(caps.supportsSavepoints);
 }
 
-TEST_F(CapabilityDetectorTest, MaxIdentifierLength) {
-    auto pg_caps = detector_->DetectCapabilities(
-        BackendType::PostgreSQL,
-        {{"server_version", "15.0"}}
-    );
-    EXPECT_EQ(pg_caps.max_identifier_length, 63);
+TEST_F(CapabilityDetectorTest, GetStaticCapabilitiesFirebird) {
+    auto caps = CapabilityDetector::GetStaticCapabilities("firebird");
     
-    auto mysql_caps = detector_->DetectCapabilities(
-        BackendType::MySQL,
-        {{"version", "8.0"}}
-    );
-    EXPECT_EQ(mysql_caps.max_identifier_length, 64);
+    EXPECT_TRUE(caps.supportsTransactions);
+    EXPECT_TRUE(caps.supportsPaging);
+    EXPECT_TRUE(caps.supportsDomains);
+    EXPECT_TRUE(caps.supportsSequences);
+    EXPECT_TRUE(caps.supportsTriggers);
+    EXPECT_TRUE(caps.supportsProcedures);
+    EXPECT_TRUE(caps.supportsUserAdmin);
+    EXPECT_TRUE(caps.supportsRoleAdmin);
+    EXPECT_TRUE(caps.supportsMultipleDatabases);
+    EXPECT_TRUE(caps.supportsSavepoints);
+    
+    // Firebird limitations
+    EXPECT_FALSE(caps.supportsExplain);
+    // Firebird supports schemas through the default mechanism
+    EXPECT_TRUE(caps.supportsSchemas);  
+    EXPECT_FALSE(caps.supportsTablespaces);
 }
 
-TEST_F(CapabilityDetectorTest, DefaultIsolationLevel) {
-    auto pg_caps = detector_->DetectCapabilities(
-        BackendType::PostgreSQL, {}
-    );
-    EXPECT_EQ(pg_caps.default_isolation_level, IsolationLevel::ReadCommitted);
+TEST_F(CapabilityDetectorTest, GetStaticCapabilitiesScratchBird) {
+    auto caps = CapabilityDetector::GetStaticCapabilities("scratchbird");
+    
+    // ScratchBird supports everything
+    EXPECT_TRUE(caps.supportsCancel);
+    EXPECT_TRUE(caps.supportsTransactions);
+    EXPECT_TRUE(caps.supportsExplain);
+    EXPECT_TRUE(caps.supportsSblr);
+    EXPECT_TRUE(caps.supportsStreaming);
+    EXPECT_TRUE(caps.supportsDdlExtract);
+    EXPECT_TRUE(caps.supportsDependencies);
+    EXPECT_TRUE(caps.supportsUserAdmin);
+    EXPECT_TRUE(caps.supportsRoleAdmin);
+    EXPECT_TRUE(caps.supportsGroupAdmin);
+    EXPECT_TRUE(caps.supportsJobScheduler);
+    EXPECT_TRUE(caps.supportsDomains);
+    EXPECT_TRUE(caps.supportsSequences);
+    EXPECT_TRUE(caps.supportsTriggers);
+    EXPECT_TRUE(caps.supportsProcedures);
+    EXPECT_TRUE(caps.supportsViews);
+    EXPECT_TRUE(caps.supportsTempTables);
+    EXPECT_TRUE(caps.supportsMultipleDatabases);
+    EXPECT_TRUE(caps.supportsTablespaces);
+    EXPECT_TRUE(caps.supportsSchemas);
+    EXPECT_TRUE(caps.supportsBackup);
+    EXPECT_TRUE(caps.supportsImportExport);
 }
 
-TEST_F(CapabilityDetectorTest, SerializeToJson) {
-    CapabilityInfo caps;
-    caps.backend_type = BackendType::PostgreSQL;
-    caps.server_version = "15.2";
-    caps.supports_transactions = true;
-    caps.supports_json = true;
+TEST_F(CapabilityDetectorTest, GetStaticCapabilitiesNative) {
+    // "native" is alias for scratchbird
+    auto caps = CapabilityDetector::GetStaticCapabilities("native");
     
-    std::string json = caps.ToJson();
-    
-    EXPECT_NE(json.find("\"supports_transactions\":true"), std::string::npos);
-    EXPECT_NE(json.find("\"server_version\":\"15.2\""), std::string::npos);
+    EXPECT_TRUE(caps.supportsSblr);
+    EXPECT_TRUE(caps.supportsJobScheduler);
+    EXPECT_TRUE(caps.supportsGroupAdmin);
 }
 
-TEST_F(CapabilityDetectorTest, DeserializeFromJson) {
-    std::string json = R"({
-        "backend_type": "PostgreSQL",
-        "server_version": "14.5",
-        "supports_transactions": true,
-        "supports_json": false,
-        "max_identifier_length": 63
-    })";
+TEST_F(CapabilityDetectorTest, GetStaticCapabilitiesUnknown) {
+    auto caps = CapabilityDetector::GetStaticCapabilities("unknown_backend");
     
-    auto caps = CapabilityInfo::FromJson(json);
-    
-    EXPECT_TRUE(caps.has_value());
-    EXPECT_EQ(caps->backend_type, BackendType::PostgreSQL);
-    EXPECT_EQ(caps->server_version, "14.5");
-    EXPECT_TRUE(caps->supports_transactions);
-    EXPECT_FALSE(caps->supports_json);
-    EXPECT_EQ(caps->max_identifier_length, 63);
+    // Should return default capabilities
+    EXPECT_FALSE(caps.supportsCancel);
+    EXPECT_TRUE(caps.supportsTransactions);  // Default
 }
 
-TEST_F(CapabilityDetectorTest, MergeCapabilities) {
-    CapabilityInfo base;
-    base.supports_transactions = true;
-    base.supports_json = false;
+TEST_F(CapabilityDetectorTest, GetStaticCapabilitiesCaseInsensitive) {
+    auto caps1 = CapabilityDetector::GetStaticCapabilities("PostgreSQL");
+    auto caps2 = CapabilityDetector::GetStaticCapabilities("POSTGRESQL");
+    auto caps3 = CapabilityDetector::GetStaticCapabilities("postgresql");
     
-    CapabilityInfo overlay;
-    overlay.supports_json = true;
-    overlay.supports_cte = true;
-    
-    auto merged = detector_->MergeCapabilities(base, overlay);
-    
-    EXPECT_TRUE(merged.supports_transactions);
-    EXPECT_TRUE(merged.supports_json);
-    EXPECT_TRUE(merged.supports_cte);
+    EXPECT_EQ(caps1.supportsExplain, caps2.supportsExplain);
+    EXPECT_EQ(caps2.supportsExplain, caps3.supportsExplain);
 }
 
-TEST_F(CapabilityDetectorTest, DetectFromConnection) {
-    // Mock connection test
-    // In real tests, this would use a mock connection
-    ConnectionProfile profile;
-    profile.backend_type = BackendType::PostgreSQL;
+TEST_F(CapabilityDetectorTest, CapabilityMatrixExists) {
+    const char* matrix = CapabilityMatrix::GetMarkdownTable();
     
-    // This would normally query the database
-    // For unit tests, we just verify the API exists
-    EXPECT_NO_THROW(detector_->DetectCapabilities(profile));
+    EXPECT_NE(matrix, nullptr);
+    EXPECT_NE(std::string(matrix).find("PostgreSQL"), std::string::npos);
+    EXPECT_NE(std::string(matrix).find("MySQL"), std::string::npos);
+    EXPECT_NE(std::string(matrix).find("Firebird"), std::string::npos);
+    EXPECT_NE(std::string(matrix).find("ScratchBird"), std::string::npos);
 }
 
-TEST_F(CapabilityDetectorTest, UnsupportedFeatureError) {
-    CapabilityInfo caps;
-    caps.supports_window_functions = false;
-    caps.supports_cte = false;
+TEST_F(CapabilityDetectorTest, DetectCapabilitiesWithNull) {
+    // Should return default capabilities when backend is null
+    auto caps = CapabilityDetector::DetectCapabilities(nullptr);
     
-    auto error = detector_->CheckFeatureSupport(caps, Feature::WindowFunctions);
-    EXPECT_TRUE(error.has_value());
+    EXPECT_FALSE(caps.supportsCancel);
+    EXPECT_TRUE(caps.supportsTransactions);  // Default
+}
+
+TEST_F(CapabilityDetectorTest, BackendCapabilitiesDefaultValues) {
+    BackendCapabilities caps;
     
-    auto ok = detector_->CheckFeatureSupport(caps, Feature::Transactions);
-    // Transactions support is assumed always present
-    // so this would depend on the caps setup
+    // Check default values
+    EXPECT_FALSE(caps.supportsCancel);
+    EXPECT_TRUE(caps.supportsTransactions);
+    EXPECT_TRUE(caps.supportsPaging);
+    EXPECT_TRUE(caps.supportsSavepoints);
+    EXPECT_FALSE(caps.supportsExplain);
+    EXPECT_FALSE(caps.supportsSblr);
+    EXPECT_TRUE(caps.supportsStreaming);
+    EXPECT_FALSE(caps.supportsDdlExtract);
+    EXPECT_FALSE(caps.supportsDependencies);
+    EXPECT_FALSE(caps.supportsUserAdmin);
+    EXPECT_FALSE(caps.supportsRoleAdmin);
+    EXPECT_FALSE(caps.supportsGroupAdmin);
+    EXPECT_FALSE(caps.supportsJobScheduler);
+    EXPECT_FALSE(caps.supportsDomains);
+    EXPECT_FALSE(caps.supportsSequences);
+    EXPECT_FALSE(caps.supportsTriggers);
+    EXPECT_FALSE(caps.supportsProcedures);
+    EXPECT_TRUE(caps.supportsViews);
+    EXPECT_TRUE(caps.supportsTempTables);
+    EXPECT_TRUE(caps.supportsMultipleDatabases);
+    EXPECT_FALSE(caps.supportsTablespaces);
+    EXPECT_TRUE(caps.supportsSchemas);
+    EXPECT_FALSE(caps.supportsBackup);
+    EXPECT_TRUE(caps.supportsImportExport);
+    
+    // Version info defaults
+    EXPECT_EQ(caps.majorVersion, 0);
+    EXPECT_EQ(caps.minorVersion, 0);
+    EXPECT_EQ(caps.patchVersion, 0);
+}
+
+TEST_F(CapabilityDetectorTest, VersionComparisonHelpers) {
+    // Test that version parsing works correctly for comparison purposes
+    int major1, minor1, patch1;
+    int major2, minor2, patch2;
+    
+    CapabilityDetector::ParseVersion("14.5", &major1, &minor1, &patch1);
+    CapabilityDetector::ParseVersion("13.8", &major2, &minor2, &patch2);
+    
+    EXPECT_GT(major1, major2);
+    
+    CapabilityDetector::ParseVersion("14.5.1", &major1, &minor1, &patch1);
+    CapabilityDetector::ParseVersion("14.5", &major2, &minor2, &patch2);
+    
+    EXPECT_EQ(major1, major2);
+    EXPECT_EQ(minor1, minor2);
+    EXPECT_GT(patch1, patch2);
 }

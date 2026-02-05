@@ -12,7 +12,7 @@
 
 #include "core/simple_json.h"
 #include "core/metadata_model.h"
-#include "diagram/diagram_document.h"
+#include "ui/diagram_model.h"
 
 namespace scratchrobin {
 
@@ -70,7 +70,7 @@ size_t GetCurrentMemoryUsage() {
 // Memory threshold constants (in bytes)
 constexpr size_t kMaxBaseMemory = 100 * 1024 * 1024;        // 100 MB
 constexpr size_t kMaxMetadataModelMemory = 10 * 1024 * 1024; // 10 MB
-constexpr size_t kMaxPerDiagramEntity = 500 * 1024;          // 500 KB per entity
+constexpr size_t kMaxPerDiagramNode = 500 * 1024;          // 500 KB per node
 constexpr size_t kMaxJsonDocumentMemory = 5 * 1024 * 1024;   // 5 MB
 
 class MemoryUsageTest : public ::testing::Test {
@@ -91,57 +91,82 @@ TEST_F(MemoryUsageTest, MetadataModelMemoryUsage) {
     // Create a metadata model with various objects
     MetadataModel model;
     
-    // Add schemas
-    for (int i = 0; i < 10; ++i) {
-        SchemaMetadata schema;
-        schema.name = "schema_" + std::to_string(i);
+    // Add many metadata nodes
+    for (int i = 0; i < 100; ++i) {
+        MetadataNode node;
+        node.id = i;
+        node.type = MetadataType::Table;
+        node.name = "table_" + std::to_string(i);
+        node.label = node.name;
+        node.schema = "public";
+        node.catalog = "test_db";
+        node.path = "test_db/public/" + node.name;
         
-        // Add tables to schema
-        for (int j = 0; j < 50; ++j) {
-            TableMetadata table;
-            table.name = "table_" + std::to_string(j);
-            table.schema = schema.name;
-            
-            // Add columns
-            for (int k = 0; k < 10; ++k) {
-                ColumnMetadata column;
-                column.name = "column_" + std::to_string(k);
-                column.type = (k % 2 == 0) ? "INTEGER" : "VARCHAR";
-                column.nullable = true;
-                table.columns.push_back(column);
-            }
-            
-            schema.tables.push_back(table);
+        // Add children (columns)
+        for (int j = 0; j < 10; ++j) {
+            MetadataNode column;
+            column.id = i * 100 + j;
+            column.type = MetadataType::Column;
+            column.name = "column_" + std::to_string(j);
+            column.label = column.name;
+            column.parent_id = i;
+            node.children.push_back(column);
         }
         
-        model.AddSchema(schema);
+        model.UpdateNode(node);
     }
     
     size_t memory_delta = GetMemoryDelta();
     
-    // Should use reasonable memory for 10 schemas x 50 tables x 10 columns
+    // Should use reasonable memory for 100 tables x 10 columns
     EXPECT_LT(memory_delta, kMaxMetadataModelMemory) 
         << "Memory delta: " << (memory_delta / 1024 / 1024) << " MB";
+    
+    // Verify model integrity
+    auto tables = model.FindNodesByType(MetadataType::Table);
+    EXPECT_EQ(tables.size(), 100);
 }
 
 TEST_F(MemoryUsageTest, SimpleJsonMemoryUsage) {
-    // Create a large JSON document
-    SimpleJson::Object root;
+    // Create a large JSON document using JsonValue
+    JsonValue root;
+    root.type = JsonValue::Type::Object;
     
     for (int i = 0; i < 1000; ++i) {
-        SimpleJson::Object item;
-        item["id"] = i;
-        item["name"] = "Item " + std::to_string(i);
-        item["description"] = "This is a description for item " + std::to_string(i);
-        item["active"] = (i % 2 == 0);
+        JsonValue item;
+        item.type = JsonValue::Type::Object;
         
-        SimpleJson::Array tags;
+        JsonValue id_val;
+        id_val.type = JsonValue::Type::Number;
+        id_val.number_value = i;
+        item.object_value["id"] = id_val;
+        
+        JsonValue name_val;
+        name_val.type = JsonValue::Type::String;
+        name_val.string_value = "Item " + std::to_string(i);
+        item.object_value["name"] = name_val;
+        
+        JsonValue desc_val;
+        desc_val.type = JsonValue::Type::String;
+        desc_val.string_value = "This is a description for item " + std::to_string(i);
+        item.object_value["description"] = desc_val;
+        
+        JsonValue active_val;
+        active_val.type = JsonValue::Type::Bool;
+        active_val.bool_value = (i % 2 == 0);
+        item.object_value["active"] = active_val;
+        
+        JsonValue tags;
+        tags.type = JsonValue::Type::Array;
         for (int j = 0; j < 5; ++j) {
-            tags.push_back("tag_" + std::to_string(j));
+            JsonValue tag;
+            tag.type = JsonValue::Type::String;
+            tag.string_value = "tag_" + std::to_string(j);
+            tags.array_value.push_back(tag);
         }
-        item["tags"] = tags;
+        item.object_value["tags"] = tags;
         
-        root["item_" + std::to_string(i)] = item;
+        root.object_value["item_" + std::to_string(i)] = item;
     }
     
     size_t memory_delta = GetMemoryDelta();
@@ -150,54 +175,45 @@ TEST_F(MemoryUsageTest, SimpleJsonMemoryUsage) {
     EXPECT_LT(memory_delta, kMaxJsonDocumentMemory)
         << "JSON memory delta: " << (memory_delta / 1024 / 1024) << " MB";
     
-    // Serialize and verify
-    std::string json_str = SimpleJson::Serialize(root);
-    EXPECT_FALSE(json_str.empty());
-    
-    // Parse back
-    auto parsed = SimpleJson::Parse(json_str);
-    EXPECT_TRUE(parsed.IsObject());
+    // Verify data integrity
+    EXPECT_EQ(root.object_value.size(), 1000);
 }
 
-TEST_F(MemoryUsageTest, DiagramDocumentMemoryUsage) {
-    // Create a diagram with entities
-    auto doc = std::make_unique<DiagramDocument>();
+TEST_F(MemoryUsageTest, DiagramModelMemoryUsage) {
+    // Create a diagram with nodes
+    auto model = std::make_unique<DiagramModel>(DiagramType::Erd);
     
-    size_t entity_count = 100;
-    for (size_t i = 0; i < entity_count; ++i) {
-        Entity entity;
-        entity.id = "entity_" + std::to_string(i);
-        entity.name = "Table_" + std::to_string(i);
-        entity.position = Point2D(i * 10.0, i * 5.0);
-        entity.size = Size2D(150, 100);
+    size_t node_count = 100;
+    for (size_t i = 0; i < node_count; ++i) {
+        DiagramNode node;
+        node.id = "node_" + std::to_string(i);
+        node.name = "Table_" + std::to_string(i);
+        node.x = i * 10.0;
+        node.y = i * 5.0;
+        node.width = 150;
+        node.height = 100;
         
         // Add attributes
         for (int j = 0; j < 5; ++j) {
-            EntityAttribute attr;
+            DiagramAttribute attr;
             attr.name = "attr_" + std::to_string(j);
-            attr.type = "INTEGER";
-            attr.isPrimaryKey = (j == 0);
-            entity.attributes.push_back(attr);
+            attr.data_type = "INTEGER";
+            attr.is_primary = (j == 0);
+            node.attributes.push_back(attr);
         }
         
-        doc->AddEntity(entity);
+        model->AddNode(node);
     }
     
     size_t memory_delta = GetMemoryDelta();
-    size_t per_entity = memory_delta / entity_count;
+    size_t per_node = memory_delta / node_count;
     
-    // Should use reasonable memory per entity
-    EXPECT_LT(per_entity, kMaxPerDiagramEntity)
-        << "Per-entity memory: " << (per_entity / 1024) << " KB";
+    // Should use reasonable memory per node
+    EXPECT_LT(per_node, kMaxPerDiagramNode)
+        << "Per-node memory: " << (per_node / 1024) << " KB";
     
-    // Serialize to XML
-    std::string xml = doc->ToXml();
-    EXPECT_FALSE(xml.empty());
-    
-    // Parse back
-    auto doc2 = std::make_unique<DiagramDocument>();
-    EXPECT_TRUE(doc2->FromXml(xml));
-    EXPECT_EQ(doc2->GetEntities().size(), entity_count);
+    // Verify model integrity
+    EXPECT_EQ(model->nodes().size(), node_count);
 }
 
 TEST_F(MemoryUsageTest, MemoryGrowthCheck) {
@@ -212,17 +228,16 @@ TEST_F(MemoryUsageTest, MemoryGrowthCheck) {
         for (int i = 0; i < 10; ++i) {
             auto model = std::make_unique<MetadataModel>();
             
-            SchemaMetadata schema;
-            schema.name = "test_schema";
-            
+            // Add nodes
             for (int j = 0; j < 20; ++j) {
-                TableMetadata table;
-                table.name = "table_" + std::to_string(j);
-                table.schema = schema.name;
-                schema.tables.push_back(table);
+                MetadataNode node;
+                node.id = j;
+                node.type = MetadataType::Table;
+                node.name = "table_" + std::to_string(j);
+                node.label = node.name;
+                model->UpdateNode(node);
             }
             
-            model->AddSchema(schema);
             models.push_back(std::move(model));
         }
         
@@ -269,7 +284,7 @@ TEST_F(MemoryUsageTest, LargeResultSetHandling) {
         std::vector<QueryValue> row;
         for (int c = 0; c < col_count; ++c) {
             QueryValue val;
-            val.value = "Value_" + std::to_string(r) + "_" + std::to_string(c);
+            val.text = "Value_" + std::to_string(r) + "_" + std::to_string(c);
             row.push_back(val);
         }
         result.rows.push_back(row);

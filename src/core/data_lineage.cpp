@@ -488,8 +488,8 @@ void RuntimeLineageCollector::RecordQuery(const QueryEvent& event) {
     
     events_.push_back(event);
     
-    // Clean up old events based on retention
-    // TODO: Implement retention policy enforcement
+    // Clean up old events based on retention policy
+    EnforceRetentionPolicy();
 }
 
 void RuntimeLineageCollector::RecordDataMovement(const std::string& from_table,
@@ -577,6 +577,24 @@ void RuntimeLineageCollector::SetRetentionPeriod(int days) {
 
 void RuntimeLineageCollector::EnableCollection(bool enable) {
     enabled_ = enable;
+}
+
+void RuntimeLineageCollector::EnforceRetentionPolicy() {
+    if (retention_days_ <= 0) {
+        return;  // No retention limit
+    }
+    
+    std::time_t now = std::time(nullptr);
+    std::time_t cutoff = now - (retention_days_ * 24 * 60 * 60);  // Convert days to seconds
+    
+    // Remove events older than the cutoff
+    events_.erase(
+        std::remove_if(events_.begin(), events_.end(),
+            [cutoff](const QueryEvent& event) {
+                return event.timestamp < cutoff;
+            }),
+        events_.end()
+    );
 }
 
 // ============================================================================

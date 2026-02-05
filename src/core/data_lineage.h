@@ -245,6 +245,8 @@ public:
     bool IsCollectionEnabled() const { return enabled_; }
     
 private:
+    void EnforceRetentionPolicy();
+    
     std::vector<QueryEvent> events_;
     bool enabled_ = false;
     int retention_days_ = 30;

@@ -662,7 +662,7 @@ void WebhookServer::HandleRequest(int client_socket) {
     if (method == "POST") {
         WebhookEvent event;
         event.payload = body;
-        event.timestamp = std::time(nullptr);
+        event.received_at = std::time(nullptr);
         
         // Determine provider from path
         if (path.find("/webhook/jira") != std::string::npos) {

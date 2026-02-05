@@ -221,6 +221,8 @@ public:
                                  const MaskingRule::Parameters& params);
     static std::string Truncate(const std::string& value,
                                  const MaskingRule::Parameters& params);
+    static std::vector<std::string> Shuffle(std::vector<std::string> values,
+                                             const MaskingRule::Parameters& params);
     
 private:
     std::map<MaskingMethod, MaskFunction> mask_functions_;

@@ -16,6 +16,7 @@
 
 #include <wx/sizer.h>
 #include <wx/button.h>
+#include <wx/filename.h>
 #include <wx/choice.h>
 #include <wx/slider.h>
 #include <wx/spinctrl.h>
@@ -236,8 +237,8 @@ void AiSettingsDialog::LoadSettings() {
     provider_choice_->SetSelection(provider_idx);
     
     // Load API key from secure storage if available
-    CredentialStore cred_store;
-    std::string secure_key = cred_store.GetApiKey(config.provider);
+    auto cred_store = CreateDefaultCredentialStore();
+    std::string secure_key = cred_store->GetApiKey(config.provider);
     if (!secure_key.empty()) {
         api_key_ctrl_->SetValue(secure_key);
         // Mask the key for display
@@ -299,8 +300,8 @@ void AiSettingsDialog::SaveSettings() {
     
     // Save API key to secure credential store
     if (!ai_config.api_key.empty()) {
-        CredentialStore cred_store;
-        cred_store.StoreApiKey(provider, ai_config.api_key);
+        auto cred_store = CreateDefaultCredentialStore();
+        cred_store->StoreApiKey(provider, ai_config.api_key);
         // Clear from plain config for security
         ai_config.api_key.clear();
     }

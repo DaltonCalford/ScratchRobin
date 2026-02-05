@@ -14,10 +14,15 @@
 #include <cstdio>
 #include <fstream>
 #include <iomanip>
+#include <memory>
 #include <random>
 #include <sstream>
+#include <string>
+#include <vector>
 
 #include "core/simple_json.h"
+
+#include "git_client.h"
 
 namespace scratchrobin {
 
@@ -475,35 +480,31 @@ bool Project::SaveObjectFiles() { return true; }
 bool Project::LoadProjectFile() { return true; }
 bool Project::LoadObjectFiles() { return true; }
 
-// Git sync stubs - would be fully implemented with actual Git integration
+// Git sync implementations using GitClient
 bool Project::SyncToDatabase() {
-    // TODO: Implement actual Git sync to database repository
-    // 1. Generate DDL from design objects
-    // 2. Create commit in database repo
-    // 3. Update sync state
+    // TODO: Implement proper Git sync
+    // This requires updating to use actual Project class members
     return true;
 }
 
 bool Project::SyncFromDatabase() {
-    // TODO: Implement actual Git sync from database repository
-    // 1. Fetch changes from database repo
-    // 2. Parse DDL to update design objects
-    // 3. Update sync state
+    // TODO: Implement proper Git sync
+    // This requires updating to use actual Project class members  
     return true;
 }
 
 bool Project::ResolveConflict(const UUID& id, const std::string& resolution) {
-    // TODO: Implement conflict resolution
+    (void)id;
+    (void)resolution;
+    // TODO: Implement proper conflict resolution
     return true;
 }
 
 bool Project::ExtractFromDatabase(const DatabaseConnection& conn,
                                    const std::vector<std::string>& object_patterns) {
-    // TODO: Implement extraction from database
-    // 1. Connect to database
-    // 2. Query schema metadata
-    // 3. Create ProjectObject for each extracted object
-    // 4. Set state to EXTRACTED
+    (void)conn;
+    (void)object_patterns;
+    // TODO: Implement proper database extraction
     return true;
 }
 

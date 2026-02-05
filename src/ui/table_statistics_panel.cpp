@@ -757,15 +757,98 @@ void TableStatisticsPanel::VacuumSelected() {
 }
 
 void TableStatisticsPanel::AnalyzeAll() {
-    // This could analyze all visible tables
-    wxMessageBox("Analyze all tables is not implemented in this version.",
-                 "Not Implemented", wxOK | wxICON_INFORMATION);
+    if (filtered_statistics_.empty()) {
+        wxMessageBox("No tables to analyze.",
+                     "No Tables", wxOK | wxICON_INFORMATION);
+        return;
+    }
+    
+    wxString msg = wxString::Format(
+        "Are you sure you want to analyze all %zu visible tables?\n\n"
+        "This will update statistics for query optimization.",
+        filtered_statistics_.size());
+    
+    int result = wxMessageBox(msg, "Confirm Analyze All",
+                              wxYES_NO | wxICON_QUESTION | wxNO_DEFAULT);
+    if (result != wxYES) {
+        return;
+    }
+    
+    if (!connection_manager_ || !connection_manager_->IsConnected()) {
+        return;
+    }
+    
+    // Build SQL to analyze all visible tables
+    std::string sql;
+    for (const auto& info : filtered_statistics_) {
+        if (!sql.empty()) {
+            sql += "\n";
+        }
+        sql += "ANALYZE " + info.schema_name + "." + info.table_name + ";";
+    }
+    
+    UpdateStatus("Analyzing all tables...");
+    maintenance_job_ = connection_manager_->ExecuteQueryAsync(sql,
+        [this](bool ok, QueryResult, const std::string& error) {
+            CallAfter([this, ok, error]() {
+                if (ok) {
+                    UpdateStatus("Analyze all completed");
+                    RefreshData();
+                } else {
+                    UpdateStatus("Analyze all failed");
+                    wxMessageBox(error.empty() ? "Failed to analyze tables" : error,
+                                 "Error", wxOK | wxICON_ERROR);
+                }
+            });
+        });
 }
 
 void TableStatisticsPanel::VacuumAll() {
-    // This could vacuum all visible tables
-    wxMessageBox("Vacuum all tables is not implemented in this version.",
-                 "Not Implemented", wxOK | wxICON_INFORMATION);
+    if (filtered_statistics_.empty()) {
+        wxMessageBox("No tables to vacuum.",
+                     "No Tables", wxOK | wxICON_INFORMATION);
+        return;
+    }
+    
+    wxString msg = wxString::Format(
+        "Are you sure you want to vacuum all %zu visible tables?\n\n"
+        "This will reclaim storage and update statistics. "
+        "Tables may be locked during the operation.",
+        filtered_statistics_.size());
+    
+    int result = wxMessageBox(msg, "Confirm Vacuum All",
+                              wxYES_NO | wxICON_WARNING | wxNO_DEFAULT);
+    if (result != wxYES) {
+        return;
+    }
+    
+    if (!connection_manager_ || !connection_manager_->IsConnected()) {
+        return;
+    }
+    
+    // Build SQL to vacuum all visible tables
+    std::string sql;
+    for (const auto& info : filtered_statistics_) {
+        if (!sql.empty()) {
+            sql += "\n";
+        }
+        sql += "VACUUM ANALYZE " + info.schema_name + "." + info.table_name + ";";
+    }
+    
+    UpdateStatus("Vacuuming all tables...");
+    maintenance_job_ = connection_manager_->ExecuteQueryAsync(sql,
+        [this](bool ok, QueryResult, const std::string& error) {
+            CallAfter([this, ok, error]() {
+                if (ok) {
+                    UpdateStatus("Vacuum all completed");
+                    RefreshData();
+                } else {
+                    UpdateStatus("Vacuum all failed");
+                    wxMessageBox(error.empty() ? "Failed to vacuum tables" : error,
+                                 "Error", wxOK | wxICON_ERROR);
+                }
+            });
+        });
 }
 
 void TableStatisticsPanel::SetAutoRefresh(bool enable, int intervalSeconds) {

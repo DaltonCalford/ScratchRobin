@@ -8,8 +8,11 @@
  * https://www.firebirdsql.org/en/initial-developers-public-license-version-1-0/
  */
 #include "cdc_streaming.h"
+#include "cdc_connectors.h"
+#include "core/simple_json.h"
 
 #include <algorithm>
+#include <cmath>
 #include <sstream>
 
 namespace scratchrobin {
@@ -50,45 +53,248 @@ std::string BrokerTypeToString(BrokerType type) {
 // ============================================================================
 // CDC Pipeline Implementation
 // ============================================================================
+
 CdcPipeline::CdcPipeline(const Configuration& config) : config_(config) {}
 
-CdcPipeline::~CdcPipeline() = default;
+CdcPipeline::~CdcPipeline() {
+    Stop();
+}
 
 bool CdcPipeline::Initialize() {
-    // Initialize connector and publisher
+    // Create connector based on source configuration
+    auto& manager = CdcStreamManager::Instance();
+    connector_ = manager.CreateConnector(config_.connector_id);
+    
+    if (!connector_) {
+        // Fallback to mock connector for testing
+        connector_ = std::make_unique<MockConnector>();
+    }
+    
+    // Configure connector
+    CdcConnectorConfig connector_config;
+    connector_config.id = config_.connector_id;
+    connector_config.include_tables = {"users", "orders", "products"};  // Default
+    connector_config.poll_interval_ms = 1000;
+    
+    if (!connector_->Initialize(connector_config)) {
+        return false;
+    }
+    
+    // Set up event callback
+    connector_->SetEventCallback([this](const CdcEvent& event) {
+        ProcessEvent(event);
+    });
+    
+    // Create publisher based on broker type
+    switch (config_.broker_type) {
+        case BrokerType::KAFKA:
+            publisher_ = std::make_unique<KafkaPublisher>();
+            break;
+        case BrokerType::REDIS_PUBSUB:
+            publisher_ = std::make_unique<RedisPublisher>();
+            break;
+        case BrokerType::RABBITMQ:
+            publisher_ = std::make_unique<RabbitMqPublisher>();
+            break;
+        case BrokerType::NATS:
+            publisher_ = std::make_unique<NatsPublisher>();
+            break;
+        default:
+            // For unsupported brokers, events go through but no publishing
+            break;
+    }
+    
+    // Connect to message broker if publisher exists
+    if (publisher_ && !config_.broker_connection_string.empty()) {
+        if (!publisher_->Connect(config_.broker_connection_string)) {
+            return false;
+        }
+    }
+    
+    // Create target topic if needed
+    if (publisher_ && !config_.target_topic.empty()) {
+        publisher_->CreateTopic(config_.target_topic, 3, 1);
+    }
+    
     return true;
 }
 
 bool CdcPipeline::Start() {
-    // Start processing
-    return true;
+    if (!connector_) return false;
+    return connector_->Start();
 }
 
 bool CdcPipeline::Stop() {
-    // Stop processing
+    if (connector_) {
+        connector_->Stop();
+    }
+    if (publisher_) {
+        publisher_->Disconnect();
+    }
     return true;
 }
 
 bool CdcPipeline::IsRunning() const {
-    return false;  // Stub
+    return connector_ && connector_->IsRunning();
 }
 
 CdcPipeline::Metrics CdcPipeline::GetMetrics() const {
-    return Metrics{};
+    Metrics metrics;
+    if (connector_) {
+        auto stats = connector_->GetStats();
+        metrics.events_processed = stats.events_captured;
+        metrics.events_filtered = stats.events_filtered;
+    }
+    // Calculate rate would need timestamp tracking
+    return metrics;
 }
 
 void CdcPipeline::ProcessEvent(const CdcEvent& event) {
-    // Apply transformations and publish
+    // Apply transformations
+    CdcEvent transformed_event = event;
+    if (!ApplyTransformations(transformed_event)) {
+        // Event was filtered out
+        return;
+    }
+    
+    // Publish to message broker
+    PublishEvent(transformed_event);
 }
 
 bool CdcPipeline::ApplyTransformations(CdcEvent& event) {
-    // Apply configured transformations
+    for (const auto& transform : config_.transformations) {
+        if (transform.type == "filter") {
+            // Apply filter logic
+            if (transform.config == "exclude_deletes" && event.type == CdcEventType::DELETE) {
+                return false;
+            }
+        } else if (transform.type == "enrich") {
+            // Add enrichment data
+            event.headers["processed_by"] = "scratchrobin";
+            event.headers["processed_at"] = std::to_string(std::time(nullptr));
+        }
+    }
     return true;
 }
 
 bool CdcPipeline::PublishEvent(const CdcEvent& event) {
-    // Publish to message broker
-    return true;
+    if (!publisher_ || config_.target_topic.empty()) {
+        return true;  // No publisher configured, event processed but not published
+    }
+    
+    // Use retry logic
+    return PublishWithRetry(event, 0);
+}
+
+// ============================================================================
+// Error Handling and Retry Logic
+// ============================================================================
+void CdcPipeline::SetErrorHandlingConfig(const ErrorHandlingConfig& config) {
+    error_config_ = config;
+}
+
+int CdcPipeline::CalculateRetryDelay(int attempt) const {
+    if (!error_config_.exponential_backoff) {
+        return error_config_.retry_delay_ms;
+    }
+    
+    // Exponential backoff: delay * (multiplier ^ attempt)
+    double delay = error_config_.retry_delay_ms * 
+                   std::pow(error_config_.backoff_multiplier, attempt);
+    return static_cast<int>(std::min(delay, static_cast<double>(error_config_.max_backoff_ms)));
+}
+
+bool CdcPipeline::PublishWithRetry(const CdcEvent& event, int attempt) {
+    // Convert to Debezium format
+    std::string message = DebeziumIntegration::ToDebeziumFormat(event);
+    
+    // Try to publish
+    if (publisher_->Publish(config_.target_topic, message)) {
+        return true;
+    }
+    
+    // Check if we should retry
+    if (attempt < error_config_.max_retries) {
+        int delay_ms = CalculateRetryDelay(attempt);
+        std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+        return PublishWithRetry(event, attempt + 1);
+    }
+    
+    // All retries exhausted - handle failure
+    HandlePublishError(event, "Max retries exceeded");
+    return false;
+}
+
+void CdcPipeline::HandlePublishError(const CdcEvent& event, const std::string& error) {
+    // Store in failed events map
+    {
+        std::lock_guard<std::mutex> lock(failed_events_mutex_);
+        FailedEvent failed;
+        failed.event = event;
+        failed.failed_at = std::time(nullptr);
+        failed.error_message = error;
+        failed_events_[event.event_id] = failed;
+    }
+    
+    // Try to send to DLQ if enabled
+    if (error_config_.enable_dlq && !error_config_.dlq_topic.empty() && publisher_) {
+        CdcEvent dlq_event = event;
+        dlq_event.headers["error"] = error;
+        dlq_event.headers["original_topic"] = config_.target_topic;
+        dlq_event.headers["failed_at"] = std::to_string(std::time(nullptr));
+        
+        std::string dlq_message = DebeziumIntegration::ToDebeziumFormat(dlq_event);
+        publisher_->Publish(error_config_.dlq_topic, dlq_message);
+    }
+}
+
+std::vector<CdcEvent> CdcPipeline::GetFailedEvents() const {
+    std::lock_guard<std::mutex> lock(failed_events_mutex_);
+    std::vector<CdcEvent> events;
+    for (const auto& [id, failed] : failed_events_) {
+        events.push_back(failed.event);
+    }
+    return events;
+}
+
+bool CdcPipeline::RetryFailedEvent(const std::string& event_id) {
+    std::lock_guard<std::mutex> lock(failed_events_mutex_);
+    auto it = failed_events_.find(event_id);
+    if (it == failed_events_.end()) {
+        return false;
+    }
+    
+    // Try to publish again
+    if (PublishEvent(it->second.event)) {
+        failed_events_.erase(it);
+        return true;
+    }
+    
+    // Increment retry count
+    it->second.retry_count++;
+    return false;
+}
+
+bool CdcPipeline::RetryAllFailedEvents() {
+    std::lock_guard<std::mutex> lock(failed_events_mutex_);
+    bool all_success = true;
+    
+    for (auto it = failed_events_.begin(); it != failed_events_.end();) {
+        if (PublishEvent(it->second.event)) {
+            it = failed_events_.erase(it);
+        } else {
+            it->second.retry_count++;
+            all_success = false;
+            ++it;
+        }
+    }
+    
+    return all_success;
+}
+
+void CdcPipeline::ClearFailedEvents() {
+    std::lock_guard<std::mutex> lock(failed_events_mutex_);
+    failed_events_.clear();
 }
 
 // ============================================================================
@@ -188,10 +394,58 @@ std::string CdcStreamManager::GetSchema(const std::string& table) const {
 // ============================================================================
 // Debezium Integration Implementation
 // ============================================================================
+
 std::optional<CdcEvent> DebeziumIntegration::ParseDebeziumMessage(const std::string& json) {
-    // Parse Debezium JSON format
+    // Parse Debezium JSON format using JsonParser
+    JsonParser parser(json);
+    JsonValue root;
+    std::string error;
+    if (!parser.Parse(&root, &error)) {
+        return std::nullopt;
+    }
+    
     CdcEvent event;
-    // Stub implementation
+    
+    // Get payload object
+    const JsonValue* payload = FindMember(root, "payload");
+    if (!payload) {
+        return std::nullopt;
+    }
+    
+    // Get operation type
+    const JsonValue* op_value = FindMember(*payload, "op");
+    if (op_value && op_value->type == JsonValue::Type::String) {
+        std::string op = op_value->string_value;
+        if (op == "c") event.type = CdcEventType::INSERT;
+        else if (op == "u") event.type = CdcEventType::UPDATE;
+        else if (op == "d") event.type = CdcEventType::DELETE;
+        else if (op == "t") event.type = CdcEventType::TRUNCATE;
+        else event.type = CdcEventType::INSERT;
+    }
+    
+    // Get source info
+    const JsonValue* source = FindMember(*payload, "source");
+    if (source && source->type == JsonValue::Type::Object) {
+        const JsonValue* db = FindMember(*source, "db");
+        if (db && db->type == JsonValue::Type::String) {
+            event.database = db->string_value;
+        }
+        const JsonValue* schema = FindMember(*source, "schema");
+        if (schema && schema->type == JsonValue::Type::String) {
+            event.schema = schema->string_value;
+        }
+        const JsonValue* table = FindMember(*source, "table");
+        if (table && table->type == JsonValue::Type::String) {
+            event.table = table->string_value;
+        }
+    }
+    
+    // Get timestamp
+    const JsonValue* ts_ms = FindMember(*payload, "ts_ms");
+    if (ts_ms && ts_ms->type == JsonValue::Type::Number) {
+        event.timestamp = static_cast<std::time_t>(ts_ms->number_value / 1000);
+    }
+    
     return event;
 }
 

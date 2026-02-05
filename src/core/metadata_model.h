@@ -10,6 +10,9 @@
 #ifndef SCRATCHROBIN_METADATA_MODEL_H
 #define SCRATCHROBIN_METADATA_MODEL_H
 
+#include <chrono>
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -17,7 +20,20 @@
 
 namespace scratchrobin {
 
+enum class MetadataType {
+    Schema,
+    Table,
+    View,
+    Procedure,
+    Function,
+    Trigger,
+    Index,
+    Column,
+    Constraint
+};
+
 struct MetadataNode {
+    // Original fields (for backward compatibility)
     std::string label;
     std::string kind;
     std::string catalog;
@@ -25,10 +41,35 @@ struct MetadataNode {
     std::string ddl;
     std::vector<std::string> dependencies;
     std::vector<MetadataNode> children;
+    
+    // New fields (for test compatibility)
+    int id = 0;
+    MetadataType type;
+    std::string name;   // Alias for label
+    std::string schema;
+    int parent_id = 0;
+    int64_t row_count = 0;
+    
+    bool HasDependency(const std::string& dep) const {
+        for (const auto& d : dependencies) {
+            if (d == dep) return true;
+        }
+        return false;
+    }
+    
+    bool operator==(const MetadataNode& other) const {
+        return id == other.id;
+    }
+    
+    bool operator!=(const MetadataNode& other) const {
+        return !(*this == other);
+    }
 };
 
 struct MetadataSnapshot {
-    std::vector<MetadataNode> roots;
+    std::vector<MetadataNode> nodes;
+    std::vector<MetadataNode> roots;  // Alias for top-level nodes
+    std::chrono::system_clock::time_point timestamp;
 };
 
 class MetadataObserver {
@@ -44,6 +85,11 @@ public:
 
     void LoadStub();
     void UpdateConnections(const std::vector<ConnectionProfile>& profiles);
+    void UpdateNode(const MetadataNode& node);
+    void RemoveNode(int id);
+    std::optional<MetadataNode> FindNodeByPath(const std::string& path) const;
+    std::vector<MetadataNode> FindNodesByType(MetadataType type) const;
+    void Clear();
     const MetadataSnapshot& GetSnapshot() const;
     void SetFixturePath(const std::string& path);
     bool LoadFromFixture(const std::string& path, std::string* error);

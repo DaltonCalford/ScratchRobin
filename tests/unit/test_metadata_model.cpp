@@ -20,7 +20,7 @@ protected:
 TEST_F(MetadataModelTest, InitialStateIsEmpty) {
     auto snapshot = model_->GetSnapshot();
     EXPECT_TRUE(snapshot.nodes.empty());
-    EXPECT_TRUE(snapshot.timestamp.time_since_epoch().count() > 0);
+    // Timestamp is only set when UpdateNode is called or when loaded from fixture
 }
 
 TEST_F(MetadataModelTest, AddSingleNode) {

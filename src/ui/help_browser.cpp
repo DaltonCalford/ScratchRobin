@@ -21,6 +21,7 @@
 #include <wx/splitter.h>
 #include <wx/srchctrl.h>
 #include <wx/statbmp.h>
+#include <wx/textdlg.h>
 #include <wx/stattext.h>
 #include <wx/toolbar.h>
 #include <wx/treectrl.h>
@@ -597,7 +598,84 @@ void HelpBrowser::OnSearch(wxCommandEvent&) {
 }
 
 void HelpBrowser::OnFind(wxCommandEvent&) {
-    // TODO: Implement find-in-page dialog
+    if (!content_view_) return;
+    
+    wxTextEntryDialog dialog(this, "Enter text to find:", "Find in Page", find_text_);
+    if (dialog.ShowModal() != wxID_OK) {
+        return;
+    }
+    
+    find_text_ = dialog.GetValue();
+    if (find_text_.IsEmpty()) {
+        return;
+    }
+    
+    // Get current topic's HTML
+    if (current_topic_ == HelpTopicId::None) {
+        return;
+    }
+    
+    const HelpTopic* topic = GetTopic(current_topic_);
+    if (!topic) return;
+    
+    wxString html = GetTopicHtml(current_topic_);
+    wxString search_text = find_text_.Lower();
+    wxString html_lower = html.Lower();
+    
+    // Count matches before highlighting
+    int match_count = 0;
+    int pos = 0;
+    while ((pos = html_lower.find(search_text, pos)) != wxString::npos) {
+        match_count++;
+        pos += search_text.Length();
+    }
+    
+    if (match_count == 0) {
+        SetStatusText(wxString::Format("No matches found for '%s'", find_text_));
+        wxBell();
+        return;
+    }
+    
+    // Highlight matches by inserting <mark> tags
+    // We need to be careful not to replace inside HTML tags
+    wxString result_html;
+    pos = 0;
+    size_t html_len = html.Length();
+    bool in_tag = false;
+    
+    for (size_t i = 0; i < html_len; ) {
+        if (html[i] == '<') {
+            in_tag = true;
+            result_html += html[i];
+            i++;
+        } else if (html[i] == '>') {
+            in_tag = false;
+            result_html += html[i];
+            i++;
+        } else if (!in_tag) {
+            // Check if we have a match here
+            wxString remaining = html_lower.Mid(i);
+            if (remaining.StartsWith(search_text)) {
+                // Found a match - add highlighted version
+                wxString original_text = html.Mid(i, search_text.Length());
+                result_html += wxString::Format("<mark style='background-color: yellow; color: black;'>%s</mark>", 
+                                                original_text);
+                i += search_text.Length();
+            } else {
+                result_html += html[i];
+                i++;
+            }
+        } else {
+            result_html += html[i];
+            i++;
+        }
+    }
+    
+    // Update the page with highlighted content
+    content_view_->SetPage(result_html);
+    
+    SetStatusText(wxString::Format("Found %d match(es) for '%s'", 
+                                   match_count, find_text_));
 }
 
 void HelpBrowser::OnClose(wxCloseEvent& event) {

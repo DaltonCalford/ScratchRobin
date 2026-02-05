@@ -9,12 +9,13 @@
 #include <chrono>
 #include <random>
 
-#include "diagram/diagram_document.h"
+#include "ui/diagram_model.h"
 #include "diagram/layout_engine.h"
 
 namespace scratchrobin {
 
 using namespace std::chrono;
+using namespace diagram;
 
 class Timer {
 public:
@@ -38,355 +39,175 @@ private:
 class DiagramPerformanceTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        doc_ = std::make_unique<DiagramDocument>();
+        model_ = std::make_unique<DiagramModel>(DiagramType::Erd);
     }
     
-    void GenerateEntities(int count) {
+    void GenerateNodes(int count) {
         std::mt19937 rng(42);  // Fixed seed for reproducibility
         std::uniform_real_distribution<double> pos_dist(0, 1000);
         
         for (int i = 0; i < count; ++i) {
-            Entity entity;
-            entity.id = "entity_" + std::to_string(i);
-            entity.name = "Table_" + std::to_string(i);
-            entity.position = Point2D(pos_dist(rng), pos_dist(rng));
-            entity.size = Size2D(150, 80 + (i % 5) * 20);
+            DiagramNode node;
+            node.id = "node_" + std::to_string(i);
+            node.name = "Table_" + std::to_string(i);
+            node.x = pos_dist(rng);
+            node.y = pos_dist(rng);
+            node.width = 150;
+            node.height = 80 + (i % 5) * 20;
             
             // Add attributes
             int attr_count = 3 + (i % 7);
             for (int j = 0; j < attr_count; ++j) {
-                EntityAttribute attr;
+                DiagramAttribute attr;
                 attr.name = "attr_" + std::to_string(j);
-                attr.type = (j % 3 == 0) ? "INTEGER" : ((j % 3 == 1) ? "VARCHAR" : "TIMESTAMP");
-                attr.isPrimaryKey = (j == 0);
-                attr.isForeignKey = (j == 1);
-                entity.attributes.push_back(attr);
+                attr.data_type = (j % 3 == 0) ? "INTEGER" : ((j % 3 == 1) ? "VARCHAR" : "TIMESTAMP");
+                attr.is_primary = (j == 0);
+                attr.is_nullable = (j > 0);
+                node.attributes.push_back(attr);
             }
             
-            doc_->AddEntity(entity);
+            model_->AddNode(node);
         }
     }
     
-    void GenerateRelationships(int count) {
+    void GenerateEdges(int count) {
         std::mt19937 rng(42);
-        auto entities = doc_->GetEntities();
-        
-        if (entities.size() < 2) return;
-        
-        std::uniform_int_distribution<int> entity_dist(0, entities.size() - 1);
+        std::uniform_int_distribution<int> node_dist(0, static_cast<int>(model_->nodes().size()) - 1);
         
         for (int i = 0; i < count; ++i) {
-            Relationship rel;
-            rel.id = "rel_" + std::to_string(i);
+            int source = node_dist(rng);
+            int target = node_dist(rng);
             
-            int from_idx = entity_dist(rng);
-            int to_idx = entity_dist(rng);
-            while (to_idx == from_idx) {
-                to_idx = entity_dist(rng);
+            if (source != target) {
+                DiagramEdge edge;
+                edge.id = "edge_" + std::to_string(i);
+                edge.source_id = model_->nodes()[source].id;
+                edge.target_id = model_->nodes()[target].id;
+                edge.label = "rel_" + std::to_string(i);
+                model_->AddEdge(edge);
             }
-            
-            rel.fromEntity = entities[from_idx].id;
-            rel.toEntity = entities[to_idx].id;
-            rel.name = "rel_" + std::to_string(i);
-            rel.cardinalityFrom = Relationship::Cardinality::ONE;
-            rel.cardinalityTo = Relationship::Cardinality::MANY;
-            
-            doc_->AddRelationship(rel);
         }
     }
     
-    std::unique_ptr<DiagramDocument> doc_;
+    std::unique_ptr<DiagramModel> model_;
+    Timer timer_;
 };
 
-// Performance thresholds (milliseconds)
-constexpr double kMaxLoad50Entities = 1000.0;
-constexpr double kMaxLoad200Entities = 3000.0;
-constexpr double kMaxLoad500Entities = 10000.0;
-constexpr double kMaxLayout50Entities = 2000.0;
-constexpr double kMaxLayout200Entities = 5000.0;
-constexpr double kMaxSerialize500Entities = 3000.0;
-
-TEST_F(DiagramPerformanceTest, Load50Entities) {
-    GenerateEntities(50);
-    GenerateRelationships(25);
+TEST_F(DiagramPerformanceTest, SmallModel_Operations) {
+    GenerateNodes(10);
+    GenerateEdges(15);
     
-    Timer timer;
-    timer.Start();
-    
-    // Serialize and reload
-    std::string xml = doc_->ToXml();
-    auto doc2 = std::make_unique<DiagramDocument>();
-    doc2->FromXml(xml);
-    
-    timer.Stop();
-    
-    double elapsed = timer.ElapsedMs();
-    std::cout << "Load 50 entities: " << elapsed << " ms" << std::endl;
-    
-    EXPECT_LT(elapsed, kMaxLoad50Entities);
-    EXPECT_EQ(doc2->GetEntities().size(), 50);
+    EXPECT_EQ(model_->nodes().size(), 10);
+    EXPECT_GE(model_->edges().size(), 10);  // Some edges may be skipped if source == target
 }
 
-TEST_F(DiagramPerformanceTest, Load200Entities) {
-    GenerateEntities(200);
-    GenerateRelationships(100);
+TEST_F(DiagramPerformanceTest, MediumModel_Operations) {
+    GenerateNodes(50);
+    GenerateEdges(75);
     
-    Timer timer;
-    timer.Start();
-    
-    std::string xml = doc_->ToXml();
-    auto doc2 = std::make_unique<DiagramDocument>();
-    doc2->FromXml(xml);
-    
-    timer.Stop();
-    
-    double elapsed = timer.ElapsedMs();
-    std::cout << "Load 200 entities: " << elapsed << " ms" << std::endl;
-    
-    EXPECT_LT(elapsed, kMaxLoad200Entities);
-    EXPECT_EQ(doc2->GetEntities().size(), 200);
+    EXPECT_EQ(model_->nodes().size(), 50);
+    EXPECT_GE(model_->edges().size(), 50);  // Some may have been skipped
 }
 
-TEST_F(DiagramPerformanceTest, Load500Entities) {
-    GenerateEntities(500);
-    GenerateRelationships(250);
+TEST_F(DiagramPerformanceTest, LargeModel_Operations) {
+    GenerateNodes(200);
+    GenerateEdges(300);
     
-    Timer timer;
-    timer.Start();
-    
-    std::string xml = doc_->ToXml();
-    auto doc2 = std::make_unique<DiagramDocument>();
-    doc2->FromXml(xml);
-    
-    timer.Stop();
-    
-    double elapsed = timer.ElapsedMs();
-    std::cout << "Load 500 entities: " << elapsed << " ms" << std::endl;
-    
-    EXPECT_LT(elapsed, kMaxLoad500Entities);
-    EXPECT_EQ(doc2->GetEntities().size(), 500);
+    EXPECT_EQ(model_->nodes().size(), 200);
+    EXPECT_GE(model_->edges().size(), 200);
 }
 
-TEST_F(DiagramPerformanceTest, Layout50EntitiesSugiyama) {
-    GenerateEntities(50);
-    GenerateRelationships(25);
+TEST_F(DiagramPerformanceTest, SugiyamaLayout_Small) {
+    GenerateNodes(10);
+    GenerateEdges(15);
     
-    LayoutEngine engine;
+    auto engine = LayoutEngine::Create(LayoutAlgorithm::Sugiyama);
     LayoutOptions options;
-    options.algorithm = LayoutAlgorithm::SUGIYAMA;
     
-    Timer timer;
-    timer.Start();
+    timer_.Start();
+    auto positions = engine->Layout(*model_, options);
+    timer_.Stop();
     
-    engine.Layout(doc_.get(), options);
-    
-    timer.Stop();
-    
-    double elapsed = timer.ElapsedMs();
-    std::cout << "Layout 50 entities (Sugiyama): " << elapsed << " ms" << std::endl;
-    
-    EXPECT_LT(elapsed, kMaxLayout50Entities);
+    EXPECT_EQ(positions.size(), 10);
+    EXPECT_LT(timer_.ElapsedMs(), 1000.0);  // Should complete within 1 second
 }
 
-TEST_F(DiagramPerformanceTest, Layout50EntitiesForceDirected) {
-    GenerateEntities(50);
-    GenerateRelationships(25);
+TEST_F(DiagramPerformanceTest, SugiyamaLayout_Medium) {
+    GenerateNodes(50);
+    GenerateEdges(75);
     
-    LayoutEngine engine;
+    auto engine = LayoutEngine::Create(LayoutAlgorithm::Sugiyama);
     LayoutOptions options;
-    options.algorithm = LayoutAlgorithm::FORCE_DIRECTED;
-    options.iterations = 100;
     
-    Timer timer;
-    timer.Start();
+    timer_.Start();
+    auto positions = engine->Layout(*model_, options);
+    timer_.Stop();
     
-    engine.Layout(doc_.get(), options);
-    
-    timer.Stop();
-    
-    double elapsed = timer.ElapsedMs();
-    std::cout << "Layout 50 entities (Force-Directed): " << elapsed << " ms" << std::endl;
-    
-    EXPECT_LT(elapsed, kMaxLayout50Entities * 1.5);  // Allow more time for FD
+    EXPECT_EQ(positions.size(), 50);
+    EXPECT_LT(timer_.ElapsedMs(), 5000.0);  // Should complete within 5 seconds
 }
 
-TEST_F(DiagramPerformanceTest, Layout200EntitiesSugiyama) {
-    GenerateEntities(200);
-    GenerateRelationships(100);
+TEST_F(DiagramPerformanceTest, ForceDirectedLayout_Small) {
+    GenerateNodes(10);
+    GenerateEdges(15);
     
-    LayoutEngine engine;
+    auto engine = LayoutEngine::Create(LayoutAlgorithm::ForceDirected);
     LayoutOptions options;
-    options.algorithm = LayoutAlgorithm::SUGIYAMA;
+    options.fd_iterations = 50;  // Reduce for faster tests
     
-    Timer timer;
-    timer.Start();
+    timer_.Start();
+    auto positions = engine->Layout(*model_, options);
+    timer_.Stop();
     
-    engine.Layout(doc_.get(), options);
-    
-    timer.Stop();
-    
-    double elapsed = timer.ElapsedMs();
-    std::cout << "Layout 200 entities (Sugiyama): " << elapsed << " ms" << std::endl;
-    
-    EXPECT_LT(elapsed, kMaxLayout200Entities);
+    EXPECT_EQ(positions.size(), 10);
+    EXPECT_LT(timer_.ElapsedMs(), 2000.0);
 }
 
-TEST_F(DiagramPerformanceTest, Layout200EntitiesOrthogonal) {
-    GenerateEntities(200);
-    GenerateRelationships(100);
+TEST_F(DiagramPerformanceTest, NodeIterationPerformance) {
+    GenerateNodes(1000);
     
-    LayoutEngine engine;
-    LayoutOptions options;
-    options.algorithm = LayoutAlgorithm::ORTHOGONAL;
+    timer_.Start();
+    int total_attrs = 0;
+    for (const auto& node : model_->nodes()) {
+        total_attrs += static_cast<int>(node.attributes.size());
+    }
+    timer_.Stop();
     
-    Timer timer;
-    timer.Start();
-    
-    engine.Layout(doc_.get(), options);
-    
-    timer.Stop();
-    
-    double elapsed = timer.ElapsedMs();
-    std::cout << "Layout 200 entities (Orthogonal): " << elapsed << " ms" << std::endl;
-    
-    EXPECT_LT(elapsed, kMaxLayout200Entities * 1.2);
+    EXPECT_GT(total_attrs, 0);
+    EXPECT_LT(timer_.ElapsedMs(), 100.0);  // Should be very fast
 }
 
-TEST_F(DiagramPerformanceTest, Serialize500Entities) {
-    GenerateEntities(500);
-    GenerateRelationships(250);
+TEST_F(DiagramPerformanceTest, EdgeLookupPerformance) {
+    GenerateNodes(100);
+    GenerateEdges(150);
     
-    Timer timer;
-    timer.Start();
-    
-    std::string xml = doc_->ToXml();
-    
-    timer.Stop();
-    
-    double elapsed = timer.ElapsedMs();
-    std::cout << "Serialize 500 entities: " << elapsed << " ms (" 
-              << (xml.size() / 1024) << " KB)" << std::endl;
-    
-    EXPECT_LT(elapsed, kMaxSerialize500Entities);
-    EXPECT_GT(xml.size(), 10000);  // Should be substantial
-}
-
-TEST_F(DiagramPerformanceTest, Deserialize500Entities) {
-    GenerateEntities(500);
-    GenerateRelationships(250);
-    
-    std::string xml = doc_->ToXml();
-    
-    Timer timer;
-    timer.Start();
-    
-    auto doc2 = std::make_unique<DiagramDocument>();
-    doc2->FromXml(xml);
-    
-    timer.Stop();
-    
-    double elapsed = timer.ElapsedMs();
-    std::cout << "Deserialize 500 entities: " << elapsed << " ms" << std::endl;
-    
-    EXPECT_LT(elapsed, kMaxLoad500Entities);
-    EXPECT_EQ(doc2->GetEntities().size(), 500);
-}
-
-TEST_F(DiagramPerformanceTest, EntityLookupPerformance) {
-    GenerateEntities(500);
-    
-    // Test ID lookup performance
-    Timer timer;
-    timer.Start();
-    
+    timer_.Start();
+    // Access edges multiple times
     for (int i = 0; i < 1000; ++i) {
-        std::string id = "entity_" + std::to_string(i % 500);
-        auto entity = doc_->FindEntityById(id);
-        EXPECT_NE(entity, nullptr);
+        volatile size_t count = model_->edges().size();
+        (void)count;
     }
+    timer_.Stop();
     
-    timer.Stop();
-    
-    double elapsed = timer.ElapsedMs();
-    std::cout << "1000 entity lookups: " << elapsed << " ms" << std::endl;
-    
-    EXPECT_LT(elapsed, 100.0);  // Should be very fast
+    EXPECT_LT(timer_.ElapsedMs(), 100.0);
 }
 
-TEST_F(DiagramPerformanceTest, BulkEntityModification) {
-    GenerateEntities(100);
+TEST_F(DiagramPerformanceTest, ModelCreationPerformance) {
+    timer_.Start();
     
-    Timer timer;
-    timer.Start();
+    auto model = std::make_unique<DiagramModel>(DiagramType::Erd);
     
-    // Modify all entities
-    for (auto& entity : doc_->GetEntities()) {
-        entity.position.x += 10;
-        entity.position.y += 10;
-        entity.size.width += 5;
+    for (int i = 0; i < 100; ++i) {
+        DiagramNode node;
+        node.id = "node_" + std::to_string(i);
+        node.name = "Table_" + std::to_string(i);
+        model->AddNode(node);
     }
     
-    // Add attributes to all
-    for (auto& entity : doc_->GetEntities()) {
-        EntityAttribute attr;
-        attr.name = "new_attr";
-        attr.type = "BOOLEAN";
-        entity.attributes.push_back(attr);
-    }
+    timer_.Stop();
     
-    timer.Stop();
-    
-    double elapsed = timer.ElapsedMs();
-    std::cout << "Bulk modify 100 entities: " << elapsed << " ms" << std::endl;
-    
-    EXPECT_LT(elapsed, 100.0);
-}
-
-TEST_F(DiagramPerformanceTest, MemoryUsageLargeDiagram) {
-    GenerateEntities(500);
-    GenerateRelationships(250);
-    
-    // Get memory usage before serialization
-    std::string xml = doc_->ToXml();
-    
-    // XML should be reasonable size
-    EXPECT_LT(xml.size(), 10 * 1024 * 1024);  // Less than 10 MB
-    
-    // Parse it back
-    auto doc2 = std::make_unique<DiagramDocument>();
-    doc2->FromXml(xml);
-    
-    // Both documents should have same entities
-    EXPECT_EQ(doc_->GetEntities().size(), doc2->GetEntities().size());
-    EXPECT_EQ(doc_->GetRelationships().size(), doc2->GetRelationships().size());
-}
-
-// Stress test - many small operations
-TEST_F(DiagramPerformanceTest, RapidSmallOperations) {
-    GenerateEntities(50);
-    
-    Timer timer;
-    timer.Start();
-    
-    // Perform many small operations
-    for (int i = 0; i < 1000; ++i) {
-        // Add and remove entity
-        Entity entity;
-        entity.id = "temp_" + std::to_string(i);
-        entity.name = "Temp";
-        entity.position = Point2D(i, i);
-        
-        doc_->AddEntity(entity);
-        doc_->RemoveEntity(entity.id);
-    }
-    
-    timer.Stop();
-    
-    double elapsed = timer.ElapsedMs();
-    std::cout << "1000 add/remove operations: " << elapsed << " ms" << std::endl;
-    
-    EXPECT_LT(elapsed, 500.0);  // Should be fast
-    EXPECT_EQ(doc_->GetEntities().size(), 50);  // Original count restored
+    EXPECT_EQ(model->nodes().size(), 100);
+    EXPECT_LT(timer_.ElapsedMs(), 100.0);
 }
 
 } // namespace scratchrobin

@@ -96,6 +96,7 @@ set(SCRATCHROBIN_CORE_SOURCES
     src/core/firebird_backend.cpp
     src/core/session_state.cpp
     src/core/project.cpp
+    src/core/git_client.cpp
     src/core/testing_framework.cpp
     src/core/docker_config.cpp
     src/core/migration_generator.cpp
@@ -104,8 +105,10 @@ set(SCRATCHROBIN_CORE_SOURCES
     # Phase 5: Advanced Features
     src/core/data_lineage.cpp
     src/core/data_masking.cpp
+    src/core/crypto_utils.cpp
     src/core/api_generator.cpp
     src/core/cdc_streaming.cpp
+    src/core/cdc_connectors.cpp
     src/core/ai_assistant.cpp
     src/core/ai_providers.cpp
     # Issue Tracker Integration
@@ -239,6 +242,8 @@ if(SCRATCHROBIN_BUILD_UI)
         src/ui/replication_manager_frame.cpp
         src/ui/etl_manager_frame.cpp
         src/ui/git_integration_frame.cpp
+        src/ui/cdc_config_frame.cpp
+        src/ui/data_masking_frame.cpp
         # New UI components
         src/ui/docker_manager_panel.cpp
         src/ui/test_runner_panel.cpp
@@ -389,20 +394,24 @@ add_executable(scratchrobin_tests
     # Core tests
     tests/unit/test_job_queue.cpp
     tests/unit/test_session_state.cpp
-    # Diagram tests
+    # Diagram tests (require diagram source files)
     tests/unit/test_diagram_model.cpp
+    src/ui/diagram_model.cpp
     tests/unit/test_layout_engine.cpp
+    src/diagram/layout_engine.cpp
     tests/unit/test_forward_engineer.cpp
+    src/diagram/forward_engineer.cpp
     # Performance tests
     tests/unit/test_diagram_performance.cpp
     tests/unit/test_memory_usage.cpp
     # Integration tests (environment-gated)
     tests/unit/test_embedded_backend.cpp
     tests/unit/test_ipc_backend.cpp
-    tests/integration/test_postgres_backend.cpp
-    tests/integration/test_mysql_backend.cpp
-    tests/integration/test_firebird_backend.cpp
-    tests/integration/test_scratchbird_backend.cpp
+    # Integration tests - require external dependencies
+    # tests/integration/test_postgres_backend.cpp
+    # tests/integration/test_mysql_backend.cpp
+    # tests/integration/test_firebird_backend.cpp
+    # tests/integration/test_scratchbird_backend.cpp
 )
 
 target_link_libraries(scratchrobin_tests PRIVATE 

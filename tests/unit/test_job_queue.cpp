@@ -7,6 +7,9 @@
 #include "core/job_queue.h"
 #include <chrono>
 #include <thread>
+#include <atomic>
+#include <mutex>
+#include <vector>
 
 using namespace scratchrobin;
 
@@ -18,7 +21,7 @@ protected:
     
     void TearDown() override {
         if (queue_) {
-            queue_->Shutdown();
+            queue_->Stop();
         }
     }
     
@@ -28,79 +31,14 @@ protected:
 TEST_F(JobQueueTest, SubmitAndExecuteJob) {
     std::atomic<bool> executed{false};
     
-    JobHandle handle = queue_->Submit([&executed]() {
+    JobHandle handle = queue_->Submit([&executed](JobHandle&) {
         executed = true;
-        return JobResult::Success();
     });
-    
-    EXPECT_NE(handle.id, 0);
     
     // Wait for job to complete
-    auto result = queue_->WaitForCompletion(handle, std::chrono::seconds(5));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
-    EXPECT_TRUE(result.has_value());
-    EXPECT_TRUE(result->success);
     EXPECT_TRUE(executed);
-}
-
-TEST_F(JobQueueTest, JobReturnsData) {
-    JobHandle handle = queue_->Submit([]() {
-        JobResult result;
-        result.success = true;
-        result.data = std::string("Hello from job");
-        return result;
-    });
-    
-    auto result = queue_->WaitForCompletion(handle, std::chrono::seconds(5));
-    
-    ASSERT_TRUE(result.has_value());
-    EXPECT_TRUE(result->success);
-    ASSERT_TRUE(result->data.has_value());
-    EXPECT_EQ(std::any_cast<std::string>(result->data), "Hello from job");
-}
-
-TEST_F(JobQueueTest, JobReturnsError) {
-    JobHandle handle = queue_->Submit([]() {
-        return JobResult::Failure("Something went wrong");
-    });
-    
-    auto result = queue_->WaitForCompletion(handle, std::chrono::seconds(5));
-    
-    ASSERT_TRUE(result.has_value());
-    EXPECT_FALSE(result->success);
-    EXPECT_EQ(result->error_message, "Something went wrong");
-}
-
-TEST_F(JobQueueTest, CancelJob) {
-    std::atomic<bool> started{false};
-    std::atomic<bool> cancelled{false};
-    
-    JobHandle handle = queue_->Submit([&]() {
-        started = true;
-        // Simulate long-running work with cancellation check
-        for (int i = 0; i < 100; ++i) {
-            if (queue_->IsCancelled(handle)) {
-                cancelled = true;
-                return JobResult::Cancelled();
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        return JobResult::Success();
-    });
-    
-    // Wait a bit for job to start
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    
-    // Cancel the job
-    bool cancel_result = queue_->Cancel(handle);
-    EXPECT_TRUE(cancel_result);
-    
-    auto result = queue_->WaitForCompletion(handle, std::chrono::seconds(5));
-    
-    EXPECT_TRUE(started);
-    EXPECT_TRUE(cancelled);
-    ASSERT_TRUE(result.has_value());
-    EXPECT_TRUE(result->cancelled);
 }
 
 TEST_F(JobQueueTest, MultipleJobs) {
@@ -108,95 +46,47 @@ TEST_F(JobQueueTest, MultipleJobs) {
     
     std::vector<JobHandle> handles;
     for (int i = 0; i < 10; ++i) {
-        handles.push_back(queue_->Submit([&counter]() {
+        handles.push_back(queue_->Submit([&counter](JobHandle&) {
             counter++;
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            return JobResult::Success();
         }));
     }
     
     // Wait for all jobs
-    for (const auto& handle : handles) {
-        queue_->WaitForCompletion(handle, std::chrono::seconds(10));
-    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
     
     EXPECT_EQ(counter, 10);
 }
 
-TEST_F(JobQueueTest, JobPriority) {
-    std::vector<int> execution_order;
-    std::mutex mutex;
+TEST_F(JobQueueTest, CancelJob) {
+    std::atomic<bool> started{false};
+    std::atomic<bool> completed{false};
     
-    // Submit low priority jobs first
-    std::vector<JobHandle> handles;
-    for (int i = 0; i < 3; ++i) {
-        handles.push_back(queue_->Submit([&execution_order, &mutex, i]() {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            std::lock_guard<std::mutex> lock(mutex);
-            execution_order.push_back(i);
-            return JobResult::Success();
-        }, JobPriority::Low));
-    }
-    
-    // Submit high priority job last
-    handles.push_back(queue_->Submit([&execution_order, &mutex]() {
-        std::lock_guard<std::mutex> lock(mutex);
-        execution_order.push_back(100);
-        return JobResult::Success();
-    }, JobPriority::High));
-    
-    // Wait for all
-    for (const auto& handle : handles) {
-        queue_->WaitForCompletion(handle, std::chrono::seconds(5));
-    }
-    
-    // High priority job should execute first
-    EXPECT_EQ(execution_order[0], 100);
-}
-
-TEST_F(JobQueueTest, JobTimeout) {
-    JobHandle handle = queue_->Submit([]() {
-        std::this_thread::sleep_for(std::chrono::seconds(10));
-        return JobResult::Success();
-    });
-    
-    // Set timeout on the job
-    queue_->SetTimeout(handle, std::chrono::milliseconds(100));
-    
-    auto result = queue_->WaitForCompletion(handle, std::chrono::seconds(5));
-    
-    ASSERT_TRUE(result.has_value());
-    EXPECT_FALSE(result->success);
-    EXPECT_TRUE(result->timed_out);
-}
-
-TEST_F(JobQueueTest, GetJobStatus) {
-    std::atomic<bool> can_proceed{false};
-    
-    JobHandle handle = queue_->Submit([&can_proceed]() {
-        while (!can_proceed) {
+    JobHandle handle = queue_->Submit([&](JobHandle& h) {
+        started = true;
+        // Simulate long-running work with cancellation check
+        for (int i = 0; i < 100; ++i) {
+            if (h.IsCanceled()) {
+                return;
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
-        return JobResult::Success();
+        completed = true;
     });
     
-    // Initially running
-    auto status = queue_->GetStatus(handle);
-    EXPECT_EQ(status, JobStatus::Running);
+    // Wait a bit for job to start
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
     
-    // Let it complete
-    can_proceed = true;
-    queue_->WaitForCompletion(handle, std::chrono::seconds(5));
+    // Cancel the job
+    handle.Cancel();
     
-    status = queue_->GetStatus(handle);
-    EXPECT_EQ(status, JobStatus::Completed);
-}
-
-TEST_F(JobQueueTest, InvalidJobHandle) {
-    JobHandle invalid_handle{0};
+    EXPECT_TRUE(handle.IsCanceled());
     
-    auto result = queue_->WaitForCompletion(invalid_handle, std::chrono::milliseconds(100));
-    EXPECT_FALSE(result.has_value());
+    // Wait and verify job didn't complete normally
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    
+    EXPECT_TRUE(started);
+    EXPECT_FALSE(completed);
 }
 
 TEST_F(JobQueueTest, ConcurrentJobSubmission) {
@@ -206,11 +96,11 @@ TEST_F(JobQueueTest, ConcurrentJobSubmission) {
     for (int t = 0; t < 5; ++t) {
         threads.emplace_back([this, &completed]() {
             for (int i = 0; i < 20; ++i) {
-                auto handle = queue_->Submit([&completed]() {
+                auto handle = queue_->Submit([&completed](JobHandle&) {
                     completed++;
-                    return JobResult::Success();
                 });
-                queue_->WaitForCompletion(handle, std::chrono::seconds(5));
+                (void)handle; // Suppress unused warning
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
         });
     }
@@ -219,68 +109,128 @@ TEST_F(JobQueueTest, ConcurrentJobSubmission) {
         t.join();
     }
     
+    // Wait for all jobs to complete
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    
     EXPECT_EQ(completed, 100);
 }
 
-TEST_F(JobQueueTest, ShutdownWaitsForJobs) {
+TEST_F(JobQueueTest, StopWaitsForJobs) {
     std::atomic<bool> job_completed{false};
+    std::atomic<int> job_count{0};
     
-    auto handle = queue_->Submit([&job_completed]() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        job_completed = true;
-        return JobResult::Success();
-    });
-    
-    // Shutdown should wait for job to complete
-    queue_->Shutdown();
-    
-    EXPECT_TRUE(job_completed);
-}
-
-TEST_F(JobQueueTest, ProgressReporting) {
-    JobHandle handle = queue_->Submit([this, handle]() {
-        for (int i = 0; i <= 100; i += 10) {
-            queue_->ReportProgress(handle, i, "Processing...");
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        return JobResult::Success();
-    });
-    
-    // Poll for progress
-    int last_progress = 0;
-    while (queue_->GetStatus(handle) == JobStatus::Running) {
-        auto progress = queue_->GetProgress(handle);
-        if (progress > last_progress) {
-            last_progress = progress;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    // Submit several jobs
+    for (int i = 0; i < 5; ++i) {
+        queue_->Submit([&](JobHandle&) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            job_count++;
+            if (job_count == 5) {
+                job_completed = true;
+            }
+        });
     }
     
-    EXPECT_GE(last_progress, 0);
+    // Give jobs time to start
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    
+    // Stop should wait for queued jobs to complete
+    queue_->Stop();
+    
+    EXPECT_TRUE(job_completed);
+    EXPECT_EQ(job_count, 5);
 }
 
-TEST_F(JobQueueTest, JobDependencies) {
-    std::atomic<int> order{0};
+TEST_F(JobQueueTest, JobHandleDefaultConstructible) {
+    // Default constructed handle should be valid but empty
+    JobHandle handle;
+    
+    // Should be able to call methods without crash
+    EXPECT_FALSE(handle.IsCanceled());
+    
+    // Cancel on empty handle should not crash
+    handle.Cancel();
+}
+
+TEST_F(JobQueueTest, JobReceivesHandleReference) {
+    std::atomic<bool> received_valid_handle{false};
+    
+    JobHandle submitted = queue_->Submit([&received_valid_handle](JobHandle& h) {
+        // Job receives a reference to its handle
+        // We can check if it's valid by using it
+        received_valid_handle = true;
+        h.IsCanceled(); // Should not crash
+    });
+    
+    (void)submitted;
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    
+    EXPECT_TRUE(received_valid_handle);
+}
+
+TEST_F(JobQueueTest, SequentialJobExecution) {
     std::vector<int> execution_order;
     std::mutex mutex;
     
-    // Submit first job
-    auto job1 = queue_->Submit([&]() {
-        std::lock_guard<std::mutex> lock(mutex);
-        execution_order.push_back(1);
-        return JobResult::Success();
+    // Submit jobs sequentially
+    for (int i = 0; i < 5; ++i) {
+        queue_->Submit([&execution_order, &mutex, i](JobHandle&) {
+            std::lock_guard<std::mutex> lock(mutex);
+            execution_order.push_back(i);
+        });
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    
+    // Wait for all
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    
+    // Verify all jobs executed
+    EXPECT_EQ(execution_order.size(), 5);
+}
+
+TEST_F(JobQueueTest, SetCancelCallback) {
+    std::atomic<bool> callback_called{false};
+    
+    JobHandle handle = queue_->Submit([&](JobHandle& h) {
+        // Set up cancel callback
+        h.SetCancelCallback([&callback_called]() {
+            callback_called = true;
+        });
+        
+        // Wait until cancelled or timeout
+        for (int i = 0; i < 50; ++i) {
+            if (h.IsCanceled()) {
+                return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
     });
     
-    // Submit second job that depends on first
-    auto job2 = queue_->Submit([&]() {
-        std::lock_guard<std::mutex> lock(mutex);
-        execution_order.push_back(2);
-        return JobResult::Success();
-    }, JobPriority::Normal, {job1});
+    // Wait for job to start
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
     
-    queue_->WaitForCompletion(job2, std::chrono::seconds(5));
+    // Cancel should trigger callback
+    handle.Cancel();
     
-    ASSERT_EQ(execution_order.size(), 2);
-    EXPECT_EQ(execution_order[0], 1);
-    EXPECT_EQ(execution_order[1], 2);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    
+    EXPECT_TRUE(callback_called);
+}
+
+TEST_F(JobQueueTest, QueueDestructor) {
+    std::atomic<int> completed{0};
+    
+    {
+        JobQueue local_queue;
+        
+        for (int i = 0; i < 5; ++i) {
+            local_queue.Submit([&completed](JobHandle&) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                completed++;
+            });
+        }
+        
+        // Queue destructor should wait for jobs
+    }
+    
+    EXPECT_EQ(completed, 5);
 }

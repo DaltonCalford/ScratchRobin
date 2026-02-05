@@ -904,7 +904,38 @@ void UsersRolesFrame::OnAlterUser(wxCommandEvent&) {
     
     UserEditorDialog dialog(this, UserEditorMode::Alter);
     dialog.SetUserName(name);
-    // TODO: Populate other fields from user details query
+    
+    // Populate other fields from user details query
+    if (connection_manager_ && connection_manager_->IsConnected()) {
+        std::string query;
+        if (backend == "postgresql") {
+            query = "SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, "
+                    "rolinherit, rolcanlogin, rolconnlimit, rolvaliduntil::text "
+                    "FROM pg_roles WHERE rolname = '" + name + "'";
+        } else if (backend == "mysql") {
+            query = "SELECT User, Host, Super_priv, Create_priv, Drop_priv "
+                    "FROM mysql.user WHERE User = '" + name + "' LIMIT 1";
+        } else if (backend == "firebird") {
+            query = "SELECT RDB$USER_NAME, RDB$GRANT_ADMIN "
+                    "FROM RDB$ROLES WHERE RDB$USER_NAME = '" + name + "'";
+        }
+        
+        if (!query.empty()) {
+            QueryResult result;
+            if (connection_manager_->ExecuteQuery(query, &result) && !result.rows.empty()) {
+                const auto& row = result.rows[0];
+                // Set superuser status if available
+                if (row.size() > 1) {
+                    std::string superuser = row[1].text;
+                    dialog.SetIsSuperUser(superuser == "t" || superuser == "1" || superuser == "true");
+                }
+                // Set default schema/database if available
+                if (row.size() > 2 && !row[2].isNull && !row[2].text.empty()) {
+                    dialog.SetDefaultSchema(row[2].text);
+                }
+            }
+        }
+    }
     
     if (dialog.ShowModal() != wxID_OK) {
         return;
@@ -962,7 +993,39 @@ void UsersRolesFrame::OnAlterRole(wxCommandEvent&) {
     
     RoleEditorDialog dialog(this, RoleEditorMode::Alter);
     dialog.SetRoleName(name);
-    // TODO: Populate other fields from role details query
+    
+    // Populate other fields from role details query
+    if (connection_manager_ && connection_manager_->IsConnected()) {
+        std::string query;
+        if (backend == "postgresql") {
+            query = "SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, "
+                    "rolinherit, rolcanlogin "
+                    "FROM pg_roles WHERE rolname = '" + name + "'";
+        } else if (backend == "mysql") {
+            query = "SELECT ROLE_NAME, IS_DEFAULT, IS_MANDATORY "
+                    "FROM mysql.roles_mapping WHERE ROLE_NAME = '" + name + "' LIMIT 1";
+        } else if (backend == "firebird") {
+            query = "SELECT RDB$ROLE_NAME, RDB$OWNER_NAME "
+                    "FROM RDB$ROLES WHERE RDB$ROLE_NAME = '" + name + "'";
+        }
+        
+        if (!query.empty()) {
+            QueryResult result;
+            if (connection_manager_->ExecuteQuery(query, &result) && !result.rows.empty()) {
+                const auto& row = result.rows[0];
+                // Set role attributes if available
+                if (row.size() > 1) {
+                    std::string superuser = row[1].text;
+                    dialog.SetIsSuperUser(superuser == "t" || superuser == "1" || superuser == "true");
+                }
+                // Set can login if available (PostgreSQL specific)
+                if (row.size() > 5) {
+                    std::string canlogin = row[5].text;
+                    dialog.SetCanLogin(canlogin == "t" || canlogin == "1" || canlogin == "true");
+                }
+            }
+        }
+    }
     
     if (dialog.ShowModal() != wxID_OK) {
         return;

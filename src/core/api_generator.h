@@ -296,9 +296,30 @@ public:
     std::string GenerateDockerfile(CodeLanguage language);
     
 private:
+    // Python generation
     std::string GeneratePythonFastApi(const ApiSpecification& spec);
+    std::string GeneratePythonModel(const std::string& schema_name,
+                                     const std::vector<ApiField>& fields);
+    std::string GeneratePythonController(const ApiEndpoint& endpoint);
+    std::string GeneratePythonClient(const ApiSpecification& spec);
+    std::string GeneratePythonTests(const ApiEndpoint& endpoint);
+    
+    // JavaScript/Node generation
     std::string GenerateNodeExpress(const ApiSpecification& spec);
+    std::string GenerateJavaScriptClient(const ApiSpecification& spec, bool isTypeScript);
+    std::string GenerateJavaScriptModel(const std::string& schema_name,
+                                         const std::vector<ApiField>& fields,
+                                         bool isTypeScript);
+    std::string GenerateJavaScriptTests(const ApiEndpoint& endpoint);
+    std::string GenerateExpressController(const ApiEndpoint& endpoint);
+    
+    // Java generation
     std::string GenerateJavaSpring(const ApiSpecification& spec);
+    std::string GenerateJavaController(const ApiEndpoint& endpoint);
+    std::string GenerateJavaModel(const std::string& schema_name,
+                                   const std::vector<ApiField>& fields);
+    
+    // Go generation
     std::string GenerateGoGin(const ApiSpecification& spec);
 };
 

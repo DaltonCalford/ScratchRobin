@@ -10,12 +10,15 @@
 #ifndef SCRATCHROBIN_CDC_STREAMING_H
 #define SCRATCHROBIN_CDC_STREAMING_H
 
+#include <atomic>
 #include <ctime>
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace scratchrobin {
@@ -258,10 +261,49 @@ public:
     };
     Metrics GetMetrics() const;
     
+    // Error handling and retry
+    struct ErrorHandlingConfig {
+        int max_retries = 3;
+        int retry_delay_ms = 1000;
+        bool exponential_backoff = true;
+        double backoff_multiplier = 2.0;
+        int max_backoff_ms = 30000;  // 30 seconds
+        bool enable_dlq = true;
+        std::string dlq_topic;
+    };
+    
+    void SetErrorHandlingConfig(const ErrorHandlingConfig& config);
+    
+    // Get failed events for retry
+    std::vector<CdcEvent> GetFailedEvents() const;
+    bool RetryFailedEvent(const std::string& event_id);
+    bool RetryAllFailedEvents();
+    void ClearFailedEvents();
+    
 private:
     Configuration config_;
+    ErrorHandlingConfig error_config_;
     std::unique_ptr<CdcConnector> connector_;
     std::unique_ptr<MessagePublisher> publisher_;
+    
+    // Error handling state
+    struct FailedEvent {
+        CdcEvent event;
+        int retry_count = 0;
+        std::time_t failed_at;
+        std::string error_message;
+    };
+    mutable std::mutex failed_events_mutex_;
+    std::map<std::string, FailedEvent> failed_events_;
+    
+    // Retry thread
+    std::atomic<bool> retry_running_{false};
+    std::thread retry_thread_;
+    void RetryThread();
+    
+    int CalculateRetryDelay(int attempt) const;
+    void HandlePublishError(const CdcEvent& event, const std::string& error);
+    bool PublishWithRetry(const CdcEvent& event, int attempt = 0);
     
     void ProcessEvent(const CdcEvent& event);
     bool ApplyTransformations(CdcEvent& event);

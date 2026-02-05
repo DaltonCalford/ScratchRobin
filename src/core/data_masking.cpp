@@ -8,11 +8,13 @@
  * https://www.firebirdsql.org/en/initial-developers-public-license-version-1-0/
  */
 #include "data_masking.h"
+#include "crypto_utils.h"
 
 #include <algorithm>
 #include <cctype>
 #include <fstream>
 #include <iomanip>
+#include <numeric>
 #include <random>
 #include <regex>
 #include <sstream>
@@ -295,26 +297,32 @@ std::string MaskingEngine::RegexReplace(const std::string& value,
 
 std::string MaskingEngine::Hash(const std::string& value,
                                  const MaskingRule::Parameters& params) {
-    // Simplified hash - in production would use proper crypto library
-    std::string salted = value + params.hash_salt;
-    
-    // Simple string hash for demonstration
-    std::hash<std::string> hasher;
-    size_t hash = hasher(salted);
-    
-    std::stringstream ss;
-    ss << std::hex << std::setw(16) << std::setfill('0') << hash;
-    
+    // Use proper SHA-256 implementation
     if (params.hash_algorithm == "SHA256") {
-        return "sha256:" + ss.str();
+        return Sha256::HashToHex(value, params.hash_salt);
+    } else if (params.hash_algorithm == "HMAC-SHA256") {
+        return Sha256::Hmac(params.hash_salt, value);
     }
-    return ss.str();
+    
+    // Default to SHA-256
+    return Sha256::HashToHex(value, params.hash_salt);
 }
 
 std::string MaskingEngine::Encrypt(const std::string& value,
                                     const MaskingRule::Parameters& params) {
-    // Stub - would use proper FPE encryption
-    return "ENC(" + value + ")";
+    // Use Format-Preserving Encryption
+    FormatPreservingEncryption fpe(params.encryption_key_id);
+    
+    // Apply appropriate encryption based on data type
+    if (params.fake_data_generator == "credit_card") {
+        return fpe.EncryptCreditCard(value);
+    } else if (params.fake_data_generator == "ssn") {
+        return fpe.EncryptSSN(value);
+    } else if (params.fake_data_generator == "phone") {
+        return fpe.EncryptPhone(value);
+    }
+    
+    return fpe.Encrypt(value);
 }
 
 std::string MaskingEngine::Randomize(const std::string& value,
@@ -383,6 +391,23 @@ std::string MaskingEngine::Truncate(const std::string& value,
         return value.substr(0, params.max_length);
     }
     return value;
+}
+
+// Note: Shuffling is typically done at the column level (across multiple rows)
+// not on individual values. This helper performs Fisher-Yates shuffle on a vector.
+std::vector<std::string> MaskingEngine::Shuffle(std::vector<std::string> values,
+                                                 const MaskingRule::Parameters& params) {
+    std::random_device rd;
+    std::mt19937 gen(params.randomization_seed ? params.randomization_seed : rd());
+    
+    // Fisher-Yates shuffle
+    for (size_t i = values.size() - 1; i > 0; i--) {
+        std::uniform_int_distribution<size_t> dis(0, i);
+        size_t j = dis(gen);
+        std::swap(values[i], values[j]);
+    }
+    
+    return values;
 }
 
 // ============================================================================
@@ -556,9 +581,26 @@ std::string MaskingJob::GetStatusString() const {
 // ============================================================================
 // Masking Manager Implementation
 // ============================================================================
+MaskingManager::MaskingManager() = default;
+MaskingManager::~MaskingManager() = default;
+
 MaskingManager& MaskingManager::Instance() {
     static MaskingManager instance;
     return instance;
+}
+
+std::string MaskingManager::SubmitJob(const MaskingJob& job) {
+    // Generate a unique job ID
+    static int counter = 0;
+    std::string job_id = "mask_job_" + std::to_string(++counter);
+    
+    // Store the job (in a real implementation, this would queue it for execution)
+    auto job_copy = std::make_unique<MaskingJob>(job);
+    job_copy->id = job_id;
+    job_copy->status = MaskingJob::Status::PENDING;
+    jobs_[job_id] = std::move(job_copy);
+    
+    return job_id;
 }
 
 void MaskingManager::AddProfile(std::unique_ptr<MaskingProfile> profile) {
@@ -589,6 +631,67 @@ std::vector<MaskingProfile*> MaskingManager::GetAllProfiles() {
 
 std::string MaskingManager::MaskValue(const std::string& value, const MaskingRule& rule) {
     return engine_.Mask(value, rule);
+}
+
+MaskingRule* MaskingManager::GetRule(const std::string& rule_id) {
+    // Search through all profiles for the rule
+    for (auto& [profile_id, profile] : profiles_) {
+        for (auto& rule : profile->rules) {
+            if (rule->id == rule_id) {
+                return rule.get();
+            }
+        }
+    }
+    return nullptr;
+}
+
+std::vector<MaskingRule*> MaskingManager::GetRulesForColumn(const std::string& schema,
+                                                             const std::string& table,
+                                                             const std::string& column) {
+    std::vector<MaskingRule*> result;
+    // TODO: Implement column matching logic
+    (void)schema;
+    (void)table;
+    (void)column;
+    return result;
+}
+
+ClassificationEngine::ClassificationResult MaskingManager::ClassifyColumn(
+    const std::string& column_name,
+    const std::vector<std::string>& sample_values) {
+    return classifier_.Classify(column_name, sample_values);
+}
+
+MaskingJob* MaskingManager::GetJob(const std::string& job_id) {
+    auto it = jobs_.find(job_id);
+    if (it != jobs_.end()) {
+        return it->second.get();
+    }
+    return nullptr;
+}
+
+std::vector<MaskingJob*> MaskingManager::GetJobs() {
+    std::vector<MaskingJob*> result;
+    for (auto& [id, job] : jobs_) {
+        result.push_back(job.get());
+    }
+    return result;
+}
+
+void MaskingManager::CancelJob(const std::string& job_id) {
+    auto* job = GetJob(job_id);
+    if (job) {
+        job->status = MaskingJob::Status::CANCELLED;
+    }
+}
+
+std::vector<MaskingRule> MaskingManager::DiscoverSensitiveColumns(
+    const std::string& connection_string,
+    const std::vector<std::string>& schemas) {
+    // TODO: Implement auto-discovery
+    (void)connection_string;
+    (void)schemas;
+    return {};
 }
 
 std::unique_ptr<MaskingProfile> MaskingManager::CreateDevProfile() {

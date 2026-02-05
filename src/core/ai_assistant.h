@@ -78,6 +78,7 @@ struct AiProviderConfig {
 struct AiRequest {
     std::string id;
     std::string prompt;
+    std::string system_message;  // System prompt/context for the AI
     std::vector<std::pair<std::string, std::string>> context;
     std::string expected_format;  // "json", "sql", "markdown", "natural"
     int max_tokens = 4096;
@@ -96,22 +97,30 @@ struct AiResponse {
 };
 
 // ============================================================================
+// Table Suggestion (Standalone)
+// ============================================================================
+struct TableSuggestion {
+    std::string name;
+    std::string description;
+    std::string table_name;  // Alias for name
+    std::string action;  // "CREATE", "ALTER", "DROP"
+    std::vector<std::pair<std::string, std::string>> columns;
+    std::vector<std::string> primary_key;
+    std::vector<std::vector<std::string>> foreign_keys;
+    std::string reason;
+};
+
+// ============================================================================
 // Schema Design Suggestions
 // ============================================================================
 struct SchemaSuggestion {
     std::string id;
     std::string title;
     std::string description;
+    std::string raw_response;  // Original AI response
+    std::vector<std::string> suggested_sql;  // Generated SQL statements
     
     // Table suggestions
-    struct TableSuggestion {
-        std::string table_name;
-        std::string action;  // "CREATE", "ALTER", "DROP"
-        std::vector<std::pair<std::string, std::string>> columns;
-        std::vector<std::string> primary_key;
-        std::vector<std::vector<std::string>> foreign_keys;
-        std::string reason;
-    };
     std::vector<TableSuggestion> tables;
     
     // Index suggestions
@@ -148,6 +157,7 @@ struct QueryOptimization {
     std::string original_query;
     std::string optimized_query;
     std::string explanation;
+    std::string raw_response;  // Original AI response
     
     // Performance estimates
     struct PerformanceEstimate {
@@ -156,8 +166,11 @@ struct QueryOptimization {
         double improvement_percent = 0.0;
         double estimated_time_original_ms = 0.0;
         double estimated_time_optimized_ms = 0.0;
+        double percent_faster = 0.0;  // Alias for improvement_percent
+        std::string explanation;  // Human-readable explanation
     };
     PerformanceEstimate performance;
+    PerformanceEstimate estimated_improvement;  // Alias for performance
     
     // Specific optimizations applied
     std::vector<std::string> optimizations_applied;
@@ -179,6 +192,10 @@ struct MigrationAssistance {
     std::string id;
     std::string source_database;
     std::string target_database;
+    std::string source_schema;  // Source schema name
+    std::string target_type;    // Target database type
+    std::string raw_response;   // Original AI response
+    std::string migration_script;  // Complete migration script
     
     // Schema migration
     struct SchemaMapping {
@@ -216,6 +233,7 @@ struct NaturalLanguageToSql {
     std::string natural_language;
     std::string generated_sql;
     std::string explanation;
+    std::string raw_response;  // Original AI response
     
     // Parameters detected
     std::vector<std::pair<std::string, std::string>> parameters;
@@ -250,6 +268,7 @@ struct CodeGeneration {
     TargetLanguage language;
     std::string description;
     std::string generated_code;
+    std::string raw_response;  // Original AI response
     
     // Dependencies
     std::vector<std::string> dependencies;
@@ -274,8 +293,11 @@ struct DocumentationGeneration {
     };
     
     DocType type;
+    DocType doc_type;  // Alias for type (compatibility)
     std::string title;
     std::string content;
+    std::string generated_documentation;  // Alias for content
+    std::string raw_response;  // Original AI response
     
     // Sections
     struct DocSection {

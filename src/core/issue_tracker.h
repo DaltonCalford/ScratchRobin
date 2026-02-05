@@ -41,11 +41,13 @@ IssueStatus IssueStatusFromString(const std::string& str);
 // Priority Enum
 // ============================================================================
 enum class IssuePriority {
+    HIGHEST,
     CRITICAL,   // P0
     HIGH,       // P1
     MEDIUM,     // P2
     LOW,        // P3
-    TRIVIAL     // P4
+    TRIVIAL,    // P4
+    LOWEST
 };
 
 std::string IssuePriorityToString(IssuePriority priority);
@@ -62,7 +64,9 @@ enum class IssueType {
     SUBTASK,
     INCIDENT,
     RFC,        // Request for Change
-    ADR         // Architecture Decision Record
+    ADR,        // Architecture Decision Record
+    ENHANCEMENT,
+    OTHER
 };
 
 // ============================================================================
@@ -184,6 +188,7 @@ struct IssueAttachment {
 struct TrackerConfig {
     std::string name;
     std::string type;  // "jira", "github", "gitlab"
+    std::string provider;  // Alias for type
     bool enabled = true;
     
     // Connection
@@ -226,6 +231,7 @@ struct IssueCreateRequest {
     std::string title;
     std::string description;
     IssueType type = IssueType::TASK;
+    IssueType issue_type = IssueType::TASK;  // Alias for type
     IssuePriority priority = IssuePriority::MEDIUM;
     std::vector<std::string> labels;
     std::string assignee;
@@ -323,6 +329,7 @@ public:
     // Link management
     bool LinkObject(const ObjectReference& obj, const IssueReference& issue, 
                      LinkType type = LinkType::MANUAL);
+    bool CreateLink(const ObjectReference& obj, const IssueReference& issue);
     bool UnlinkObject(const ObjectReference& obj, const std::string& issue_id);
     bool UnlinkIssue(const std::string& issue_id);
     
@@ -330,6 +337,9 @@ public:
     std::vector<IssueLink> GetLinkedObjects(const std::string& issue_id);
     std::optional<IssueLink> GetLink(const ObjectReference& obj, 
                                       const std::string& issue_id);
+    
+    // Adapter access
+    IssueTrackerAdapter* GetAdapter(const std::string& name);
     
     // Sync
     bool SyncLink(const std::string& link_id);

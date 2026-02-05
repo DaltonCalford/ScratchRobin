@@ -816,7 +816,8 @@ void AddTrackerDialog::CreateControls() {
     
     // Update UI based on provider
     provider_choice_->Bind(wxEVT_CHOICE, &AddTrackerDialog::OnProviderChanged, this);
-    OnProviderChanged(wxCommandEvent());
+    wxCommandEvent dummyEvent;
+    OnProviderChanged(dummyEvent);
 }
 
 void AddTrackerDialog::OnProviderChanged(wxCommandEvent& /*event*/) {

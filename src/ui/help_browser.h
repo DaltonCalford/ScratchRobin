@@ -203,6 +203,7 @@ private:
     // Current state
     HelpTopicId current_topic_ = HelpTopicId::None;
     bool navigating_history_ = false;
+    wxString find_text_;  // Last search text for find-in-page
     
     wxDECLARE_EVENT_TABLE();
 };

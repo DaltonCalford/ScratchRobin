@@ -910,4 +910,57 @@ bool MetadataModel::LoadFromConnections(std::string* error) {
     return true;
 }
 
+void MetadataModel::UpdateNode(const MetadataNode& node) {
+    // Update or add the node
+    bool found = false;
+    for (auto& existing : snapshot_.nodes) {
+        if (existing.id == node.id) {
+            existing = node;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        snapshot_.nodes.push_back(node);
+    }
+    snapshot_.timestamp = std::chrono::system_clock::now();
+    NotifyObservers();
+}
+
+void MetadataModel::RemoveNode(int id) {
+    snapshot_.nodes.erase(
+        std::remove_if(snapshot_.nodes.begin(), snapshot_.nodes.end(),
+            [id](const MetadataNode& node) { return node.id == id; }),
+        snapshot_.nodes.end()
+    );
+    snapshot_.timestamp = std::chrono::system_clock::now();
+    NotifyObservers();
+}
+
+std::optional<MetadataNode> MetadataModel::FindNodeByPath(const std::string& path) const {
+    for (const auto& node : snapshot_.nodes) {
+        if (node.path == path) {
+            return node;
+        }
+    }
+    return std::nullopt;
+}
+
+std::vector<MetadataNode> MetadataModel::FindNodesByType(MetadataType type) const {
+    std::vector<MetadataNode> result;
+    for (const auto& node : snapshot_.nodes) {
+        if (node.type == type) {
+            result.push_back(node);
+        }
+    }
+    return result;
+}
+
+void MetadataModel::Clear() {
+    snapshot_.nodes.clear();
+    snapshot_.roots.clear();
+    snapshot_.timestamp = std::chrono::system_clock::now();
+    NotifyObservers();
+}
+
 } // namespace scratchrobin

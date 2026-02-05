@@ -4,344 +4,246 @@
  */
 
 #include <gtest/gtest.h>
-#include "diagram/diagram_model.h"
+#include "ui/diagram_model.h"
 
 using namespace scratchrobin;
 
 class DiagramModelTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        model_ = std::make_unique<DiagramModel>();
+        model_ = std::make_unique<DiagramModel>(DiagramType::Erd);
     }
     
     std::unique_ptr<DiagramModel> model_;
 };
 
 TEST_F(DiagramModelTest, CreateEmptyDiagram) {
-    EXPECT_TRUE(model_->GetEntities().empty());
-    EXPECT_TRUE(model_->GetRelationships().empty());
+    EXPECT_TRUE(model_->nodes().empty());
+    EXPECT_TRUE(model_->edges().empty());
 }
 
-TEST_F(DiagramModelTest, AddEntity) {
-    Entity entity;
-    entity.id = "entity1";
-    entity.name = "Users";
-    entity.x = 100;
-    entity.y = 200;
-    entity.width = 150;
-    entity.height = 200;
+TEST_F(DiagramModelTest, AddNode) {
+    DiagramNode node;
+    node.id = "node1";
+    node.name = "Users";
+    node.x = 100.0;
+    node.y = 200.0;
+    node.width = 150.0;
+    node.height = 200.0;
     
-    model_->AddEntity(entity);
+    model_->AddNode(node);
     
-    auto entities = model_->GetEntities();
-    ASSERT_EQ(entities.size(), 1);
-    EXPECT_EQ(entities[0].name, "Users");
-    EXPECT_EQ(entities[0].x, 100);
+    auto& nodes = model_->nodes();
+    ASSERT_EQ(nodes.size(), 1);
+    EXPECT_EQ(nodes[0].name, "Users");
+    EXPECT_EQ(nodes[0].x, 100.0);
+    EXPECT_EQ(nodes[0].y, 200.0);
 }
 
-TEST_F(DiagramModelTest, RemoveEntity) {
-    Entity entity;
-    entity.id = "entity1";
-    model_->AddEntity(entity);
+TEST_F(DiagramModelTest, AddEdge) {
+    // Add two nodes first
+    DiagramNode node1;
+    node1.id = "node1";
+    node1.name = "Users";
+    model_->AddNode(node1);
     
-    model_->RemoveEntity("entity1");
+    DiagramNode node2;
+    node2.id = "node2";
+    node2.name = "Orders";
+    model_->AddNode(node2);
     
-    EXPECT_TRUE(model_->GetEntities().empty());
+    // Add edge between them
+    DiagramEdge edge;
+    edge.id = "edge1";
+    edge.source_id = "node1";
+    edge.target_id = "node2";
+    edge.label = "has many";
+    edge.source_cardinality = Cardinality::One;
+    edge.target_cardinality = Cardinality::ZeroOrMany;
+    
+    model_->AddEdge(edge);
+    
+    auto& edges = model_->edges();
+    ASSERT_EQ(edges.size(), 1);
+    EXPECT_EQ(edges[0].source_id, "node1");
+    EXPECT_EQ(edges[0].target_id, "node2");
+    EXPECT_EQ(edges[0].label, "has many");
 }
 
-TEST_F(DiagramModelTest, UpdateEntityPosition) {
-    Entity entity;
-    entity.id = "entity1";
-    entity.x = 0;
-    entity.y = 0;
-    model_->AddEntity(entity);
+TEST_F(DiagramModelTest, RemoveNodeByClearing) {
+    DiagramNode node;
+    node.id = "node1";
+    model_->AddNode(node);
     
-    model_->UpdateEntityPosition("entity1", 500, 300);
+    // Clear all nodes
+    model_->nodes().clear();
     
-    auto e = model_->GetEntity("entity1");
-    ASSERT_TRUE(e.has_value());
-    EXPECT_EQ(e->x, 500);
-    EXPECT_EQ(e->y, 300);
+    EXPECT_TRUE(model_->nodes().empty());
 }
 
-TEST_F(DiagramModelTest, AddEntityAttribute) {
-    Entity entity;
-    entity.id = "entity1";
-    entity.name = "Users";
+TEST_F(DiagramModelTest, DiagramType) {
+    EXPECT_EQ(model_->type(), DiagramType::Erd);
     
-    Attribute attr;
-    attr.name = "id";
-    attr.type = "INTEGER";
-    attr.is_primary_key = true;
-    attr.is_nullable = false;
-    
-    entity.attributes.push_back(attr);
-    model_->AddEntity(entity);
-    
-    auto e = model_->GetEntity("entity1");
-    ASSERT_TRUE(e.has_value());
-    ASSERT_EQ(e->attributes.size(), 1);
-    EXPECT_EQ(e->attributes[0].name, "id");
-    EXPECT_TRUE(e->attributes[0].is_primary_key);
+    model_->set_type(DiagramType::Silverston);
+    EXPECT_EQ(model_->type(), DiagramType::Silverston);
 }
 
-TEST_F(DiagramModelTest, AddRelationship) {
-    // Create two entities
-    Entity users;
-    users.id = "users";
-    users.name = "Users";
-    model_->AddEntity(users);
+TEST_F(DiagramModelTest, ErdNotation) {
+    // Default notation
+    EXPECT_EQ(model_->notation(), ErdNotation::CrowsFoot);
     
-    Entity orders;
-    orders.id = "orders";
-    orders.name = "Orders";
-    model_->AddEntity(orders);
+    // Set different notations
+    model_->set_notation(ErdNotation::IDEF1X);
+    EXPECT_EQ(model_->notation(), ErdNotation::IDEF1X);
     
-    // Create relationship
-    Relationship rel;
-    rel.id = "rel1";
-    rel.source_entity_id = "users";
-    rel.target_entity_id = "orders";
-    rel.source_cardinality = Cardinality::One;
-    rel.target_cardinality = Cardinality::Many;
-    rel.identifying = false;
+    model_->set_notation(ErdNotation::UML);
+    EXPECT_EQ(model_->notation(), ErdNotation::UML);
     
-    model_->AddRelationship(rel);
-    
-    auto relationships = model_->GetRelationships();
-    ASSERT_EQ(relationships.size(), 1);
-    EXPECT_EQ(relationships[0].source_entity_id, "users");
-    EXPECT_EQ(relationships[0].target_cardinality, Cardinality::Many);
+    model_->set_notation(ErdNotation::Chen);
+    EXPECT_EQ(model_->notation(), ErdNotation::Chen);
 }
 
-TEST_F(DiagramModelTest, RemoveRelationship) {
-    Relationship rel;
-    rel.id = "rel1";
-    rel.source_entity_id = "entity1";
-    rel.target_entity_id = "entity2";
-    model_->AddRelationship(rel);
+TEST_F(DiagramModelTest, NextNodeIndex) {
+    int idx1 = model_->NextNodeIndex();
+    int idx2 = model_->NextNodeIndex();
+    int idx3 = model_->NextNodeIndex();
     
-    model_->RemoveRelationship("rel1");
-    
-    EXPECT_TRUE(model_->GetRelationships().empty());
+    EXPECT_EQ(idx2, idx1 + 1);
+    EXPECT_EQ(idx3, idx2 + 1);
 }
 
-TEST_F(DiagramModelTest, RelationshipCascadingDelete) {
-    Entity users;
-    users.id = "users";
-    model_->AddEntity(users);
+TEST_F(DiagramModelTest, NextEdgeIndex) {
+    int idx1 = model_->NextEdgeIndex();
+    int idx2 = model_->NextEdgeIndex();
     
-    Entity orders;
-    orders.id = "orders";
-    model_->AddEntity(orders);
-    
-    Relationship rel;
-    rel.id = "rel1";
-    rel.source_entity_id = "users";
-    rel.target_entity_id = "orders";
-    model_->AddRelationship(rel);
-    
-    // Delete users entity - relationship should be removed too
-    model_->RemoveEntity("users");
-    
-    EXPECT_TRUE(model_->GetRelationships().empty());
+    EXPECT_EQ(idx2, idx1 + 1);
 }
 
-TEST_F(DiagramModelTest, SetNotation) {
-    model_->SetNotation(ErdNotation::CrowsFoot);
-    EXPECT_EQ(model_->GetNotation(), ErdNotation::CrowsFoot);
+TEST_F(DiagramModelTest, NodeWithAttributes) {
+    DiagramNode node;
+    node.id = "table1";
+    node.name = "users";
     
-    model_->SetNotation(ErdNotation::IDEF1X);
-    EXPECT_EQ(model_->GetNotation(), ErdNotation::IDEF1X);
+    DiagramAttribute attr1;
+    attr1.name = "id";
+    attr1.data_type = "INTEGER";
+    attr1.is_primary = true;
+    attr1.is_nullable = false;
+    node.attributes.push_back(attr1);
+    
+    DiagramAttribute attr2;
+    attr2.name = "email";
+    attr2.data_type = "VARCHAR(255)";
+    attr2.is_primary = false;
+    attr2.is_nullable = true;
+    node.attributes.push_back(attr2);
+    
+    model_->AddNode(node);
+    
+    auto& nodes = model_->nodes();
+    ASSERT_EQ(nodes[0].attributes.size(), 2);
+    EXPECT_EQ(nodes[0].attributes[0].name, "id");
+    EXPECT_TRUE(nodes[0].attributes[0].is_primary);
+    EXPECT_FALSE(nodes[0].attributes[0].is_nullable);
 }
 
-TEST_F(DiagramModelTest, SerializeToJson) {
-    Entity entity;
-    entity.id = "users";
-    entity.name = "Users";
-    entity.x = 100;
-    entity.y = 200;
+TEST_F(DiagramModelTest, CardinalityValues) {
+    DiagramEdge edge;
+    edge.id = "edge1";
+    edge.source_id = "node1";
+    edge.target_id = "node2";
     
-    Attribute attr;
-    attr.name = "id";
-    attr.type = "INTEGER";
-    attr.is_primary_key = true;
-    entity.attributes.push_back(attr);
+    // Test all cardinality types
+    edge.source_cardinality = Cardinality::One;
+    edge.target_cardinality = Cardinality::ZeroOrOne;
+    model_->AddEdge(edge);
     
-    model_->AddEntity(entity);
-    model_->SetNotation(ErdNotation::CrowsFoot);
+    edge.id = "edge2";
+    edge.source_cardinality = Cardinality::OneOrMany;
+    edge.target_cardinality = Cardinality::ZeroOrMany;
+    model_->AddEdge(edge);
     
-    std::string json = model_->ToJson();
-    
-    EXPECT_NE(json.find("\"name\":\"Users\""), std::string::npos);
-    EXPECT_NE(json.find("\"notation\":\"crowsfoot\""), std::string::npos);
-    EXPECT_NE(json.find("\"id\":\"INTEGER\""), std::string::npos);
+    auto& edges = model_->edges();
+    EXPECT_EQ(edges.size(), 2);
 }
 
-TEST_F(DiagramModelTest, DeserializeFromJson) {
-    std::string json = R"({
-        "version": "1.0",
-        "notation": "crowsfoot",
-        "entities": [
-            {
-                "id": "orders",
-                "name": "Orders",
-                "x": 300,
-                "y": 400,
-                "attributes": [
-                    {"name": "id", "type": "INTEGER", "is_primary_key": true}
-                ]
-            }
-        ],
-        "relationships": []
-    })";
+TEST_F(DiagramModelTest, NodePositionAndSize) {
+    DiagramNode node;
+    node.x = 50.5;
+    node.y = 100.25;
+    node.width = 200.0;
+    node.height = 150.0;
     
-    auto result = DiagramModel::FromJson(json);
+    auto& added = model_->AddNode(node);
     
-    ASSERT_TRUE(result.has_value());
-    EXPECT_EQ(result->GetNotation(), ErdNotation::CrowsFoot);
-    
-    auto entities = result->GetEntities();
-    ASSERT_EQ(entities.size(), 1);
-    EXPECT_EQ(entities[0].name, "Orders");
-    EXPECT_EQ(entities[0].x, 300);
+    EXPECT_EQ(added.x, 50.5);
+    EXPECT_EQ(added.y, 100.25);
+    EXPECT_EQ(added.width, 200.0);
+    EXPECT_EQ(added.height, 150.0);
 }
 
-TEST_F(DiagramModelTest, InvalidJsonReturnsNullopt) {
-    std::string invalid = "{invalid json";
-    auto result = DiagramModel::FromJson(invalid);
-    EXPECT_FALSE(result.has_value());
+TEST_F(DiagramModelTest, NodeFlags) {
+    DiagramNode node;
+    node.ghosted = true;
+    node.pinned = true;
+    
+    auto& added = model_->AddNode(node);
+    
+    EXPECT_TRUE(added.ghosted);
+    EXPECT_TRUE(added.pinned);
 }
 
-TEST_F(DiagramModelTest, GetEntityBounds) {
-    Entity e1;
-    e1.id = "e1";
-    e1.x = 0;
-    e1.y = 0;
-    e1.width = 100;
-    e1.height = 150;
-    model_->AddEntity(e1);
+TEST_F(DiagramModelTest, EdgeFlags) {
+    DiagramEdge edge;
+    edge.id = "edge1";
+    edge.source_id = "node1";
+    edge.target_id = "node2";
+    edge.directed = false;
+    edge.identifying = true;
     
-    Entity e2;
-    e2.id = "e2";
-    e2.x = 200;
-    e2.y = 300;
-    e2.width = 100;
-    e2.height = 150;
-    model_->AddEntity(e2);
+    model_->AddEdge(edge);
     
-    auto bounds = model_->GetBounds();
-    EXPECT_EQ(bounds.x, 0);
-    EXPECT_EQ(bounds.y, 0);
-    EXPECT_EQ(bounds.width, 300);
-    EXPECT_EQ(bounds.height, 450);
+    auto& edges = model_->edges();
+    EXPECT_FALSE(edges[0].directed);
+    EXPECT_TRUE(edges[0].identifying);
 }
 
-TEST_F(DiagramModelTest, ClearDiagram) {
-    Entity entity;
-    entity.id = "e1";
-    model_->AddEntity(entity);
-    
-    Relationship rel;
-    rel.id = "r1";
-    model_->AddRelationship(rel);
-    
-    model_->Clear();
-    
-    EXPECT_TRUE(model_->GetEntities().empty());
-    EXPECT_TRUE(model_->GetRelationships().empty());
+TEST_F(DiagramModelTest, ErdNotationToString) {
+    EXPECT_EQ(ErdNotationToString(ErdNotation::CrowsFoot), "crowsfoot");
+    EXPECT_EQ(ErdNotationToString(ErdNotation::IDEF1X), "idef1x");
+    EXPECT_EQ(ErdNotationToString(ErdNotation::UML), "uml");
+    EXPECT_EQ(ErdNotationToString(ErdNotation::Chen), "chen");
 }
 
-TEST_F(DiagramModelTest, EntityNotFound) {
-    auto entity = model_->GetEntity("nonexistent");
-    EXPECT_FALSE(entity.has_value());
+TEST_F(DiagramModelTest, StringToErdNotation) {
+    EXPECT_EQ(StringToErdNotation("crowsfoot"), ErdNotation::CrowsFoot);
+    EXPECT_EQ(StringToErdNotation("idef1x"), ErdNotation::IDEF1X);
+    EXPECT_EQ(StringToErdNotation("uml"), ErdNotation::UML);
+    EXPECT_EQ(StringToErdNotation("chen"), ErdNotation::Chen);
+    // Default case
+    EXPECT_EQ(StringToErdNotation("unknown"), ErdNotation::CrowsFoot);
 }
 
-TEST_F(DiagramModelTest, UpdateEntitySize) {
-    Entity entity;
-    entity.id = "e1";
-    entity.width = 100;
-    entity.height = 100;
-    model_->AddEntity(entity);
-    
-    model_->UpdateEntitySize("e1", 200, 250);
-    
-    auto e = model_->GetEntity("e1");
-    ASSERT_TRUE(e.has_value());
-    EXPECT_EQ(e->width, 200);
-    EXPECT_EQ(e->height, 250);
+TEST_F(DiagramModelTest, ErdNotationLabel) {
+    EXPECT_FALSE(ErdNotationLabel(ErdNotation::CrowsFoot).empty());
+    EXPECT_FALSE(ErdNotationLabel(ErdNotation::IDEF1X).empty());
+    EXPECT_FALSE(ErdNotationLabel(ErdNotation::UML).empty());
+    EXPECT_FALSE(ErdNotationLabel(ErdNotation::Chen).empty());
 }
 
-TEST_F(DiagramModelTest, DiagramVersion) {
-    EXPECT_EQ(model_->GetVersion(), "1.0");
+TEST_F(DiagramModelTest, CardinalityLabel) {
+    EXPECT_FALSE(CardinalityLabel(Cardinality::One).empty());
+    EXPECT_FALSE(CardinalityLabel(Cardinality::ZeroOrOne).empty());
+    EXPECT_FALSE(CardinalityLabel(Cardinality::OneOrMany).empty());
+    EXPECT_FALSE(CardinalityLabel(Cardinality::ZeroOrMany).empty());
 }
 
-TEST_F(DiagramModelTest, SetDiagramName) {
-    model_->SetName("My ERD Diagram");
-    EXPECT_EQ(model_->GetName(), "My ERD Diagram");
+TEST_F(DiagramModelTest, DiagramTypeLabel) {
+    EXPECT_FALSE(DiagramTypeLabel(DiagramType::Erd).empty());
+    EXPECT_FALSE(DiagramTypeLabel(DiagramType::Silverston).empty());
 }
 
-TEST_F(DiagramModelTest, ComplexDiagramRoundTrip) {
-    // Create a more complex diagram
-    Entity users;
-    users.id = "users";
-    users.name = "Users";
-    users.x = 100;
-    users.y = 100;
-    
-    Attribute userId;
-    userId.name = "user_id";
-    userId.type = "INTEGER";
-    userId.is_primary_key = true;
-    users.attributes.push_back(userId);
-    
-    Attribute userName;
-    userName.name = "username";
-    userName.type = "VARCHAR(50)";
-    userName.is_nullable = false;
-    users.attributes.push_back(userName);
-    
-    model_->AddEntity(users);
-    
-    Entity orders;
-    orders.id = "orders";
-    orders.name = "Orders";
-    orders.x = 400;
-    orders.y = 100;
-    
-    Attribute orderId;
-    orderId.name = "order_id";
-    orderId.type = "INTEGER";
-    orderId.is_primary_key = true;
-    orders.attributes.push_back(orderId);
-    
-    Attribute userIdFk;
-    userIdFk.name = "user_id";
-    userIdFk.type = "INTEGER";
-    userIdFk.is_foreign_key = true;
-    orders.attributes.push_back(userIdFk);
-    
-    model_->AddEntity(orders);
-    
-    Relationship rel;
-    rel.id = "users_orders";
-    rel.source_entity_id = "users";
-    rel.target_entity_id = "orders";
-    rel.source_cardinality = Cardinality::One;
-    rel.target_cardinality = Cardinality::Many;
-    rel.source_role = "places";
-    rel.target_role = "placed_by";
-    model_->AddRelationship(rel);
-    
-    // Serialize and deserialize
-    std::string json = model_->ToJson();
-    auto restored = DiagramModel::FromJson(json);
-    
-    ASSERT_TRUE(restored.has_value());
-    EXPECT_EQ(restored->GetEntities().size(), 2);
-    EXPECT_EQ(restored->GetRelationships().size(), 1);
-    
-    auto users_entity = restored->GetEntity("users");
-    ASSERT_TRUE(users_entity.has_value());
-    EXPECT_EQ(users_entity->attributes.size(), 2);
+TEST_F(DiagramModelTest, DiagramTypeKey) {
+    EXPECT_FALSE(DiagramTypeKey(DiagramType::Erd).empty());
+    EXPECT_FALSE(DiagramTypeKey(DiagramType::Silverston).empty());
 }
