@@ -82,6 +82,41 @@ This tracker reflects the sequenced execution roadmap for reaching a fully imple
 
 ---
 
+## Phase 7 — Diagram Types Implementation
+
+- [ ] **(18)** Silverston diagram renderer + interaction model  
+  Owner: `TBD` | Status: `In Progress` | Depends: `5` | Est: `4–6d`
+
+- [ ] **(19)** Whiteboard diagram engine (domain wizard + freeform attributes)  
+  Owner: `TBD` | Status: `Not Started` | Depends: `18` | Est: `3–5d`
+
+- [ ] **(20)** Mind map model + serialization + round‑trip  
+  Owner: `TBD` | Status: `Not Started` | Depends: `18` | Est: `3–4d`
+
+- [ ] **(21)** Data Flow Diagram (DFD) renderer + ERD traceability  
+  Owner: `TBD` | Status: `Not Started` | Depends: `18` | Est: `4–6d`
+
+- [ ] **(22)** SVG‑first export pipeline for diagram types  
+  Owner: `TBD` | Status: `Not Started` | Depends: `18–21` | Est: `2–3d`
+
+---
+
+## Phase 8 — Project System & Documentation
+
+- [ ] **(23)** Project metadata + governance runtime wiring  
+  Owner: `TBD` | Status: `Not Started` | Depends: `3,6` | Est: `3–5d`
+
+- [ ] **(24)** Project templates + automated documentation generation  
+  Owner: `TBD` | Status: `Not Started` | Depends: `6` | Est: `3–4d`
+
+- [ ] **(25)** Reporting storage persistence implementation  
+  Owner: `TBD` | Status: `Not Started` | Depends: `1,6,9` | Est: `3–5d`
+
+- [ ] **(26)** Documentation indices refresh (README, target features, trackers)  
+  Owner: `TBD` | Status: `In Progress` | Depends: `—` | Est: `1–2d`
+
+---
+
 ## Notes
 
 - Update `Owner` and `Status` fields as tasks progress.

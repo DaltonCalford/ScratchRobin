@@ -31,6 +31,15 @@ std::vector<std::string> BuildPaletteTypes(DiagramType type) {
     if (type == DiagramType::Silverston) {
         return {"Cluster", "Node", "Database", "Schema", "Table", "Service", "Host", "Network", "Dependency"};
     }
+    if (type == DiagramType::Whiteboard) {
+        return {"Note", "Group", "Sketch", "Image", "Link"};
+    }
+    if (type == DiagramType::MindMap) {
+        return {"Topic", "Subtopic", "Idea", "Note", "Link"};
+    }
+    if (type == DiagramType::DataFlow) {
+        return {"Process", "Data Store", "External", "Data Flow"};
+    }
     return {"Table", "View", "Domain", "Sequence", "Relationship"};
 }
 
@@ -142,6 +151,9 @@ void DiagramPage::BuildLayout() {
     diagram_type_choice_ = new wxChoice(canvasPanel, wxID_ANY);
     diagram_type_choice_->Append("ERD");
     diagram_type_choice_->Append("Silverston");
+    diagram_type_choice_->Append("Whiteboard");
+    diagram_type_choice_->Append("Mind Map");
+    diagram_type_choice_->Append("DFD");
     diagram_type_choice_->SetSelection(static_cast<int>(diagram_type_));
     topBar->Add(diagram_type_choice_, 0, wxALIGN_CENTER_VERTICAL);
     
@@ -346,7 +358,26 @@ void DiagramPage::UpdateProperties() {
 
 void DiagramPage::OnDiagramTypeChanged(wxCommandEvent&) {
     int selection = diagram_type_choice_->GetSelection();
-    diagram_type_ = selection == 1 ? DiagramType::Silverston : DiagramType::Erd;
+    switch (selection) {
+        case 0:
+            diagram_type_ = DiagramType::Erd;
+            break;
+        case 1:
+            diagram_type_ = DiagramType::Silverston;
+            break;
+        case 2:
+            diagram_type_ = DiagramType::Whiteboard;
+            break;
+        case 3:
+            diagram_type_ = DiagramType::MindMap;
+            break;
+        case 4:
+            diagram_type_ = DiagramType::DataFlow;
+            break;
+        default:
+            diagram_type_ = DiagramType::Erd;
+            break;
+    }
     canvas_->SetDiagramType(diagram_type_);
     
     // Enable/disable notation selector based on diagram type
@@ -456,7 +487,15 @@ void DiagramPage::StartRelationshipMode() {
     }
     relationship_mode_ = true;
     relationship_source_id_ = source->id;
-    relationship_kind_ = diagram_type_ == DiagramType::Silverston ? "Dependency" : "Relationship";
+    if (diagram_type_ == DiagramType::Silverston) {
+        relationship_kind_ = "Dependency";
+    } else if (diagram_type_ == DiagramType::DataFlow) {
+        relationship_kind_ = "Flow";
+    } else if (diagram_type_ == DiagramType::MindMap || diagram_type_ == DiagramType::Whiteboard) {
+        relationship_kind_ = "Link";
+    } else {
+        relationship_kind_ = "Relationship";
+    }
     mode_label_->SetLabel("Mode: Select target");
 }
 
@@ -492,7 +531,9 @@ void DiagramPage::OnPaletteAdd(wxCommandEvent&) {
     }
     const std::string& type = palette_types_[static_cast<size_t>(selection)];
     if ((diagram_type_ == DiagramType::Erd && type == "Relationship") ||
-        (diagram_type_ == DiagramType::Silverston && type == "Dependency")) {
+        (diagram_type_ == DiagramType::Silverston && type == "Dependency") ||
+        (diagram_type_ == DiagramType::DataFlow && type == "Data Flow") ||
+        ((diagram_type_ == DiagramType::Whiteboard || diagram_type_ == DiagramType::MindMap) && type == "Link")) {
         StartRelationshipMode();
         return;
     }
@@ -510,7 +551,13 @@ void DiagramPage::OnSelectionChanged(wxCommandEvent& event) {
         const DiagramNode* target = canvas_->GetSelectedNode();
         if (target && target->id != relationship_source_id_) {
             wxTextEntryDialog label_dialog(this, "Relationship label (optional)", relationship_kind_ + " Label");
-            label_dialog.SetValue(diagram_type_ == DiagramType::Silverston ? "depends_on" : "FK");
+            if (diagram_type_ == DiagramType::Silverston) {
+                label_dialog.SetValue("depends_on");
+            } else if (diagram_type_ == DiagramType::DataFlow) {
+                label_dialog.SetValue("flow");
+            } else {
+                label_dialog.SetValue("FK");
+            }
             if (label_dialog.ShowModal() == wxID_OK) {
                 std::string label = label_dialog.GetValue().ToStdString();
                 canvas_->AddEdge(relationship_source_id_, target->id, label);

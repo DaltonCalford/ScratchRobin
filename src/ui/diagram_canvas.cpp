@@ -489,6 +489,15 @@ void DiagramCanvas::AddNode(const std::string& node_type, const std::string& nam
             {"name", "VARCHAR(200)", false, false},
             {"created_at", "TIMESTAMP", false, false}
         };
+    } else if (model_.type() == DiagramType::MindMap) {
+        node.width = 200.0;
+        node.height = 90.0;
+    } else if (model_.type() == DiagramType::Whiteboard) {
+        node.width = 220.0;
+        node.height = 140.0;
+    } else if (model_.type() == DiagramType::DataFlow) {
+        node.width = 200.0;
+        node.height = 120.0;
     } else {
         node.width = 180.0;
         node.height = 140.0;
@@ -514,7 +523,9 @@ void DiagramCanvas::AddEdge(const std::string& source_id, const std::string& tar
     edge.source_id = source_id;
     edge.target_id = target_id;
     edge.label = label;
-    edge.directed = model_.type() == DiagramType::Silverston;
+    edge.directed = (model_.type() == DiagramType::Silverston ||
+                     model_.type() == DiagramType::DataFlow ||
+                     model_.type() == DiagramType::MindMap);
     edge.identifying = false;
     model_.AddEdge(edge);
     Refresh();

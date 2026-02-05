@@ -70,6 +70,12 @@ std::string DiagramTypeLabel(DiagramType type) {
             return "ERD";
         case DiagramType::Silverston:
             return "Silverston";
+        case DiagramType::Whiteboard:
+            return "Whiteboard";
+        case DiagramType::MindMap:
+            return "Mind Map";
+        case DiagramType::DataFlow:
+            return "DFD";
         default:
             return "Diagram";
     }
@@ -81,6 +87,12 @@ std::string DiagramTypeKey(DiagramType type) {
             return "erd";
         case DiagramType::Silverston:
             return "silverston";
+        case DiagramType::Whiteboard:
+            return "whiteboard";
+        case DiagramType::MindMap:
+            return "mindmap";
+        case DiagramType::DataFlow:
+            return "dfd";
         default:
             return "diagram";
     }

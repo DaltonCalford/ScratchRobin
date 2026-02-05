@@ -17,7 +17,10 @@ namespace scratchrobin {
 
 enum class DiagramType {
     Erd,
-    Silverston
+    Silverston,
+    Whiteboard,
+    MindMap,
+    DataFlow
 };
 
 // Supported ERD notations (Phase 3.2)
