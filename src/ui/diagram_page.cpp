@@ -555,6 +555,8 @@ void DiagramPage::OnSelectionChanged(wxCommandEvent& event) {
                 label_dialog.SetValue("depends_on");
             } else if (diagram_type_ == DiagramType::DataFlow) {
                 label_dialog.SetValue("flow");
+            } else if (diagram_type_ == DiagramType::MindMap || diagram_type_ == DiagramType::Whiteboard) {
+                label_dialog.SetValue("link");
             } else {
                 label_dialog.SetValue("FK");
             }

@@ -108,10 +108,18 @@ private:
     static std::string SvgFooter();
     static std::string SvgRect(double x, double y, double w, double h,
                                 const std::string& fill, const std::string& stroke);
+    static std::string SvgRoundedRect(double x, double y, double w, double h, double r,
+                                       const std::string& fill, const std::string& stroke);
+    static std::string SvgRectDashed(double x, double y, double w, double h,
+                                      const std::string& fill, const std::string& stroke);
+    static std::string SvgEllipse(double x, double y, double w, double h,
+                                   const std::string& fill, const std::string& stroke);
     static std::string SvgText(double x, double y, const std::string& text,
-                               const std::string& font_family, int font_size);
+                                const std::string& font_family, int font_size);
     static std::string SvgLine(double x1, double y1, double x2, double y2,
-                               const std::string& stroke, int width);
+                                const std::string& stroke, int width);
+    static std::string SvgArrow(double x1, double y1, double x2, double y2,
+                                 const std::string& stroke);
 };
 
 // Import from various formats (for future expansion)

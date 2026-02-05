@@ -212,6 +212,11 @@ std::string ExportManager::ExportToSvg(const DiagramModel& model,
         double y2 = (target_it->y + target_it->height / 2 - min_y + 50) * options.scale;
         
         svg << SvgLine(x1, y1, x2, y2, "#666666", 2);
+        if (model.type() == DiagramType::Silverston ||
+            model.type() == DiagramType::DataFlow ||
+            model.type() == DiagramType::MindMap) {
+            svg << SvgArrow(x1, y1, x2, y2, "#666666");
+        }
         
         // Cardinality labels
         if (!edge.label.empty()) {
@@ -226,22 +231,45 @@ std::string ExportManager::ExportToSvg(const DiagramModel& model,
         double w = node.width * options.scale;
         double h = node.height * options.scale;
         
-        // Node rectangle
-        svg << SvgRect(x, y, w, h, "#f0f0f0", "#333333");
-        
-        // Header
-        svg << "  <rect x=\"" << x << "\" y=\"" << y << "\" width=\"" << w 
-            << "\" height=\"25\" fill=\"#e0e0e0\" stroke=\"#333333\"/>\n";
-        
-        // Title
-        svg << SvgText(x + 5, y + 17, node.name, "Arial", 12);
-        
-        // Attributes
-        double attr_y = y + 35;
-        for (const auto& attr : node.attributes) {
-            std::string text = attr.name + " : " + attr.data_type;
-            svg << SvgText(x + 5, attr_y, text, "Arial", 10);
-            attr_y += 14;
+        if (model.type() == DiagramType::MindMap) {
+            svg << SvgEllipse(x, y, w, h, "#e6f0ff", "#335577");
+            svg << SvgText(x + w / 2 - 20, y + h / 2 + 4, node.name, "Arial", 12);
+        } else if (model.type() == DiagramType::DataFlow) {
+            if (node.type == "Process") {
+                svg << SvgRoundedRect(x, y, w, h, 12, "#e8f2ff", "#335577");
+            } else if (node.type == "Data Store") {
+                svg << SvgRect(x, y, w, h, "#f7f7f7", "#444444");
+                svg << SvgLine(x + 6, y, x + 6, y + h, "#444444", 2);
+                svg << SvgLine(x + w - 6, y, x + w - 6, y + h, "#444444", 2);
+            } else {
+                svg << SvgRect(x, y, w, h, "#f7f7f7", "#444444");
+            }
+            svg << SvgText(x + 6, y + 18, node.name, "Arial", 12);
+        } else if (model.type() == DiagramType::Whiteboard) {
+            if (node.type == "Note") {
+                svg << SvgRect(x, y, w, h, "#f2e698", "#8a7a2f");
+            } else if (node.type == "Sketch") {
+                svg << SvgRectDashed(x, y, w, h, "#f9f9f9", "#777777");
+            } else {
+                svg << SvgRect(x, y, w, h, "#f0f0f0", "#333333");
+            }
+            svg << SvgText(x + 6, y + 18, node.name, "Arial", 12);
+        } else if (model.type() == DiagramType::Silverston) {
+            svg << SvgRect(x, y, w, h, "#2f353a", "#8f9aa3");
+            svg << SvgText(x + 6, y + 18, node.name, "Arial", 12);
+            svg << SvgText(x + 6, y + 34, node.type, "Arial", 10);
+        } else {
+            // ERD default
+            svg << SvgRect(x, y, w, h, "#f0f0f0", "#333333");
+            svg << "  <rect x=\"" << x << "\" y=\"" << y << "\" width=\"" << w 
+                << "\" height=\"25\" fill=\"#e0e0e0\" stroke=\"#333333\"/>\n";
+            svg << SvgText(x + 5, y + 17, node.name, "Arial", 12);
+            double attr_y = y + 35;
+            for (const auto& attr : node.attributes) {
+                std::string text = attr.name + " : " + attr.data_type;
+                svg << SvgText(x + 5, attr_y, text, "Arial", 10);
+                attr_y += 14;
+            }
         }
     }
     
@@ -321,9 +349,31 @@ void ExportManager::RenderToDc(wxDC& dc, const DiagramModel& model,
         int y = static_cast<int>(node.y);
         int w = static_cast<int>(node.width);
         int h = static_cast<int>(node.height);
-        
-        dc.DrawRectangle(x, y, w, h);
-        dc.DrawText(node.name, x + 5, y + 5);
+
+        if (model.type() == DiagramType::MindMap) {
+            dc.DrawEllipse(x, y, w, h);
+            dc.DrawText(node.name, x + 8, y + 8);
+        } else if (model.type() == DiagramType::DataFlow) {
+            if (node.type == "Process") {
+                dc.DrawRoundedRectangle(x, y, w, h, 8);
+            } else if (node.type == "Data Store") {
+                dc.DrawRectangle(x, y, w, h);
+                dc.DrawLine(x + 6, y, x + 6, y + h);
+                dc.DrawLine(x + w - 6, y, x + w - 6, y + h);
+            } else {
+                dc.DrawRectangle(x, y, w, h);
+            }
+            dc.DrawText(node.name, x + 5, y + 5);
+        } else if (model.type() == DiagramType::Whiteboard) {
+            if (node.type == "Note") {
+                dc.SetBrush(wxBrush(wxColour(242, 230, 152)));
+            }
+            dc.DrawRectangle(x, y, w, h);
+            dc.DrawText(node.name, x + 5, y + 5);
+        } else {
+            dc.DrawRectangle(x, y, w, h);
+            dc.DrawText(node.name, x + 5, y + 5);
+        }
     }
 }
 
@@ -346,6 +396,55 @@ std::string ExportManager::SvgRect(double x, double y, double w, double h,
     ss << "  <rect x=\"" << x << "\" y=\"" << y << "\" width=\"" << w 
        << "\" height=\"" << h << "\" fill=\"" << fill << "\" stroke=\"" 
        << stroke << "\" stroke-width=\"1\"/>\n";
+    return ss.str();
+}
+
+std::string ExportManager::SvgRoundedRect(double x, double y, double w, double h, double r,
+                                           const std::string& fill, const std::string& stroke) {
+    std::stringstream ss;
+    ss << "  <rect x=\"" << x << "\" y=\"" << y << "\" width=\"" << w
+       << "\" height=\"" << h << "\" rx=\"" << r << "\" ry=\"" << r
+       << "\" fill=\"" << fill << "\" stroke=\"" << stroke << "\" stroke-width=\"1\"/>\n";
+    return ss.str();
+}
+
+std::string ExportManager::SvgRectDashed(double x, double y, double w, double h,
+                                          const std::string& fill, const std::string& stroke) {
+    std::stringstream ss;
+    ss << "  <rect x=\"" << x << "\" y=\"" << y << "\" width=\"" << w
+       << "\" height=\"" << h << "\" fill=\"" << fill << "\" stroke=\"" << stroke
+       << "\" stroke-width=\"1\" stroke-dasharray=\"4 3\"/>\n";
+    return ss.str();
+}
+
+std::string ExportManager::SvgEllipse(double x, double y, double w, double h,
+                                       const std::string& fill, const std::string& stroke) {
+    std::stringstream ss;
+    ss << "  <ellipse cx=\"" << (x + w / 2) << "\" cy=\"" << (y + h / 2)
+       << "\" rx=\"" << (w / 2) << "\" ry=\"" << (h / 2)
+       << "\" fill=\"" << fill << "\" stroke=\"" << stroke << "\" stroke-width=\"1\"/>\n";
+    return ss.str();
+}
+
+std::string ExportManager::SvgArrow(double x1, double y1, double x2, double y2,
+                                     const std::string& stroke) {
+    double dx = x2 - x1;
+    double dy = y2 - y1;
+    double len = std::sqrt(dx * dx + dy * dy);
+    if (len < 0.01) return "";
+    dx /= len;
+    dy /= len;
+    double size = 8.0;
+    double px = x2 - dx * size;
+    double py = y2 - dy * size;
+    double ox = -dy * (size * 0.5);
+    double oy = dx * (size * 0.5);
+    std::stringstream ss;
+    ss << "  <polygon points=\""
+       << x2 << "," << y2 << " "
+       << (px + ox) << "," << (py + oy) << " "
+       << (px - ox) << "," << (py - oy)
+       << "\" fill=\"" << stroke << "\"/>\n";
     return ss.str();
 }
 

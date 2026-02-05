@@ -831,7 +831,9 @@ void DiagramCanvas::DrawEdges(wxDC& dc) {
         std::vector<wxPoint> path = BuildOrthogonalPath(source, target);
         for (size_t i = 0; i + 1 < path.size(); ++i) {
             bool is_last = (i + 1 == path.size() - 1);
-            if (model_.type() == DiagramType::Silverston && is_last) {
+            if ((model_.type() == DiagramType::Silverston ||
+                 model_.type() == DiagramType::DataFlow ||
+                 model_.type() == DiagramType::MindMap) && is_last) {
                 DrawArrow(dc, path[i], path[i + 1]);
             } else {
                 dc.DrawLine(path[i], path[i + 1]);
@@ -946,11 +948,42 @@ void DiagramCanvas::DrawNodes(wxDC& dc) {
             } else {
                 dc.SetPen(node_border);
             }
-            dc.DrawRectangle(layer_rect);
+
+            if (model_.type() == DiagramType::MindMap) {
+                dc.DrawEllipse(layer_rect);
+            } else if (model_.type() == DiagramType::DataFlow) {
+                if (node.type == "Process") {
+                    dc.DrawRoundedRectangle(layer_rect, 12);
+                } else if (node.type == "Data Store") {
+                    dc.DrawRectangle(layer_rect);
+                    wxRect inner = layer_rect;
+                    inner.Deflate(6, 0);
+                    dc.DrawLine(inner.GetLeft(), inner.GetTop(), inner.GetLeft(), inner.GetBottom());
+                    dc.DrawLine(inner.GetRight(), inner.GetTop(), inner.GetRight(), inner.GetBottom());
+                } else {
+                    dc.DrawRectangle(layer_rect);
+                }
+            } else if (model_.type() == DiagramType::Whiteboard) {
+                if (node.type == "Note") {
+                    dc.SetBrush(wxBrush(wxColour(242, 230, 152)));
+                    dc.DrawRectangle(layer_rect);
+                } else if (node.type == "Sketch") {
+                    wxPen dashed(node_border);
+                    dashed.SetStyle(wxPENSTYLE_SHORT_DASH);
+                    dc.SetPen(dashed);
+                    dc.DrawRectangle(layer_rect);
+                } else {
+                    dc.DrawRectangle(layer_rect);
+                }
+            } else {
+                dc.DrawRectangle(layer_rect);
+            }
         }
 
         dc.DrawText(node.name, draw_rect.GetX() + 8, draw_rect.GetY() + 6);
-        dc.DrawText(node.type, draw_rect.GetX() + 8, draw_rect.GetY() + 26);
+        if (model_.type() != DiagramType::MindMap) {
+            dc.DrawText(node.type, draw_rect.GetX() + 8, draw_rect.GetY() + 26);
+        }
 
         if (model_.type() == DiagramType::Silverston) {
             wxRect icon_rect(draw_rect.GetX() + draw_rect.GetWidth() - 28,
