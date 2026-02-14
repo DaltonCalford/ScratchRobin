@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scratchrobin.package_profile_manifest.schema.json",
+  "title": "ScratchRobin Package Profile Manifest",
+  "type": "object",
+  "required": [
+    "manifest_version",
+    "profile_id",
+    "build_version",
+    "build_hash",
+    "build_timestamp_utc",
+    "platform",
+    "enabled_backends",
+    "surfaces",
+    "security_defaults",
+    "artifacts"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "manifest_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "profile_id": {
+      "type": "string",
+      "enum": [
+        "full",
+        "no_scratchbird",
+        "minimal_ui",
+        "ci_strict",
+        "preview",
+        "ga"
+      ]
+    },
+    "build_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "build_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "build_timestamp_utc": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "platform": {
+      "type": "string",
+      "enum": [
+        "linux",
+        "windows",
+        "macos"
+      ]
+    },
+    "enabled_backends": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "embedded",
+          "network",
+          "scratchbird",
+          "firebird",
+          "postgresql",
+          "mysql",
+          "mariadb"
+        ]
+      }
+    },
+    "surfaces": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "disabled",
+        "preview_only"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "$ref": "#/$defs/surfaceArray"
+        },
+        "disabled": {
+          "$ref": "#/$defs/surfaceArray"
+        },
+        "preview_only": {
+          "$ref": "#/$defs/surfaceArray"
+        }
+      }
+    },
+    "security_defaults": {
+      "type": "object",
+      "required": [
+        "security_mode",
+        "credential_store_policy",
+        "audit_enabled_default",
+        "tls_required_default"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "security_mode": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "hardened"
+          ]
+        },
+        "credential_store_policy": {
+          "type": "string",
+          "enum": [
+            "required",
+            "preferred",
+            "fallback_file"
+          ]
+        },
+        "audit_enabled_default": {
+          "type": "boolean"
+        },
+        "tls_required_default": {
+          "type": "boolean"
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "required": [
+        "license_path",
+        "attribution_path",
+        "help_root_path",
+        "config_template_path",
+        "connections_template_path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "license_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attribution_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "help_root_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "config_template_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "connections_template_path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "$defs": {
+    "surfaceId": {
+      "type": "string",
+      "enum": [
+        "MainFrame",
+        "ConnectionManagerFrame",
+        "ObjectManagerFrame",
+        "SqlEditorFrame",
+        "MonitoringFrame",
+        "UsersRolesFrame",
+        "JobsFrame",
+        "StorageManagerFrame",
+        "BackupRestoreFrame",
+        "InspectorTabs",
+        "SpecWorkspaceFrame",
+        "ClusterManagerFrame",
+        "ReplicationManagerFrame",
+        "EtlManagerFrame",
+        "DockerManagerPanel",
+        "TestRunnerPanel"
+      ]
+    },
+    "surfaceArray": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/surfaceId"
+      }
+    }
+  }
+}

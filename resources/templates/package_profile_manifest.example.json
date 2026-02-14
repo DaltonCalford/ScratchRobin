@@ -1,0 +1,40 @@
+{
+  "manifest_version": "1.0.0",
+  "profile_id": "full",
+  "build_version": "1.0.0",
+  "build_hash": "f9af1509f89f6f4cd7f01cc8cf7e30b4edc4cfb7e072bb1022db3ff51f8f4f64",
+  "build_timestamp_utc": "2026-02-14T00:00:00Z",
+  "platform": "linux",
+  "enabled_backends": [
+    "embedded",
+    "firebird",
+    "network"
+  ],
+  "surfaces": {
+    "enabled": [
+      "MainFrame",
+      "SqlEditorFrame",
+      "ObjectManagerFrame"
+    ],
+    "disabled": [
+      "ClusterManagerFrame",
+      "ReplicationManagerFrame"
+    ],
+    "preview_only": [
+      "EtlManagerFrame"
+    ]
+  },
+  "security_defaults": {
+    "security_mode": "standard",
+    "credential_store_policy": "preferred",
+    "audit_enabled_default": true,
+    "tls_required_default": false
+  },
+  "artifacts": {
+    "license_path": "docs/LICENSE.txt",
+    "attribution_path": "docs/ATTRIBUTION.txt",
+    "help_root_path": "share/help",
+    "config_template_path": "config/scratchrobin.toml.example",
+    "connections_template_path": "config/connections.toml.example"
+  }
+}

@@ -1,4 +1,5 @@
 #include "phases/phase_registry.h"
+#include "packaging/packaging_services.h"
 #include "release/release_conformance_services.h"
 #include "runtime/runtime_services.h"
 
@@ -70,6 +71,31 @@ int main(int argc, char** argv) {
             return verdict.promotable ? 0 : 3;
         } catch (const std::exception& ex) {
             std::cerr << "release gate check failed: " << ex.what() << "\n";
+            return 2;
+        }
+    }
+
+    if (argc > 0 && argv != nullptr && arg_value(argc, argv, "--validate-package-manifest=").has_value()) {
+        namespace fs = std::filesystem;
+        const fs::path repo_root = find_repo_root(argc > 0 ? argv[0] : nullptr);
+        const std::string manifest_path = *arg_value(argc, argv, "--validate-package-manifest=");
+        std::string registry_path = (repo_root / "resources/schemas/package_surface_id_registry.json").string();
+        std::string schema_path = (repo_root / "resources/schemas/package_profile_manifest.schema.json").string();
+        if (const auto value = arg_value(argc, argv, "--surface-registry=")) {
+            registry_path = *value;
+        }
+        if (const auto value = arg_value(argc, argv, "--manifest-schema=")) {
+            schema_path = *value;
+        }
+
+        try {
+            scratchrobin::packaging::PackagingService service;
+            const auto summary = service.ValidateManifestFile(manifest_path, registry_path, schema_path);
+            std::cout << "{\"ok\":" << (summary.ok ? "true" : "false")
+                      << ",\"profile_id\":\"" << summary.profile_id << "\"}\n";
+            return 0;
+        } catch (const std::exception& ex) {
+            std::cerr << "manifest validation failed: " << ex.what() << "\n";
             return 2;
         }
     }

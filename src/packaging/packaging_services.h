@@ -19,9 +19,16 @@ class PackagingService {
 public:
     std::string CanonicalBuildHash(const std::string& full_commit_id) const;
 
+    std::set<std::string> LoadSurfaceRegistry(const std::string& registry_json_path) const;
+    std::set<std::string> LoadBackendEnumFromSchema(const std::string& schema_json_path) const;
+    std::string LoadTextFile(const std::string& path) const;
+
     ManifestValidationSummary ValidateManifestJson(const std::string& manifest_json,
                                                    const std::set<std::string>& surface_registry,
                                                    const std::set<std::string>& backend_enum) const;
+    ManifestValidationSummary ValidateManifestFile(const std::string& manifest_path,
+                                                   const std::string& registry_json_path,
+                                                   const std::string& schema_json_path) const;
     void ValidateSurfaceRegistryJson(const std::string& manifest_json,
                                      const std::set<std::string>& surface_registry) const;
     void ValidatePackageArtifacts(const std::set<std::string>& packaged_paths) const;

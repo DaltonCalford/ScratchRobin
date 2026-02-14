@@ -183,5 +183,52 @@ int main() {
                         fs::remove_all(temp);
                     }});
 
+    tests.push_back({"integration/packaging_resource_contract_files", [] {
+                        namespace fs = std::filesystem;
+                        PackagingService svc;
+
+                        fs::path repo_root = fs::current_path();
+                        if (repo_root.filename() == "build") {
+                            repo_root = repo_root.parent_path();
+                        }
+                        if (!fs::exists(repo_root / "resources/schemas/package_profile_manifest.schema.json")) {
+                            repo_root = fs::path("/home/dcalford/CliWork/ScratchRobin");
+                        }
+
+                        const fs::path schema_path = repo_root / "resources/schemas/package_profile_manifest.schema.json";
+                        const fs::path registry_path = repo_root / "resources/schemas/package_surface_id_registry.json";
+                        const fs::path template_path = repo_root / "resources/templates/package_profile_manifest.example.json";
+
+                        scratchrobin::tests::AssertTrue(fs::exists(schema_path), "manifest schema file missing");
+                        scratchrobin::tests::AssertTrue(fs::exists(registry_path), "surface registry file missing");
+                        scratchrobin::tests::AssertTrue(fs::exists(template_path), "manifest template file missing");
+
+                        auto surface_registry = svc.LoadSurfaceRegistry(registry_path.string());
+                        auto backend_enum = svc.LoadBackendEnumFromSchema(schema_path.string());
+                        scratchrobin::tests::AssertTrue(surface_registry.count("MainFrame") == 1U, "registry missing MainFrame");
+                        scratchrobin::tests::AssertTrue(backend_enum.count("embedded") == 1U, "schema missing embedded backend");
+
+                        auto summary =
+                            svc.ValidateManifestFile(template_path.string(), registry_path.string(), schema_path.string());
+                        scratchrobin::tests::AssertTrue(summary.ok, "template manifest validation should pass");
+
+                        const fs::path temp = fs::temp_directory_path() / "scratchrobin_manifest_file_validation";
+                        fs::remove_all(temp);
+                        fs::create_directories(temp);
+                        auto text = svc.LoadTextFile(template_path.string());
+                        const std::string needle = "\"profile_id\": \"full\"";
+                        const std::size_t pos = text.find(needle);
+                        scratchrobin::tests::AssertTrue(pos != std::string::npos, "template profile_id not found");
+                        text.replace(pos, needle.size(), "\"profile_id\": \"ga\"");
+                        WriteTextFile(temp / "manifest_ga_invalid.json", text);
+                        ExpectReject("SRB1-R-9001", [&] {
+                            (void)svc.ValidateManifestFile((temp / "manifest_ga_invalid.json").string(),
+                                                           registry_path.string(),
+                                                           schema_path.string());
+                        });
+
+                        fs::remove_all(temp);
+                    }});
+
     return scratchrobin::tests::RunTests(tests);
 }

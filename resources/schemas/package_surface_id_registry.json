@@ -1,0 +1,21 @@
+{
+  "registry_version": "1.0.0",
+  "surface_ids": [
+    "MainFrame",
+    "ConnectionManagerFrame",
+    "ObjectManagerFrame",
+    "SqlEditorFrame",
+    "MonitoringFrame",
+    "UsersRolesFrame",
+    "JobsFrame",
+    "StorageManagerFrame",
+    "BackupRestoreFrame",
+    "InspectorTabs",
+    "SpecWorkspaceFrame",
+    "ClusterManagerFrame",
+    "ReplicationManagerFrame",
+    "EtlManagerFrame",
+    "DockerManagerPanel",
+    "TestRunnerPanel"
+  ]
+}

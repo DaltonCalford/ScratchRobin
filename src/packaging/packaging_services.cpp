@@ -1,5 +1,8 @@
 #include "packaging/packaging_services.h"
 
+#include <fstream>
+#include <sstream>
+
 #include "core/reject.h"
 
 namespace scratchrobin::packaging {
@@ -16,10 +19,78 @@ JsonValue ParseJsonManifest(const std::string& manifest_json) {
     return root;
 }
 
+const JsonValue& RequireObjectMember(const JsonValue& object,
+                                     const std::string& key,
+                                     const std::string& method) {
+    if (object.type != JsonValue::Type::Object) {
+        throw MakeReject("SRB1-R-9002", "invalid json object", "packaging", method);
+    }
+    const JsonValue* value = FindMember(object, key);
+    if (value == nullptr || value->type != JsonValue::Type::Object) {
+        throw MakeReject("SRB1-R-9002", "missing/invalid object member", "packaging", method, false, key);
+    }
+    return *value;
+}
+
+std::vector<std::string> RequireStringArrayMember(const JsonValue& object,
+                                                  const std::string& key,
+                                                  const std::string& method) {
+    if (object.type != JsonValue::Type::Object) {
+        throw MakeReject("SRB1-R-9002", "invalid json object", "packaging", method);
+    }
+    const JsonValue* value = FindMember(object, key);
+    if (value == nullptr || value->type != JsonValue::Type::Array) {
+        throw MakeReject("SRB1-R-9002", "missing/invalid array member", "packaging", method, false, key);
+    }
+    std::vector<std::string> out;
+    out.reserve(value->array_value.size());
+    for (const auto& item : value->array_value) {
+        std::string text;
+        if (!GetStringValue(item, &text)) {
+            throw MakeReject("SRB1-R-9002", "non-string array element", "packaging", method, false, key);
+        }
+        out.push_back(text);
+    }
+    return out;
+}
+
 }  // namespace
 
 std::string PackagingService::CanonicalBuildHash(const std::string& full_commit_id) const {
     return beta1b::CanonicalBuildHash(full_commit_id);
+}
+
+std::set<std::string> PackagingService::LoadSurfaceRegistry(const std::string& registry_json_path) const {
+    const auto json = ParseJsonManifest(LoadTextFile(registry_json_path));
+    const auto values = RequireStringArrayMember(json, "surface_ids", "load_surface_registry");
+    std::set<std::string> out(values.begin(), values.end());
+    if (out.empty()) {
+        throw MakeReject("SRB1-R-9002", "surface registry cannot be empty", "packaging", "load_surface_registry");
+    }
+    return out;
+}
+
+std::set<std::string> PackagingService::LoadBackendEnumFromSchema(const std::string& schema_json_path) const {
+    const auto json = ParseJsonManifest(LoadTextFile(schema_json_path));
+    const JsonValue& properties = RequireObjectMember(json, "properties", "load_backend_enum");
+    const JsonValue& enabled_backends = RequireObjectMember(properties, "enabled_backends", "load_backend_enum");
+    const JsonValue& items = RequireObjectMember(enabled_backends, "items", "load_backend_enum");
+    const auto enum_values = RequireStringArrayMember(items, "enum", "load_backend_enum");
+    std::set<std::string> out(enum_values.begin(), enum_values.end());
+    if (out.empty()) {
+        throw MakeReject("SRB1-R-9002", "backend enum cannot be empty", "packaging", "load_backend_enum");
+    }
+    return out;
+}
+
+std::string PackagingService::LoadTextFile(const std::string& path) const {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        throw MakeReject("SRB1-R-9002", "file read failure", "packaging", "load_text_file", false, path);
+    }
+    std::ostringstream out;
+    out << in.rdbuf();
+    return out.str();
 }
 
 ManifestValidationSummary PackagingService::ValidateManifestJson(const std::string& manifest_json,
@@ -31,6 +102,15 @@ ManifestValidationSummary PackagingService::ValidateManifestJson(const std::stri
     summary.ok = result.ok;
     summary.profile_id = result.profile_id;
     return summary;
+}
+
+ManifestValidationSummary PackagingService::ValidateManifestFile(const std::string& manifest_path,
+                                                                 const std::string& registry_json_path,
+                                                                 const std::string& schema_json_path) const {
+    const auto manifest_json = LoadTextFile(manifest_path);
+    const auto surface_registry = LoadSurfaceRegistry(registry_json_path);
+    const auto backend_enum = LoadBackendEnumFromSchema(schema_json_path);
+    return ValidateManifestJson(manifest_json, surface_registry, backend_enum);
 }
 
 void PackagingService::ValidateSurfaceRegistryJson(const std::string& manifest_json,
