@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(SCRATCHROBIN_BUILD_TESTS "Build beta1b conformance-first tests" ON)
+
 add_library(scratchrobin_phase_scaffold STATIC
     src/phases/phase00_governance.cpp
     src/phases/phase01_scope.cpp
@@ -26,6 +28,64 @@ target_include_directories(scratchrobin_phase_scaffold PUBLIC
 
 target_compile_features(scratchrobin_phase_scaffold PUBLIC cxx_std_20)
 
+add_library(scratchrobin_core_contracts STATIC
+    src/core/reject.cpp
+    src/core/sha256.cpp
+    src/core/simple_json.cpp
+    src/core/beta1b_contracts.cpp
+)
+
+target_include_directories(scratchrobin_core_contracts PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_compile_features(scratchrobin_core_contracts PUBLIC cxx_std_20)
+
 add_executable(scratchrobin src/main.cpp)
 
-target_link_libraries(scratchrobin PRIVATE scratchrobin_phase_scaffold)
+target_link_libraries(scratchrobin PRIVATE scratchrobin_phase_scaffold scratchrobin_core_contracts)
+
+if(SCRATCHROBIN_BUILD_TESTS)
+    enable_testing()
+
+    add_executable(scratchrobin_tests_unit
+        tests/unit/beta1b_contracts_unit.cpp
+    )
+    target_include_directories(scratchrobin_tests_unit PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(scratchrobin_tests_unit PRIVATE scratchrobin_core_contracts)
+    add_test(NAME scratchrobin_tests_unit COMMAND scratchrobin_tests_unit)
+
+    add_executable(scratchrobin_tests_smoke
+        tests/smoke/beta1b_smoke.cpp
+    )
+    target_include_directories(scratchrobin_tests_smoke PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(scratchrobin_tests_smoke PRIVATE scratchrobin_phase_scaffold scratchrobin_core_contracts)
+    add_test(NAME scratchrobin_tests_smoke COMMAND scratchrobin_tests_smoke)
+
+    add_executable(scratchrobin_tests_integration
+        tests/integration/beta1b_integration.cpp
+    )
+    target_include_directories(scratchrobin_tests_integration PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(scratchrobin_tests_integration PRIVATE scratchrobin_core_contracts)
+    add_test(NAME scratchrobin_tests_integration COMMAND scratchrobin_tests_integration)
+
+    add_executable(scratchrobin_tests_conformance
+        tests/conformance/beta1b_conformance_vector.cpp
+    )
+    target_include_directories(scratchrobin_tests_conformance PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(scratchrobin_tests_conformance PRIVATE scratchrobin_core_contracts)
+    add_test(NAME scratchrobin_tests_conformance COMMAND scratchrobin_tests_conformance)
+endif()

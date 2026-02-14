@@ -2,7 +2,7 @@
 
 ScratchRobin is now in Beta implementation.
 
-All Alpha specification goals have been met, and the first Beta specification set is now being implemented.
+All Alpha specification goals have been met, and the first Beta specification set now has a contract-complete runtime with case-ID conformance coverage.
 
 Authoritative specification source:
 - /home/dcalford/CliWork/local_work/docs/specifications_beta1b/
@@ -14,6 +14,10 @@ Implementation intent:
 1. Remove implementation drift from prior alpha work.
 2. Implement deterministically from beta1b contracts and conformance rows.
 3. Keep legacy material available for reference only.
+
+Conformance evidence:
+- `docs/conformance/CONFORMANCE_IMPLEMENTATION_CHECKLIST.csv`
+- `tests/conformance/beta1b_conformance_vector.cpp`
 
 ## Clone Resync Required
 
