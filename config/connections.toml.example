@@ -1,0 +1,20 @@
+[[connection]]
+name = "local_scratchbird"
+backend = "scratchbird"
+mode = "network"
+host = "127.0.0.1"
+port = 3092
+database = "scratchbird"
+username = "sysdba"
+credential_id = "local_default"
+
+[[connection]]
+name = "local_firebird"
+backend = "firebird"
+mode = "network"
+host = "127.0.0.1"
+port = 3050
+database = "employee"
+username = "sysdba"
+credential_id = "fb_default"
+

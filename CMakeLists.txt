@@ -42,9 +42,22 @@ target_include_directories(scratchrobin_core_contracts PUBLIC
 
 target_compile_features(scratchrobin_core_contracts PUBLIC cxx_std_20)
 
+add_library(scratchrobin_runtime STATIC
+    src/runtime/runtime_config.cpp
+    src/runtime/runtime_services.cpp
+)
+
+target_include_directories(scratchrobin_runtime PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(scratchrobin_runtime PUBLIC scratchrobin_core_contracts)
+target_compile_features(scratchrobin_runtime PUBLIC cxx_std_20)
+
 add_executable(scratchrobin src/main.cpp)
 
-target_link_libraries(scratchrobin PRIVATE scratchrobin_phase_scaffold scratchrobin_core_contracts)
+target_link_libraries(scratchrobin PRIVATE scratchrobin_phase_scaffold scratchrobin_core_contracts scratchrobin_runtime)
 
 if(SCRATCHROBIN_BUILD_TESTS)
     enable_testing()
@@ -76,8 +89,18 @@ if(SCRATCHROBIN_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
-    target_link_libraries(scratchrobin_tests_integration PRIVATE scratchrobin_core_contracts)
+    target_link_libraries(scratchrobin_tests_integration PRIVATE scratchrobin_core_contracts scratchrobin_runtime)
     add_test(NAME scratchrobin_tests_integration COMMAND scratchrobin_tests_integration)
+
+    add_executable(scratchrobin_tests_runtime_integration
+        tests/integration/runtime_lifecycle_integration.cpp
+    )
+    target_include_directories(scratchrobin_tests_runtime_integration PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(scratchrobin_tests_runtime_integration PRIVATE scratchrobin_core_contracts scratchrobin_runtime)
+    add_test(NAME scratchrobin_tests_runtime_integration COMMAND scratchrobin_tests_runtime_integration)
 
     add_executable(scratchrobin_tests_conformance
         tests/conformance/beta1b_conformance_vector.cpp

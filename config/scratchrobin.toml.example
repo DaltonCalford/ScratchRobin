@@ -1,0 +1,17 @@
+[startup]
+enabled = true
+show_progress = true
+
+[network]
+connect_timeout_ms = 5000
+query_timeout_ms = 0
+read_timeout_ms = 30000
+write_timeout_ms = 30000
+
+[metadata]
+use_fixture = false
+fixture_path = ""
+
+[runtime]
+mandatory_backends = false
+
