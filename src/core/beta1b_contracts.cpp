@@ -270,6 +270,21 @@ void EnsureSortedUnique(std::vector<std::string> values,
     }
 }
 
+void EnsureOnlyObjectFields(const JsonValue& object,
+                            const std::set<std::string>& allowed,
+                            const std::string& code,
+                            const std::string& surface,
+                            const std::string& op) {
+    if (object.type != JsonValue::Type::Object) {
+        throw MakeReject(code, "object expected", surface, op);
+    }
+    for (const auto& [key, _] : object.object_value) {
+        if (allowed.count(key) == 0U) {
+            throw MakeReject(code, "unexpected field: " + key, surface, op);
+        }
+    }
+}
+
 }  // namespace
 
 // -------------------------
@@ -448,6 +463,14 @@ void ValidateTransport(const EnterpriseConnectionProfile& profile) {
                                  false,
                                  "index=" + std::to_string(i));
             }
+            if (hop.auth_method != "password" && hop.auth_method != "keypair" && hop.auth_method != "agent") {
+                throw MakeReject("SRB1-R-4004", "jump host invalid auth_method", "connection", "validate_transport",
+                                 false, "index=" + std::to_string(i));
+            }
+            if ((hop.auth_method == "password" || hop.auth_method == "keypair") && hop.credential_id.empty()) {
+                throw MakeReject("SRB1-R-4004", "jump host missing credential_id", "connection", "validate_transport",
+                                 false, "index=" + std::to_string(i));
+            }
         }
     }
 
@@ -458,6 +481,9 @@ void ValidateTransport(const EnterpriseConnectionProfile& profile) {
     }
     if (ident.mode != "local_password" && ident.provider_id.empty()) {
         throw MakeReject("SRB1-R-4005", "provider_id required", "connection", "validate_transport");
+    }
+    if ((ident.mode == "oidc" || ident.mode == "saml") && ident.provider_scope.empty()) {
+        throw MakeReject("SRB1-R-4005", "provider_scope required", "connection", "validate_transport");
     }
 
     if (profile.secret_provider.has_value()) {
@@ -551,7 +577,19 @@ SessionFingerprint ConnectEnterprise(
     out.profile_id = profile.profile_id;
     out.transport_mode = profile.transport.mode;
     out.identity_mode = profile.identity.mode;
-    out.backend_route = profile.transport.mode == "direct" ? "direct" : "ssh";
+    if (profile.transport.mode == "direct") {
+        out.backend_route = "direct";
+    } else if (profile.transport.mode == "ssh_tunnel") {
+        out.backend_route = "ssh_tunnel:" + profile.ssh->target_host + ":" + std::to_string(profile.ssh->target_port);
+    } else {
+        std::vector<std::string> hops;
+        hops.reserve(profile.jump_hosts.size());
+        for (const auto& hop : profile.jump_hosts) {
+            hops.push_back(hop.host + ":" + std::to_string(hop.port));
+        }
+        out.backend_route = "ssh_jump_chain:" + std::to_string(profile.jump_hosts.size()) + ":" + Join(hops, "->") +
+                            "->" + profile.ssh->target_host + ":" + std::to_string(profile.ssh->target_port);
+    }
     return out;
 }
 
@@ -691,23 +729,411 @@ void ValidateProjectPayload(const JsonValue& payload) {
     if (payload.type != JsonValue::Type::Object) {
         throw MakeReject("SRB1-R-3002", "project payload must be object", "project", "validate_project_payload");
     }
-    const JsonValue* project = FindMember(payload, "project");
-    if (project == nullptr || project->type != JsonValue::Type::Object) {
-        throw MakeReject("SRB1-R-3002", "missing project object", "project", "validate_project_payload");
+
+    const auto require_object = [&](const JsonValue& parent, const std::string& key) -> const JsonValue& {
+        const JsonValue* value = FindMember(parent, key);
+        if (value == nullptr || value->type != JsonValue::Type::Object) {
+            throw MakeReject("SRB1-R-3002", "missing object field: " + key, "project", "validate_project_payload");
+        }
+        return *value;
+    };
+    const auto require_array = [&](const JsonValue& parent, const std::string& key) -> const JsonValue& {
+        const JsonValue* value = FindMember(parent, key);
+        if (value == nullptr || value->type != JsonValue::Type::Array) {
+            throw MakeReject("SRB1-R-3002", "missing array field: " + key, "project", "validate_project_payload");
+        }
+        return *value;
+    };
+    const auto require_string = [&](const JsonValue& parent, const std::string& key, bool non_empty) -> std::string {
+        const JsonValue* value = FindMember(parent, key);
+        std::string out;
+        if (value == nullptr || !GetStringValue(*value, &out) || (non_empty && out.empty())) {
+            throw MakeReject("SRB1-R-3002", "invalid string field: " + key, "project", "validate_project_payload");
+        }
+        return out;
+    };
+    const auto require_bool = [&](const JsonValue& parent, const std::string& key) -> bool {
+        const JsonValue* value = FindMember(parent, key);
+        bool out = false;
+        if (value == nullptr || !GetBoolValue(*value, &out)) {
+            throw MakeReject("SRB1-R-3002", "invalid bool field: " + key, "project", "validate_project_payload");
+        }
+        return out;
+    };
+    const auto require_int_min = [&](const JsonValue& parent, const std::string& key, int64_t min) -> int64_t {
+        const JsonValue* value = FindMember(parent, key);
+        int64_t out = 0;
+        if (value == nullptr || !GetInt64Value(*value, &out) || out < min) {
+            throw MakeReject("SRB1-R-3002", "invalid integer field: " + key, "project", "validate_project_payload");
+        }
+        return out;
+    };
+    const auto ensure_only_fields = [&](const JsonValue& object,
+                                        const std::set<std::string>& allowed,
+                                        const std::string& context) {
+        for (const auto& [key, _] : object.object_value) {
+            if (allowed.count(key) == 0U) {
+                throw MakeReject("SRB1-R-3002", "unexpected field in " + context + ": " + key, "project",
+                                 "validate_project_payload");
+            }
+        }
+    };
+    const auto is_uuid = [&](const std::string& value) -> bool {
+        static const std::regex re(R"(^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$)");
+        return std::regex_match(value.begin(), value.end(), re);
+    };
+    const auto is_rel_path = [&](const std::string& value) -> bool {
+        return !value.empty() && value.find("..") == std::string::npos &&
+               (value[0] != '/' && value.find(':') == std::string::npos);
+    };
+
+    ensure_only_fields(payload, {"project"}, "root");
+    const JsonValue& project = require_object(payload, "project");
+    ensure_only_fields(project,
+                       {"project_id", "name", "created_at", "updated_at", "config", "objects", "objects_by_path",
+                        "reporting_assets", "reporting_schedules", "data_view_snapshots", "git_sync_state",
+                        "audit_log_path"},
+                       "project");
+
+    const std::string project_id = require_string(project, "project_id", true);
+    if (!is_uuid(project_id)) {
+        throw MakeReject("SRB1-R-3002", "invalid project_id", "project", "validate_project_payload");
+    }
+    (void)require_string(project, "name", true);
+    const std::string created_at = require_string(project, "created_at", true);
+    const std::string updated_at = require_string(project, "updated_at", true);
+    if (!IsRfc3339Utc(created_at) || !IsRfc3339Utc(updated_at)) {
+        throw MakeReject("SRB1-R-3002", "invalid project timestamps", "project", "validate_project_payload");
+    }
+    if (updated_at < created_at) {
+        throw MakeReject("SRB1-R-3002", "updated_at earlier than created_at", "project", "validate_project_payload");
     }
 
-    const std::vector<std::string> required = {
-        "project_id", "name", "created_at", "updated_at", "config", "objects", "objects_by_path", "reporting_assets",
-        "reporting_schedules", "data_view_snapshots", "git_sync_state", "audit_log_path"};
-    for (const auto& field : required) {
-        if (FindMember(*project, field) == nullptr) {
-            throw MakeReject("SRB1-R-3002", "missing project field: " + field, "project", "validate_project_payload");
+    const JsonValue& config = require_object(project, "config");
+    ensure_only_fields(config,
+                       {"default_environment_id", "active_connection_id", "connections_file_path", "governance",
+                        "security_mode", "features"},
+                       "project.config");
+    (void)require_string(config, "default_environment_id", true);
+    const JsonValue* active_connection_id = FindMember(config, "active_connection_id");
+    if (active_connection_id == nullptr ||
+        !(active_connection_id->type == JsonValue::Type::Null ||
+          (active_connection_id->type == JsonValue::Type::String && is_uuid(active_connection_id->string_value)))) {
+        throw MakeReject("SRB1-R-3002", "invalid active_connection_id", "project", "validate_project_payload");
+    }
+    const std::string connections_file_path = require_string(config, "connections_file_path", true);
+    if (!is_rel_path(connections_file_path)) {
+        throw MakeReject("SRB1-R-3002", "invalid connections_file_path", "project", "validate_project_payload");
+    }
+
+    const JsonValue& governance = require_object(config, "governance");
+    ensure_only_fields(governance,
+                       {"owners", "stewards", "review_min_approvals", "allowed_roles_by_environment", "ai_policy",
+                        "audit_policy"},
+                       "project.config.governance");
+    const JsonValue& owners = require_array(governance, "owners");
+    if (owners.array_value.empty()) {
+        throw MakeReject("SRB1-R-3002", "governance.owners cannot be empty", "project", "validate_project_payload");
+    }
+    std::set<std::string> owner_names;
+    for (const auto& row : owners.array_value) {
+        if (row.type != JsonValue::Type::String || row.string_value.empty() || owner_names.count(row.string_value) > 0U) {
+            throw MakeReject("SRB1-R-3002", "invalid governance owner entry", "project", "validate_project_payload");
+        }
+        owner_names.insert(row.string_value);
+    }
+    const JsonValue& stewards = require_array(governance, "stewards");
+    std::set<std::string> steward_names;
+    for (const auto& row : stewards.array_value) {
+        if (row.type != JsonValue::Type::String || row.string_value.empty() || steward_names.count(row.string_value) > 0U) {
+            throw MakeReject("SRB1-R-3002", "invalid governance steward entry", "project", "validate_project_payload");
+        }
+        steward_names.insert(row.string_value);
+    }
+    (void)require_int_min(governance, "review_min_approvals", 1);
+    const JsonValue& allowed_roles = require_object(governance, "allowed_roles_by_environment");
+    for (const auto& [env_id, role_array] : allowed_roles.object_value) {
+        if (env_id.empty() || role_array.type != JsonValue::Type::Array) {
+            throw MakeReject("SRB1-R-3002", "invalid allowed_roles_by_environment", "project", "validate_project_payload");
+        }
+        std::set<std::string> roles;
+        for (const auto& role : role_array.array_value) {
+            if (role.type != JsonValue::Type::String || role.string_value.empty() || roles.count(role.string_value) > 0U) {
+                throw MakeReject("SRB1-R-3002", "invalid role entry", "project", "validate_project_payload");
+            }
+            roles.insert(role.string_value);
+        }
+    }
+    const JsonValue& ai_policy = require_object(governance, "ai_policy");
+    ensure_only_fields(ai_policy, {"enabled", "require_review", "allow_scopes", "deny_scopes"},
+                       "project.config.governance.ai_policy");
+    (void)require_bool(ai_policy, "enabled");
+    (void)require_bool(ai_policy, "require_review");
+    for (const auto& key : {"allow_scopes", "deny_scopes"}) {
+        const JsonValue& scopes = require_array(ai_policy, key);
+        std::set<std::string> seen;
+        for (const auto& row : scopes.array_value) {
+            if (row.type != JsonValue::Type::String || row.string_value.empty() || seen.count(row.string_value) > 0U) {
+                throw MakeReject("SRB1-R-3002", "invalid ai scope entry", "project", "validate_project_payload");
+            }
+            seen.insert(row.string_value);
+        }
+    }
+    const JsonValue& audit_policy = require_object(governance, "audit_policy");
+    ensure_only_fields(audit_policy, {"level", "retention_days", "export_enabled"},
+                       "project.config.governance.audit_policy");
+    const std::string audit_level = require_string(audit_policy, "level", true);
+    if (audit_level != "minimal" && audit_level != "standard" && audit_level != "verbose") {
+        throw MakeReject("SRB1-R-3002", "invalid audit level", "project", "validate_project_payload");
+    }
+    (void)require_int_min(audit_policy, "retention_days", 1);
+    (void)require_bool(audit_policy, "export_enabled");
+
+    const std::string security_mode = require_string(config, "security_mode", true);
+    if (security_mode != "standard" && security_mode != "hardened") {
+        throw MakeReject("SRB1-R-3002", "invalid security_mode", "project", "validate_project_payload");
+    }
+    const JsonValue& features = require_object(config, "features");
+    for (const auto& [name, enabled] : features.object_value) {
+        if (name.empty() || enabled.type != JsonValue::Type::Bool) {
+            throw MakeReject("SRB1-R-3002", "invalid feature flag", "project", "validate_project_payload");
         }
     }
 
-    std::string ts;
-    if (!GetStringValue(*FindMember(*project, "created_at"), &ts) || !IsRfc3339Utc(ts)) {
-        throw MakeReject("SRB1-R-3002", "invalid created_at", "project", "validate_project_payload");
+    static const std::set<std::string> object_kinds = {"schema", "table", "index", "domain", "sequence", "view",
+                                                        "trigger", "procedure", "function", "package", "job", "user", "role"};
+    static const std::set<std::string> design_states = {"EXTRACTED", "NEW", "MODIFIED", "DELETED", "PENDING",
+                                                         "APPROVED", "REJECTED", "IMPLEMENTED", "CONFLICTED"};
+    const JsonValue& objects = require_array(project, "objects");
+    std::set<std::string> object_ids;
+    std::set<std::string> object_paths;
+    for (const auto& row : objects.array_value) {
+        if (row.type != JsonValue::Type::Object) {
+            throw MakeReject("SRB1-R-3002", "invalid project object row", "project", "validate_project_payload");
+        }
+        ensure_only_fields(row,
+                           {"id", "kind", "name", "path", "schema_name", "design_state", "has_source", "source_snapshot",
+                            "current_design", "comments", "change_history", "design_file_path"},
+                           "project.objects[]");
+        const std::string id = require_string(row, "id", true);
+        const std::string kind = require_string(row, "kind", true);
+        const std::string name = require_string(row, "name", true);
+        const std::string path = require_string(row, "path", true);
+        if (!is_uuid(id) || object_ids.count(id) > 0U) {
+            throw MakeReject("SRB1-R-3002", "invalid/duplicate project object id", "project", "validate_project_payload");
+        }
+        if (object_kinds.count(kind) == 0U || name.empty() || !is_rel_path(path) || object_paths.count(path) > 0U) {
+            throw MakeReject("SRB1-R-3002", "invalid project object identity", "project", "validate_project_payload");
+        }
+        object_ids.insert(id);
+        object_paths.insert(path);
+
+        const JsonValue* schema_name = FindMember(row, "schema_name");
+        if (schema_name == nullptr ||
+            !(schema_name->type == JsonValue::Type::Null ||
+              (schema_name->type == JsonValue::Type::String))) {
+            throw MakeReject("SRB1-R-3002", "invalid schema_name", "project", "validate_project_payload");
+        }
+        const std::string design_state = require_string(row, "design_state", true);
+        if (design_states.count(design_state) == 0U) {
+            throw MakeReject("SRB1-R-3002", "invalid design_state", "project", "validate_project_payload");
+        }
+        const bool has_source = require_bool(row, "has_source");
+        const JsonValue* source_snapshot = FindMember(row, "source_snapshot");
+        if (source_snapshot == nullptr ||
+            !(source_snapshot->type == JsonValue::Type::Null ||
+              source_snapshot->type == JsonValue::Type::String)) {
+            throw MakeReject("SRB1-R-3002", "invalid source_snapshot", "project", "validate_project_payload");
+        }
+        if (has_source &&
+            !(source_snapshot->type == JsonValue::Type::String && !source_snapshot->string_value.empty())) {
+            throw MakeReject("SRB1-R-3002", "has_source requires source_snapshot", "project", "validate_project_payload");
+        }
+        for (const auto& key : {"current_design", "comments"}) {
+            const JsonValue* text = FindMember(row, key);
+            if (text == nullptr ||
+                !(text->type == JsonValue::Type::Null || text->type == JsonValue::Type::String)) {
+                throw MakeReject("SRB1-R-3002", "invalid nullable text field", "project", "validate_project_payload");
+            }
+        }
+        const JsonValue& history = require_array(row, "change_history");
+        for (const auto& entry : history.array_value) {
+            if (entry.type != JsonValue::Type::Object) {
+                throw MakeReject("SRB1-R-3002", "invalid change_history row", "project", "validate_project_payload");
+            }
+            ensure_only_fields(entry,
+                               {"timestamp", "actor", "action", "state_before", "state_after", "note"},
+                               "project.objects[].change_history[]");
+            const std::string ts = require_string(entry, "timestamp", true);
+            const std::string actor = require_string(entry, "actor", true);
+            const std::string action = require_string(entry, "action", true);
+            const std::string before = require_string(entry, "state_before", true);
+            const std::string after = require_string(entry, "state_after", true);
+            if (!IsRfc3339Utc(ts) || actor.empty() || action.empty() || design_states.count(before) == 0U ||
+                design_states.count(after) == 0U) {
+                throw MakeReject("SRB1-R-3002", "invalid change_history fields", "project", "validate_project_payload");
+            }
+            const JsonValue* note = FindMember(entry, "note");
+            if (note == nullptr || !(note->type == JsonValue::Type::Null || note->type == JsonValue::Type::String)) {
+                throw MakeReject("SRB1-R-3002", "invalid change_history note", "project", "validate_project_payload");
+            }
+        }
+        const JsonValue* design_file_path = FindMember(row, "design_file_path");
+        if (design_file_path == nullptr ||
+            !(design_file_path->type == JsonValue::Type::Null ||
+              (design_file_path->type == JsonValue::Type::String &&
+               (design_file_path->string_value.empty() || is_rel_path(design_file_path->string_value))))) {
+            throw MakeReject("SRB1-R-3002", "invalid design_file_path", "project", "validate_project_payload");
+        }
+    }
+
+    const JsonValue& objects_by_path = require_object(project, "objects_by_path");
+    for (const auto& [path, object_id] : objects_by_path.object_value) {
+        if (!is_rel_path(path) || object_id.type != JsonValue::Type::String || !is_uuid(object_id.string_value) ||
+            object_paths.count(path) == 0U || object_ids.count(object_id.string_value) == 0U) {
+            throw MakeReject("SRB1-R-3002", "invalid objects_by_path entry", "project", "validate_project_payload");
+        }
+    }
+
+    const JsonValue& reporting_assets = require_array(project, "reporting_assets");
+    std::set<std::string> reporting_asset_ids;
+    static const std::set<std::string> reporting_asset_types = {"Question", "Dashboard", "Model", "Metric", "Segment",
+                                                                 "Alert", "Subscription", "Collection", "Timeline"};
+    for (const auto& row : reporting_assets.array_value) {
+        if (row.type != JsonValue::Type::Object) {
+            throw MakeReject("SRB1-R-3002", "invalid reporting asset row", "project", "validate_project_payload");
+        }
+        ensure_only_fields(row,
+                           {"id", "asset_type", "name", "collection_id", "created_at", "updated_at", "created_by",
+                            "updated_by", "payload_json"},
+                           "project.reporting_assets[]");
+        const std::string id = require_string(row, "id", true);
+        const std::string asset_type = require_string(row, "asset_type", true);
+        const std::string name = require_string(row, "name", true);
+        const std::string created = require_string(row, "created_at", true);
+        const std::string updated = require_string(row, "updated_at", true);
+        const std::string payload_json = require_string(row, "payload_json", true);
+        if (!is_uuid(id) || reporting_asset_ids.count(id) > 0U || reporting_asset_types.count(asset_type) == 0U ||
+            name.empty() || payload_json.empty() || !IsRfc3339Utc(created) || !IsRfc3339Utc(updated)) {
+            throw MakeReject("SRB1-R-3002", "invalid reporting asset fields", "project", "validate_project_payload");
+        }
+        reporting_asset_ids.insert(id);
+        const JsonValue* collection = FindMember(row, "collection_id");
+        if (collection == nullptr ||
+            !(collection->type == JsonValue::Type::Null ||
+              (collection->type == JsonValue::Type::String && is_uuid(collection->string_value)))) {
+            throw MakeReject("SRB1-R-3002", "invalid reporting collection_id", "project", "validate_project_payload");
+        }
+        for (const auto& key : {"created_by", "updated_by"}) {
+            const JsonValue* user = FindMember(row, key);
+            if (user == nullptr || !(user->type == JsonValue::Type::Null || user->type == JsonValue::Type::String)) {
+                throw MakeReject("SRB1-R-3002", "invalid reporting user field", "project", "validate_project_payload");
+            }
+        }
+    }
+
+    const JsonValue& reporting_schedules = require_array(project, "reporting_schedules");
+    for (const auto& row : reporting_schedules.array_value) {
+        if (row.type != JsonValue::Type::Object) {
+            throw MakeReject("SRB1-R-3002", "invalid reporting schedule row", "project", "validate_project_payload");
+        }
+        ensure_only_fields(row,
+                           {"id", "asset_id", "schedule_kind", "schedule_spec", "schedule_dtstart_local", "timezone",
+                            "schedule_rdates_local", "schedule_exdates_local", "enabled", "next_run_at"},
+                           "project.reporting_schedules[]");
+        const std::string schedule_id = require_string(row, "id", true);
+        const std::string asset_id = require_string(row, "asset_id", true);
+        const std::string schedule_kind = require_string(row, "schedule_kind", true);
+        ReportingSchedule schedule;
+        schedule.schedule_spec = require_string(row, "schedule_spec", true);
+        schedule.schedule_dtstart_local = require_string(row, "schedule_dtstart_local", true);
+        schedule.timezone = require_string(row, "timezone", true);
+        if (!is_uuid(schedule_id) || !is_uuid(asset_id) || reporting_asset_ids.count(asset_id) == 0U ||
+            schedule_kind != "RRULE") {
+            throw MakeReject("SRB1-R-3002", "invalid reporting schedule identity", "project", "validate_project_payload");
+        }
+        const JsonValue& rdates = require_array(row, "schedule_rdates_local");
+        for (const auto& dt : rdates.array_value) {
+            if (dt.type != JsonValue::Type::String || !IsLocalDateTime(dt.string_value)) {
+                throw MakeReject("SRB1-R-3002", "invalid schedule_rdates_local", "project", "validate_project_payload");
+            }
+            schedule.schedule_rdates_local.push_back(dt.string_value);
+        }
+        const JsonValue& exdates = require_array(row, "schedule_exdates_local");
+        for (const auto& dt : exdates.array_value) {
+            if (dt.type != JsonValue::Type::String || !IsLocalDateTime(dt.string_value)) {
+                throw MakeReject("SRB1-R-3002", "invalid schedule_exdates_local", "project", "validate_project_payload");
+            }
+            schedule.schedule_exdates_local.push_back(dt.string_value);
+        }
+        (void)require_bool(row, "enabled");
+        const JsonValue* next_run_at = FindMember(row, "next_run_at");
+        if (next_run_at == nullptr ||
+            !(next_run_at->type == JsonValue::Type::Null ||
+              (next_run_at->type == JsonValue::Type::String && IsRfc3339Utc(next_run_at->string_value)))) {
+            throw MakeReject("SRB1-R-3002", "invalid schedule next_run_at", "project", "validate_project_payload");
+        }
+        ValidateAnchorUntil(schedule);
+    }
+
+    const JsonValue& snapshots = require_array(project, "data_view_snapshots");
+    for (const auto& row : snapshots.array_value) {
+        if (row.type != JsonValue::Type::Object) {
+            throw MakeReject("SRB1-R-3002", "invalid data_view_snapshot row", "project", "validate_project_payload");
+        }
+        ensure_only_fields(row, {"id", "source_ref", "captured_at", "schema_hash", "payload_json"},
+                           "project.data_view_snapshots[]");
+        const std::string id = require_string(row, "id", true);
+        const std::string source_ref = require_string(row, "source_ref", true);
+        const std::string captured_at = require_string(row, "captured_at", true);
+        const std::string schema_hash = require_string(row, "schema_hash", true);
+        const std::string payload_json = require_string(row, "payload_json", true);
+        if (!is_uuid(id) || source_ref.empty() || !IsRfc3339Utc(captured_at) || schema_hash.empty() || payload_json.empty()) {
+            throw MakeReject("SRB1-R-3002", "invalid data_view_snapshot fields", "project", "validate_project_payload");
+        }
+    }
+
+    const JsonValue* git_sync = FindMember(project, "git_sync_state");
+    if (git_sync == nullptr ||
+        !(git_sync->type == JsonValue::Type::Null || git_sync->type == JsonValue::Type::Object)) {
+        throw MakeReject("SRB1-R-3002", "invalid git_sync_state", "project", "validate_project_payload");
+    }
+    if (git_sync->type == JsonValue::Type::Object) {
+        ensure_only_fields(*git_sync,
+                           {"enabled", "project_repo_head", "project_repo_branch", "database_repo_head",
+                            "database_repo_branch", "dirty_files", "last_sync_at", "sync_status"},
+                           "project.git_sync_state");
+        (void)require_bool(*git_sync, "enabled");
+        for (const auto& key : {"project_repo_head", "project_repo_branch", "database_repo_head", "database_repo_branch"}) {
+            const JsonValue* value = FindMember(*git_sync, key);
+            if (value == nullptr || !(value->type == JsonValue::Type::Null || value->type == JsonValue::Type::String)) {
+                throw MakeReject("SRB1-R-3002", "invalid git sync text field", "project", "validate_project_payload");
+            }
+        }
+        const JsonValue& dirty_files = require_array(*git_sync, "dirty_files");
+        std::set<std::string> unique_dirty;
+        for (const auto& row : dirty_files.array_value) {
+            if (row.type != JsonValue::Type::String || !is_rel_path(row.string_value) ||
+                unique_dirty.count(row.string_value) > 0U) {
+                throw MakeReject("SRB1-R-3002", "invalid dirty_files entry", "project", "validate_project_payload");
+            }
+            unique_dirty.insert(row.string_value);
+        }
+        const JsonValue* last_sync_at = FindMember(*git_sync, "last_sync_at");
+        if (last_sync_at == nullptr ||
+            !(last_sync_at->type == JsonValue::Type::Null ||
+              (last_sync_at->type == JsonValue::Type::String && IsRfc3339Utc(last_sync_at->string_value)))) {
+            throw MakeReject("SRB1-R-3002", "invalid git_sync_state.last_sync_at", "project", "validate_project_payload");
+        }
+        const std::string sync_status = require_string(*git_sync, "sync_status", true);
+        if (sync_status != "clean" && sync_status != "dirty" && sync_status != "conflicted" && sync_status != "unknown") {
+            throw MakeReject("SRB1-R-3002", "invalid git_sync_state.sync_status", "project", "validate_project_payload");
+        }
+    }
+
+    const std::string audit_log_path = require_string(project, "audit_log_path", true);
+    if (!is_rel_path(audit_log_path)) {
+        throw MakeReject("SRB1-R-3002", "invalid audit_log_path", "project", "validate_project_payload");
     }
 }
 
@@ -715,10 +1141,161 @@ void ValidateSpecsetPayload(const JsonValue& payload) {
     if (payload.type != JsonValue::Type::Object) {
         throw MakeReject("SRB1-R-5402", "specset payload must be object", "spec_workspace", "validate_specset_payload");
     }
-    for (const auto& key : {"spec_sets", "spec_files", "coverage_links", "conformance_bindings"}) {
-        const JsonValue* v = FindMember(payload, key);
-        if (v == nullptr || v->type != JsonValue::Type::Array) {
-            throw MakeReject("SRB1-R-5402", "missing array field: " + std::string(key), "spec_workspace", "validate_specset_payload");
+
+    const auto require_array = [&](const JsonValue& parent, const std::string& key) -> const JsonValue& {
+        const JsonValue* value = FindMember(parent, key);
+        if (value == nullptr || value->type != JsonValue::Type::Array) {
+            throw MakeReject("SRB1-R-5402", "missing array field: " + key, "spec_workspace", "validate_specset_payload");
+        }
+        return *value;
+    };
+    const auto require_string = [&](const JsonValue& parent, const std::string& key, bool non_empty) -> std::string {
+        const JsonValue* value = FindMember(parent, key);
+        std::string out;
+        if (value == nullptr || !GetStringValue(*value, &out) || (non_empty && out.empty())) {
+            throw MakeReject("SRB1-R-5402", "invalid string field: " + key, "spec_workspace", "validate_specset_payload");
+        }
+        return out;
+    };
+    const auto ensure_only_fields = [&](const JsonValue& object,
+                                        const std::set<std::string>& allowed,
+                                        const std::string& context) {
+        for (const auto& [key, _] : object.object_value) {
+            if (allowed.count(key) == 0U) {
+                throw MakeReject("SRB1-R-5402", "unexpected field in " + context + ": " + key,
+                                 "spec_workspace", "validate_specset_payload");
+            }
+        }
+    };
+    const auto is_rel_path = [&](const std::string& value) -> bool {
+        return !value.empty() && value.find("..") == std::string::npos &&
+               (value[0] != '/' && value.find(':') == std::string::npos);
+    };
+    const auto is_sha256 = [&](const std::string& value) -> bool {
+        static const std::regex re(R"(^[0-9a-f]{64}$)");
+        return std::regex_match(value.begin(), value.end(), re);
+    };
+    const auto is_set_id = [&](const std::string& value) -> bool {
+        return value == "sb_v3" || value == "sb_vnext" || value == "sb_beta1";
+    };
+
+    ensure_only_fields(payload, {"spec_sets", "spec_files", "coverage_links", "conformance_bindings"}, "root");
+    const JsonValue& spec_sets = require_array(payload, "spec_sets");
+    const JsonValue& spec_files = require_array(payload, "spec_files");
+    const JsonValue& coverage_links = require_array(payload, "coverage_links");
+    const JsonValue& conformance_bindings = require_array(payload, "conformance_bindings");
+
+    for (const auto& row : spec_sets.array_value) {
+        if (row.type != JsonValue::Type::Object) {
+            throw MakeReject("SRB1-R-5402", "invalid spec_sets row", "spec_workspace", "validate_specset_payload");
+        }
+        ensure_only_fields(row,
+                           {"set_id", "package_manifest_ref", "package_root", "authoritative_inventory_relpath",
+                            "version_stamp", "package_hash_sha256", "last_indexed_at", "index_status", "index_error"},
+                           "spec_sets[]");
+        const std::string set_id = require_string(row, "set_id", true);
+        const std::string package_manifest_ref = require_string(row, "package_manifest_ref", true);
+        const std::string package_root = require_string(row, "package_root", true);
+        const std::string authoritative_inventory_relpath =
+            require_string(row, "authoritative_inventory_relpath", true);
+        const std::string version_stamp = require_string(row, "version_stamp", true);
+        const std::string package_hash_sha256 = require_string(row, "package_hash_sha256", true);
+        if (!is_set_id(set_id) || !is_rel_path(package_manifest_ref) || !is_rel_path(package_root) ||
+            !is_rel_path(authoritative_inventory_relpath) || version_stamp.empty() || !is_sha256(package_hash_sha256)) {
+            throw MakeReject("SRB1-R-5402", "invalid spec_set fields", "spec_workspace", "validate_specset_payload");
+        }
+        const JsonValue* indexed_at = FindMember(row, "last_indexed_at");
+        if (indexed_at == nullptr ||
+            !(indexed_at->type == JsonValue::Type::Null ||
+              (indexed_at->type == JsonValue::Type::String && IsRfc3339Utc(indexed_at->string_value)))) {
+            throw MakeReject("SRB1-R-5402", "invalid last_indexed_at", "spec_workspace", "validate_specset_payload");
+        }
+        const std::string index_status = require_string(row, "index_status", true);
+        if (index_status != "unindexed" && index_status != "indexed" && index_status != "stale" && index_status != "error") {
+            throw MakeReject("SRB1-R-5402", "invalid index_status", "spec_workspace", "validate_specset_payload");
+        }
+        const JsonValue* index_error = FindMember(row, "index_error");
+        if (index_error == nullptr ||
+            !(index_error->type == JsonValue::Type::Null || index_error->type == JsonValue::Type::String)) {
+            throw MakeReject("SRB1-R-5402", "invalid index_error", "spec_workspace", "validate_specset_payload");
+        }
+    }
+
+    for (const auto& row : spec_files.array_value) {
+        if (row.type != JsonValue::Type::Object) {
+            throw MakeReject("SRB1-R-5402", "invalid spec_files row", "spec_workspace", "validate_specset_payload");
+        }
+        ensure_only_fields(row,
+                           {"set_id", "section_id", "relative_path", "is_normative", "file_role", "content_hash",
+                            "last_seen_at", "size_bytes"},
+                           "spec_files[]");
+        const std::string set_id = require_string(row, "set_id", true);
+        const std::string section_id = require_string(row, "section_id", true);
+        const std::string relative_path = require_string(row, "relative_path", true);
+        const std::string file_role = require_string(row, "file_role", true);
+        const std::string content_hash = require_string(row, "content_hash", true);
+        const std::string last_seen_at = require_string(row, "last_seen_at", true);
+        int64_t size_bytes = 0;
+        const JsonValue* size_value = FindMember(row, "size_bytes");
+        if (size_value == nullptr || !GetInt64Value(*size_value, &size_bytes) || size_bytes < 0) {
+            throw MakeReject("SRB1-R-5402", "invalid size_bytes", "spec_workspace", "validate_specset_payload");
+        }
+        const JsonValue* is_normative = FindMember(row, "is_normative");
+        if (is_normative == nullptr || is_normative->type != JsonValue::Type::Bool) {
+            throw MakeReject("SRB1-R-5402", "invalid is_normative", "spec_workspace", "validate_specset_payload");
+        }
+        static const std::set<std::string> file_roles = {"readme", "spec_outline", "decision", "dependencies",
+                                                          "test_contract", "contract", "matrix", "registry", "vector", "other"};
+        if (!is_set_id(set_id) || section_id.empty() || !is_rel_path(relative_path) || file_roles.count(file_role) == 0U ||
+            !is_sha256(content_hash) || !IsRfc3339Utc(last_seen_at)) {
+            throw MakeReject("SRB1-R-5402", "invalid spec_files fields", "spec_workspace", "validate_specset_payload");
+        }
+    }
+
+    static const std::regex spec_ref_re(R"(^(sb_v3|sb_vnext|sb_beta1):.+$)");
+    for (const auto& row : coverage_links.array_value) {
+        if (row.type != JsonValue::Type::Object) {
+            throw MakeReject("SRB1-R-5402", "invalid coverage_links row", "spec_workspace", "validate_specset_payload");
+        }
+        ensure_only_fields(row,
+                           {"spec_file_ref", "robin_surface_or_service_id", "coverage_class", "coverage_state",
+                            "conformance_case_id", "last_updated_at"},
+                           "coverage_links[]");
+        const std::string spec_file_ref = require_string(row, "spec_file_ref", true);
+        const std::string surface_id = require_string(row, "robin_surface_or_service_id", true);
+        const std::string coverage_class = require_string(row, "coverage_class", true);
+        const std::string coverage_state = require_string(row, "coverage_state", true);
+        const std::string last_updated_at = require_string(row, "last_updated_at", true);
+        if (!std::regex_match(spec_file_ref.begin(), spec_file_ref.end(), spec_ref_re) || surface_id.empty() ||
+            (coverage_class != "design" && coverage_class != "development" && coverage_class != "management") ||
+            (coverage_state != "covered" && coverage_state != "partial" && coverage_state != "missing") ||
+            !IsRfc3339Utc(last_updated_at)) {
+            throw MakeReject("SRB1-R-5402", "invalid coverage_links fields", "spec_workspace", "validate_specset_payload");
+        }
+        const JsonValue* case_id = FindMember(row, "conformance_case_id");
+        if (case_id == nullptr || !(case_id->type == JsonValue::Type::Null || case_id->type == JsonValue::Type::String)) {
+            throw MakeReject("SRB1-R-5402", "invalid conformance_case_id", "spec_workspace", "validate_specset_payload");
+        }
+    }
+
+    for (const auto& row : conformance_bindings.array_value) {
+        if (row.type != JsonValue::Type::Object) {
+            throw MakeReject("SRB1-R-5402", "invalid conformance_bindings row", "spec_workspace", "validate_specset_payload");
+        }
+        ensure_only_fields(row, {"binding_id", "spec_file_ref", "case_id", "binding_kind", "notes"},
+                           "conformance_bindings[]");
+        const std::string binding_id = require_string(row, "binding_id", true);
+        const std::string spec_file_ref = require_string(row, "spec_file_ref", true);
+        const std::string case_id = require_string(row, "case_id", true);
+        const std::string binding_kind = require_string(row, "binding_kind", true);
+        if (binding_id.empty() || !std::regex_match(spec_file_ref.begin(), spec_file_ref.end(), spec_ref_re) ||
+            case_id.empty() || (binding_kind != "required" && binding_kind != "supporting")) {
+            throw MakeReject("SRB1-R-5402", "invalid conformance_bindings fields", "spec_workspace",
+                             "validate_specset_payload");
+        }
+        const JsonValue* notes = FindMember(row, "notes");
+        if (notes == nullptr || !(notes->type == JsonValue::Type::Null || notes->type == JsonValue::Type::String)) {
+            throw MakeReject("SRB1-R-5402", "invalid conformance binding notes", "spec_workspace", "validate_specset_payload");
         }
     }
 }
@@ -1292,6 +1869,79 @@ std::string CanonicalizeRRule(const std::map<std::string, std::string>& key_valu
     static const std::set<std::string> allowed = {"FREQ",      "INTERVAL",  "COUNT",    "UNTIL",   "BYSECOND",
                                                   "BYMINUTE",  "BYHOUR",    "BYDAY",    "BYMONTHDAY", "BYYEARDAY",
                                                   "BYWEEKNO",  "BYMONTH",   "BYSETPOS", "WKST"};
+    static const std::set<std::string> allowed_freq = {"SECONDLY", "MINUTELY", "HOURLY", "DAILY", "WEEKLY", "MONTHLY", "YEARLY"};
+    static const std::set<std::string> weekday_tokens = {"MO", "TU", "WE", "TH", "FR", "SA", "SU"};
+
+    auto parse_int = [&](const std::string& text, int min, int max, const std::string& key) {
+        try {
+            size_t idx = 0;
+            int v = std::stoi(text, &idx, 10);
+            if (idx != text.size() || v < min || v > max) {
+                throw MakeReject("SRB1-R-7101", "invalid numeric value for " + key, "reporting", "canonicalize_rrule");
+            }
+            return v;
+        } catch (const RejectError&) {
+            throw;
+        } catch (...) {
+            throw MakeReject("SRB1-R-7101", "invalid numeric value for " + key, "reporting", "canonicalize_rrule");
+        }
+    };
+    auto normalize_list = [&](const std::string& key, const std::string& value) -> std::string {
+        std::vector<std::string> tokens = Split(value, ',');
+        if (tokens.empty()) {
+            throw MakeReject("SRB1-R-7101", "empty list for " + key, "reporting", "canonicalize_rrule");
+        }
+        std::vector<std::string> normalized;
+        normalized.reserve(tokens.size());
+        std::set<std::string> unique;
+        for (auto& token : tokens) {
+            token = Trim(token);
+            if (token.empty()) {
+                throw MakeReject("SRB1-R-7101", "empty token in " + key, "reporting", "canonicalize_rrule");
+            }
+            if (key == "BYSECOND") {
+                token = std::to_string(parse_int(token, 0, 59, key));
+            } else if (key == "BYMINUTE") {
+                token = std::to_string(parse_int(token, 0, 59, key));
+            } else if (key == "BYHOUR") {
+                token = std::to_string(parse_int(token, 0, 23, key));
+            } else if (key == "BYMONTH") {
+                token = std::to_string(parse_int(token, 1, 12, key));
+            } else if (key == "BYMONTHDAY") {
+                int v = parse_int(token, -31, 31, key);
+                if (v == 0) {
+                    throw MakeReject("SRB1-R-7101", "BYMONTHDAY cannot contain zero", "reporting", "canonicalize_rrule");
+                }
+                token = std::to_string(v);
+            } else if (key == "BYSETPOS") {
+                int v = parse_int(token, -366, 366, key);
+                if (v == 0) {
+                    throw MakeReject("SRB1-R-7101", "BYSETPOS cannot contain zero", "reporting", "canonicalize_rrule");
+                }
+                token = std::to_string(v);
+            } else if (key == "BYDAY") {
+                std::string upper = ToUpper(token);
+                if (weekday_tokens.count(upper) == 0U) {
+                    static const std::regex ordinal_re(R"(^([+-]?[1-5])?(MO|TU|WE|TH|FR|SA|SU)$)");
+                    if (!std::regex_match(upper.begin(), upper.end(), ordinal_re)) {
+                        throw MakeReject("SRB1-R-7101", "invalid BYDAY token", "reporting", "canonicalize_rrule", false, token);
+                    }
+                }
+                token = upper;
+            } else if (key == "WKST") {
+                std::string upper = ToUpper(token);
+                if (weekday_tokens.count(upper) == 0U) {
+                    throw MakeReject("SRB1-R-7101", "invalid WKST token", "reporting", "canonicalize_rrule", false, token);
+                }
+                token = upper;
+            }
+            if (unique.insert(token).second) {
+                normalized.push_back(token);
+            }
+        }
+        std::sort(normalized.begin(), normalized.end());
+        return Join(normalized, ",");
+    };
 
     if (key_values.count("FREQ") == 0U) {
         throw MakeReject("SRB1-R-7101", "FREQ required", "reporting", "canonicalize_rrule");
@@ -1306,6 +1956,23 @@ std::string CanonicalizeRRule(const std::map<std::string, std::string>& key_valu
         if (v.find(' ') != std::string::npos) {
             throw MakeReject("SRB1-R-7101", "spaces not allowed in rrule values", "reporting", "canonicalize_rrule");
         }
+        if (k == "FREQ") {
+            const std::string freq = ToUpper(v);
+            if (allowed_freq.count(freq) == 0U) {
+                throw MakeReject("SRB1-R-7101", "invalid FREQ", "reporting", "canonicalize_rrule");
+            }
+        } else if (k == "INTERVAL") {
+            (void)parse_int(v, 1, 1000000, k);
+        } else if (k == "COUNT") {
+            (void)parse_int(v, 1, 1000000, k);
+        } else if (k == "UNTIL") {
+            if (!IsRfc3339Utc(v)) {
+                throw MakeReject("SRB1-R-7101", "invalid UNTIL", "reporting", "canonicalize_rrule");
+            }
+        } else if (k == "BYSECOND" || k == "BYMINUTE" || k == "BYHOUR" || k == "BYDAY" || k == "BYMONTHDAY" ||
+                   k == "BYMONTH" || k == "BYSETPOS" || k == "WKST") {
+            (void)normalize_list(k, v);
+        }
         keys.push_back(k);
     }
     std::sort(keys.begin(), keys.end());
@@ -1313,7 +1980,14 @@ std::string CanonicalizeRRule(const std::map<std::string, std::string>& key_valu
     std::vector<std::string> pairs;
     pairs.reserve(keys.size());
     for (const auto& k : keys) {
-        pairs.push_back(k + "=" + key_values.at(k));
+        if (k == "BYSECOND" || k == "BYMINUTE" || k == "BYHOUR" || k == "BYDAY" || k == "BYMONTHDAY" ||
+            k == "BYMONTH" || k == "BYSETPOS" || k == "WKST") {
+            pairs.push_back(k + "=" + normalize_list(k, key_values.at(k)));
+        } else if (k == "FREQ") {
+            pairs.push_back(k + "=" + ToUpper(key_values.at(k)));
+        } else {
+            pairs.push_back(k + "=" + key_values.at(k));
+        }
     }
     return Join(pairs, ";");
 }
@@ -1377,6 +2051,97 @@ std::vector<std::string> ExpandRRuleBounded(const ReportingSchedule& schedule,
         throw MakeReject("SRB1-R-7102", "invalid anchor", "reporting", "expand_rrule_bounded");
     }
 
+    auto parse_int_list = [&](const std::string& key, int min, int max, bool disallow_zero = false) {
+        std::vector<int> out;
+        if (kv.count(key) == 0U) {
+            return out;
+        }
+        for (const auto& token : Split(kv[key], ',')) {
+            try {
+                size_t idx = 0;
+                int value = std::stoi(token, &idx, 10);
+                if (idx != token.size() || value < min || value > max || (disallow_zero && value == 0)) {
+                    throw MakeReject("SRB1-R-7101", "invalid " + key + " value", "reporting", "expand_rrule_bounded",
+                                     false, token);
+                }
+                out.push_back(value);
+            } catch (const RejectError&) {
+                throw;
+            } catch (...) {
+                throw MakeReject("SRB1-R-7101", "invalid " + key + " value", "reporting", "expand_rrule_bounded",
+                                 false, token);
+            }
+        }
+        std::sort(out.begin(), out.end());
+        out.erase(std::unique(out.begin(), out.end()), out.end());
+        return out;
+    };
+    auto parse_weekday_list = [&](const std::string& key) {
+        std::set<int> weekdays;
+        if (kv.count(key) == 0U) {
+            return weekdays;
+        }
+        static const std::map<std::string, int> weekday_map = {
+            {"SU", 0}, {"MO", 1}, {"TU", 2}, {"WE", 3}, {"TH", 4}, {"FR", 5}, {"SA", 6}};
+        static const std::regex ordinal_re(R"(^([+-]?[1-5])?(MO|TU|WE|TH|FR|SA|SU)$)");
+        for (auto token : Split(kv[key], ',')) {
+            token = ToUpper(Trim(token));
+            std::smatch match;
+            if (!std::regex_match(token, match, ordinal_re)) {
+                throw MakeReject("SRB1-R-7101", "invalid weekday token", "reporting", "expand_rrule_bounded", false, token);
+            }
+            weekdays.insert(weekday_map.at(match[2].str()));
+        }
+        return weekdays;
+    };
+    auto days_in_month = [](int year, int month_1_to_12) -> int {
+        static const std::array<int, 12> base = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+        int days = base[month_1_to_12 - 1];
+        if (month_1_to_12 == 2) {
+            const bool leap = ((year % 4) == 0 && (year % 100) != 0) || ((year % 400) == 0);
+            if (leap) {
+                days = 29;
+            }
+        }
+        return days;
+    };
+    auto to_tm = [](std::time_t t) {
+        std::tm tm{};
+#if defined(_WIN32)
+        gmtime_s(&tm, &t);
+#else
+        gmtime_r(&t, &tm);
+#endif
+        return tm;
+    };
+    auto to_time_t = [](std::tm tm) -> std::time_t {
+#if defined(_WIN32)
+        return _mkgmtime(&tm);
+#else
+        return timegm(&tm);
+#endif
+    };
+    auto add_months = [&](std::time_t base, int months) -> std::time_t {
+        std::tm tm = to_tm(base);
+        const int original_day = tm.tm_mday;
+        int total_month = tm.tm_mon + months;
+        int year_adjust = total_month / 12;
+        if (total_month < 0 && (total_month % 12) != 0) {
+            year_adjust -= 1;
+        }
+        tm.tm_year += year_adjust;
+        total_month -= year_adjust * 12;
+        tm.tm_mon = total_month;
+        tm.tm_mday = std::min(original_day, days_in_month(tm.tm_year + 1900, tm.tm_mon + 1));
+        return to_time_t(tm);
+    };
+    auto add_years = [&](std::time_t base, int years) -> std::time_t {
+        std::tm tm = to_tm(base);
+        tm.tm_year += years;
+        tm.tm_mday = std::min(tm.tm_mday, days_in_month(tm.tm_year + 1900, tm.tm_mon + 1));
+        return to_time_t(tm);
+    };
+
     int interval = 1;
     if (kv.count("INTERVAL") > 0U) {
         interval = std::max(1, std::stoi(kv["INTERVAL"]));
@@ -1395,51 +2160,194 @@ std::vector<std::string> ExpandRRuleBounded(const ReportingSchedule& schedule,
         }
     }
 
-    std::int64_t step_seconds = 0;
     const std::string freq = kv["FREQ"];
-    if (freq == "SECONDLY") {
-        step_seconds = interval;
-    } else if (freq == "MINUTELY") {
-        step_seconds = 60LL * interval;
-    } else if (freq == "HOURLY") {
-        step_seconds = 3600LL * interval;
-    } else if (freq == "DAILY") {
-        step_seconds = 86400LL * interval;
-    } else if (freq == "WEEKLY") {
-        step_seconds = 7LL * 86400LL * interval;
-    } else if (freq == "MONTHLY") {
-        step_seconds = 30LL * 86400LL * interval;
-    } else if (freq == "YEARLY") {
-        step_seconds = 365LL * 86400LL * interval;
-    } else {
+    if (freq != "SECONDLY" && freq != "MINUTELY" && freq != "HOURLY" && freq != "DAILY" && freq != "WEEKLY" &&
+        freq != "MONTHLY" && freq != "YEARLY") {
         throw MakeReject("SRB1-R-7101", "invalid FREQ", "reporting", "expand_rrule_bounded");
     }
 
-    if (step_seconds <= 0) {
-        throw MakeReject("SRB1-R-7101", "invalid interval", "reporting", "expand_rrule_bounded");
-    }
+    const std::vector<int> by_second = parse_int_list("BYSECOND", 0, 59);
+    const std::vector<int> by_minute = parse_int_list("BYMINUTE", 0, 59);
+    const std::vector<int> by_hour = parse_int_list("BYHOUR", 0, 23);
+    const std::vector<int> by_month = parse_int_list("BYMONTH", 1, 12);
+    const std::vector<int> by_monthday = parse_int_list("BYMONTHDAY", -31, 31, true);
+    const std::vector<int> by_setpos = parse_int_list("BYSETPOS", -366, 366, true);
+    const std::set<int> by_weekday = parse_weekday_list("BYDAY");
 
     std::set<std::string> out;
-    std::time_t t = *anchor;
-    std::size_t eval_count = 0;
+    std::time_t period_cursor = *anchor;
+    std::size_t period_count = 0;
     int emitted = 0;
 
-    while (eval_count < max_candidates) {
-        ++eval_count;
-        if (until.has_value() && t > *until) {
+    while (period_count < max_candidates * 8U) {
+        ++period_count;
+        if (until.has_value() && period_cursor > *until) {
             break;
         }
-        if (t > *now) {
-            out.insert(FormatUtc(t));
-            ++emitted;
+
+        std::vector<std::time_t> period_candidates = {period_cursor};
+        if (freq == "WEEKLY" && !by_weekday.empty()) {
+            period_candidates.clear();
+            std::tm base = to_tm(period_cursor);
+            const int weekday = base.tm_wday;
+            std::time_t week_start = period_cursor - static_cast<std::time_t>(weekday * 86400);
+            for (int wd : by_weekday) {
+                period_candidates.push_back(week_start + static_cast<std::time_t>(wd * 86400));
+            }
+        } else if ((freq == "MONTHLY" || freq == "YEARLY") && (!by_monthday.empty() || !by_weekday.empty() || !by_month.empty())) {
+            period_candidates.clear();
+            std::tm base = to_tm(period_cursor);
+            std::vector<int> months;
+            if (freq == "YEARLY" && !by_month.empty()) {
+                months = by_month;
+            } else {
+                months = {base.tm_mon + 1};
+            }
+            for (int month : months) {
+                int year = base.tm_year + 1900;
+                int max_day = days_in_month(year, month);
+                std::set<int> day_candidates;
+                if (!by_monthday.empty()) {
+                    for (int md : by_monthday) {
+                        int day = md > 0 ? md : (max_day + md + 1);
+                        if (day >= 1 && day <= max_day) {
+                            day_candidates.insert(day);
+                        }
+                    }
+                } else {
+                    day_candidates.insert(base.tm_mday);
+                }
+                if (!by_weekday.empty()) {
+                    std::set<int> filtered;
+                    for (int day = 1; day <= max_day; ++day) {
+                        std::tm tm{};
+                        tm.tm_year = year - 1900;
+                        tm.tm_mon = month - 1;
+                        tm.tm_mday = day;
+                        tm.tm_hour = base.tm_hour;
+                        tm.tm_min = base.tm_min;
+                        tm.tm_sec = base.tm_sec;
+                        std::time_t t = to_time_t(tm);
+                        if (by_weekday.count(to_tm(t).tm_wday) > 0U) {
+                            if (by_monthday.empty() || day_candidates.count(day) > 0U) {
+                                filtered.insert(day);
+                            }
+                        }
+                    }
+                    day_candidates = std::move(filtered);
+                }
+                for (int day : day_candidates) {
+                    std::tm tm{};
+                    tm.tm_year = year - 1900;
+                    tm.tm_mon = month - 1;
+                    tm.tm_mday = day;
+                    tm.tm_hour = base.tm_hour;
+                    tm.tm_min = base.tm_min;
+                    tm.tm_sec = base.tm_sec;
+                    period_candidates.push_back(to_time_t(tm));
+                }
+            }
+        }
+
+        std::vector<std::time_t> expanded;
+        for (std::time_t base_ts : period_candidates) {
+            std::vector<int> hours = by_hour.empty() ? std::vector<int>{to_tm(base_ts).tm_hour} : by_hour;
+            std::vector<int> minutes = by_minute.empty() ? std::vector<int>{to_tm(base_ts).tm_min} : by_minute;
+            std::vector<int> seconds = by_second.empty() ? std::vector<int>{to_tm(base_ts).tm_sec} : by_second;
+            std::tm base_tm = to_tm(base_ts);
+            for (int h : hours) {
+                for (int m : minutes) {
+                    for (int s : seconds) {
+                        std::tm tm = base_tm;
+                        tm.tm_hour = h;
+                        tm.tm_min = m;
+                        tm.tm_sec = s;
+                        std::time_t candidate = to_time_t(tm);
+                        std::tm ctm = to_tm(candidate);
+                        const int month_1 = ctm.tm_mon + 1;
+                        const int day = ctm.tm_mday;
+                        const int days_this_month = days_in_month(ctm.tm_year + 1900, month_1);
+                        bool pass = true;
+                        if (!by_month.empty() &&
+                            std::find(by_month.begin(), by_month.end(), month_1) == by_month.end()) {
+                            pass = false;
+                        }
+                        if (pass && !by_monthday.empty()) {
+                            bool monthday_match = false;
+                            for (int md : by_monthday) {
+                                if (md > 0 && day == md) {
+                                    monthday_match = true;
+                                    break;
+                                }
+                                if (md < 0 && day == (days_this_month + md + 1)) {
+                                    monthday_match = true;
+                                    break;
+                                }
+                            }
+                            pass = monthday_match;
+                        }
+                        if (pass && !by_weekday.empty() && by_weekday.count(ctm.tm_wday) == 0U) {
+                            pass = false;
+                        }
+                        if (pass) {
+                            expanded.push_back(candidate);
+                        }
+                    }
+                }
+            }
+        }
+
+        std::sort(expanded.begin(), expanded.end());
+        expanded.erase(std::unique(expanded.begin(), expanded.end()), expanded.end());
+
+        std::vector<std::time_t> selected;
+        if (!by_setpos.empty()) {
+            for (int pos : by_setpos) {
+                int idx = pos > 0 ? pos - 1 : static_cast<int>(expanded.size()) + pos;
+                if (idx >= 0 && idx < static_cast<int>(expanded.size())) {
+                    selected.push_back(expanded[static_cast<size_t>(idx)]);
+                }
+            }
+            std::sort(selected.begin(), selected.end());
+            selected.erase(std::unique(selected.begin(), selected.end()), selected.end());
+        } else {
+            selected = expanded;
+        }
+
+        for (std::time_t candidate : selected) {
+            if (until.has_value() && candidate > *until) {
+                continue;
+            }
+            if (candidate > *now) {
+                out.insert(FormatUtc(candidate));
+                ++emitted;
+                if (count_limit >= 0 && emitted >= count_limit) {
+                    break;
+                }
+            }
         }
         if (count_limit >= 0 && emitted >= count_limit) {
             break;
         }
-        t += step_seconds;
+
+        if (freq == "SECONDLY") {
+            period_cursor += interval;
+        } else if (freq == "MINUTELY") {
+            period_cursor += static_cast<std::time_t>(60LL * interval);
+        } else if (freq == "HOURLY") {
+            period_cursor += static_cast<std::time_t>(3600LL * interval);
+        } else if (freq == "DAILY") {
+            period_cursor += static_cast<std::time_t>(86400LL * interval);
+        } else if (freq == "WEEKLY") {
+            period_cursor += static_cast<std::time_t>(7LL * 86400LL * interval);
+        } else if (freq == "MONTHLY") {
+            period_cursor = add_months(period_cursor, interval);
+        } else if (freq == "YEARLY") {
+            period_cursor = add_years(period_cursor, interval);
+        }
     }
 
-    if (eval_count >= max_candidates && out.empty()) {
+    if (period_count >= max_candidates * 8U && out.empty()) {
         throw MakeReject("SRB1-R-7103", "candidate cap exceeded", "reporting", "expand_rrule_bounded");
     }
 
@@ -1834,6 +2742,13 @@ PackageValidationResult ValidateProfileManifest(const JsonValue& manifest,
     if (manifest.type != JsonValue::Type::Object) {
         throw MakeReject("SRB1-R-9002", "manifest must be object", "packaging", "validate_profile_manifest");
     }
+    EnsureOnlyObjectFields(
+        manifest,
+        {"manifest_version", "profile_id", "build_version", "build_hash", "build_timestamp_utc",
+         "platform", "enabled_backends", "surfaces", "security_defaults", "artifacts"},
+        "SRB1-R-9002",
+        "packaging",
+        "validate_profile_manifest");
 
     const std::string manifest_version =
         RequireString(manifest, "manifest_version", "SRB1-R-9002", "packaging", "validate_profile_manifest");
@@ -1847,6 +2762,7 @@ PackageValidationResult ValidateProfileManifest(const JsonValue& manifest,
         throw MakeReject("SRB1-R-9002", "invalid profile_id", "packaging", "validate_profile_manifest");
     }
 
+    (void)RequireString(manifest, "build_version", "SRB1-R-9002", "packaging", "validate_profile_manifest");
     std::string build_hash = RequireString(manifest, "build_hash", "SRB1-R-9002", "packaging", "validate_profile_manifest");
     if (build_hash.size() != 64U || !IsHexLower(build_hash)) {
         throw MakeReject("SRB1-R-9002", "invalid build_hash", "packaging", "validate_profile_manifest");
@@ -1855,6 +2771,12 @@ PackageValidationResult ValidateProfileManifest(const JsonValue& manifest,
     std::string ts = RequireString(manifest, "build_timestamp_utc", "SRB1-R-9002", "packaging", "validate_profile_manifest");
     if (!IsRfc3339Utc(ts)) {
         throw MakeReject("SRB1-R-9002", "invalid build_timestamp_utc", "packaging", "validate_profile_manifest");
+    }
+    static const std::set<std::string> platforms = {"linux", "windows", "macos"};
+    const std::string platform =
+        RequireString(manifest, "platform", "SRB1-R-9002", "packaging", "validate_profile_manifest");
+    if (platforms.count(platform) == 0U) {
+        throw MakeReject("SRB1-R-9002", "invalid platform", "packaging", "validate_profile_manifest");
     }
 
     const auto backends = RequireStringArray(manifest, "enabled_backends", "SRB1-R-9002", "packaging", "validate_profile_manifest");
@@ -1873,16 +2795,49 @@ PackageValidationResult ValidateProfileManifest(const JsonValue& manifest,
     if (security_defaults.type != JsonValue::Type::Object) {
         throw MakeReject("SRB1-R-9002", "invalid security_defaults", "packaging", "validate_profile_manifest");
     }
-    (void)RequireString(security_defaults, "security_mode", "SRB1-R-9002", "packaging", "validate_profile_manifest");
-    (void)RequireString(security_defaults, "credential_store_policy", "SRB1-R-9002", "packaging", "validate_profile_manifest");
+    EnsureOnlyObjectFields(
+        security_defaults,
+        {"security_mode", "credential_store_policy", "audit_enabled_default", "tls_required_default"},
+        "SRB1-R-9002",
+        "packaging",
+        "validate_profile_manifest");
+    const std::string security_mode =
+        RequireString(security_defaults, "security_mode", "SRB1-R-9002", "packaging", "validate_profile_manifest");
+    if (security_mode != "standard" && security_mode != "hardened") {
+        throw MakeReject("SRB1-R-9002", "invalid security_mode", "packaging", "validate_profile_manifest");
+    }
+    const std::string credential_store_policy =
+        RequireString(security_defaults, "credential_store_policy", "SRB1-R-9002", "packaging", "validate_profile_manifest");
+    if (credential_store_policy != "required" && credential_store_policy != "preferred" &&
+        credential_store_policy != "fallback_file") {
+        throw MakeReject("SRB1-R-9002", "invalid credential_store_policy", "packaging", "validate_profile_manifest");
+    }
+    bool audit_enabled = false;
+    bool tls_required = false;
+    if (!GetBoolValue(RequireMember(security_defaults, "audit_enabled_default", "SRB1-R-9002", "packaging",
+                                    "validate_profile_manifest"), &audit_enabled)) {
+        throw MakeReject("SRB1-R-9002", "invalid audit_enabled_default", "packaging", "validate_profile_manifest");
+    }
+    if (!GetBoolValue(RequireMember(security_defaults, "tls_required_default", "SRB1-R-9002", "packaging",
+                                    "validate_profile_manifest"), &tls_required)) {
+        throw MakeReject("SRB1-R-9002", "invalid tls_required_default", "packaging", "validate_profile_manifest");
+    }
+    (void)audit_enabled;
+    (void)tls_required;
 
     const JsonValue& artifacts = RequireMember(manifest, "artifacts", "SRB1-R-9002", "packaging", "validate_profile_manifest");
     if (artifacts.type != JsonValue::Type::Object) {
         throw MakeReject("SRB1-R-9002", "invalid artifacts", "packaging", "validate_profile_manifest");
     }
+    EnsureOnlyObjectFields(
+        artifacts,
+        {"license_path", "attribution_path", "help_root_path", "config_template_path", "connections_template_path"},
+        "SRB1-R-9002",
+        "packaging",
+        "validate_profile_manifest");
     for (const auto& key : {"license_path", "attribution_path", "help_root_path", "config_template_path", "connections_template_path"}) {
         std::string v = RequireString(artifacts, key, "SRB1-R-9002", "packaging", "validate_profile_manifest");
-        if (v.find("..") != std::string::npos || (!v.empty() && v[0] == '/')) {
+        if (v.find("..") != std::string::npos || (!v.empty() && v[0] == '/') || v.find(':') != std::string::npos) {
             throw MakeReject("SRB1-R-9002", "invalid artifact path", "packaging", "validate_profile_manifest", false, v);
         }
     }
@@ -1912,6 +2867,12 @@ SpecSetManifest LoadSpecsetManifest(const std::string& manifest_path) {
     if (json.type != JsonValue::Type::Object) {
         throw MakeReject("SRB1-R-5402", "manifest must be object", "spec_workspace", "load_specset_manifest");
     }
+    EnsureOnlyObjectFields(
+        json,
+        {"set_id", "package_root", "authoritative_inventory_relpath", "version_stamp", "package_hash_sha256"},
+        "SRB1-R-5402",
+        "spec_workspace",
+        "load_specset_manifest");
 
     SpecSetManifest out;
     out.set_id = RequireString(json, "set_id", "SRB1-R-5402", "spec_workspace", "load_specset_manifest");
@@ -1925,8 +2886,14 @@ SpecSetManifest LoadSpecsetManifest(const std::string& manifest_path) {
     if (out.set_id != "sb_v3" && out.set_id != "sb_vnext" && out.set_id != "sb_beta1") {
         throw MakeReject("SRB1-R-5401", "unsupported set id", "spec_workspace", "load_specset_manifest", false, out.set_id);
     }
-    if (out.package_root.find("..") != std::string::npos || out.authoritative_inventory_relpath.find("..") != std::string::npos) {
+    if (out.package_root.find("..") != std::string::npos || out.authoritative_inventory_relpath.find("..") != std::string::npos ||
+        out.package_root.find(':') != std::string::npos || out.authoritative_inventory_relpath.find(':') != std::string::npos ||
+        (!out.package_root.empty() && out.package_root[0] == '/') ||
+        (!out.authoritative_inventory_relpath.empty() && out.authoritative_inventory_relpath[0] == '/')) {
         throw MakeReject("SRB1-R-5402", "path traversal in manifest", "spec_workspace", "load_specset_manifest");
+    }
+    if (out.package_hash_sha256.size() != 64U || !IsHexLower(ToLower(out.package_hash_sha256))) {
+        throw MakeReject("SRB1-R-5402", "invalid package_hash_sha256", "spec_workspace", "load_specset_manifest");
     }
     return out;
 }
@@ -1948,6 +2915,11 @@ std::vector<std::string> ParseAuthoritativeInventory(const std::string& inventor
         }
         std::string rel = line.substr(first + 1, second - first - 1);
         if (!rel.empty()) {
+            if (rel.find("..") != std::string::npos || rel.find(':') != std::string::npos ||
+                (!rel.empty() && rel[0] == '/')) {
+                throw MakeReject("SRB1-R-5402", "invalid inventory relative path", "spec_workspace",
+                                 "parse_inventory", false, rel);
+            }
             rows.push_back(rel);
         }
     }
@@ -1956,7 +2928,11 @@ std::vector<std::string> ParseAuthoritativeInventory(const std::string& inventor
         throw MakeReject("SRB1-R-5402", "inventory parse failure", "spec_workspace", "parse_inventory", false, inventory_path);
     }
     std::sort(rows.begin(), rows.end());
-    rows.erase(std::unique(rows.begin(), rows.end()), rows.end());
+    auto unique_it = std::unique(rows.begin(), rows.end());
+    if (unique_it != rows.end()) {
+        throw MakeReject("SRB1-R-5402", "duplicate authoritative inventory entries", "spec_workspace",
+                         "parse_inventory", false, inventory_path);
+    }
     return rows;
 }
 
@@ -1974,10 +2950,18 @@ std::vector<SpecFileRow> LoadSpecsetPackage(const std::string& manifest_path) {
     const auto rel_files = ParseAuthoritativeInventory(inventory_path.string());
     std::vector<SpecFileRow> out;
     out.reserve(rel_files.size());
+    const std::filesystem::path package_root_abs = std::filesystem::weakly_canonical(package_root);
     for (const auto& rel : rel_files) {
         const std::filesystem::path abs = package_root / rel;
         if (!std::filesystem::exists(abs)) {
             throw MakeReject("SRB1-R-5402", "missing normative file", "spec_workspace", "load_specset_package", false, rel);
+        }
+        const std::filesystem::path abs_canonical = std::filesystem::weakly_canonical(abs);
+        const std::string abs_canonical_s = abs_canonical.generic_string();
+        const std::string package_root_s = package_root_abs.generic_string();
+        if (abs_canonical_s.rfind(package_root_s, 0) != 0U) {
+            throw MakeReject("SRB1-R-5402", "normative path escaped package root", "spec_workspace",
+                             "load_specset_package", false, rel);
         }
         std::ifstream in(abs, std::ios::binary);
         std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
@@ -2024,7 +3008,18 @@ void AssertSupportComplete(const std::vector<SpecFileRow>& spec_files,
 
 void ValidateBindings(const std::vector<std::string>& binding_case_ids,
                       const std::set<std::string>& conformance_case_ids) {
+    if (conformance_case_ids.empty()) {
+        throw MakeReject("SRB1-R-5404", "conformance case registry empty", "spec_workspace", "validate_bindings");
+    }
+    static const std::regex case_id_re(R"(^[A-Z0-9][A-Z0-9\-]*$)");
+    std::set<std::string> seen;
     for (const auto& id : binding_case_ids) {
+        if (id.empty() || !std::regex_match(id.begin(), id.end(), case_id_re)) {
+            throw MakeReject("SRB1-R-5404", "invalid case id format: " + id, "spec_workspace", "validate_bindings");
+        }
+        if (!seen.insert(id).second) {
+            throw MakeReject("SRB1-R-5404", "duplicate case id binding: " + id, "spec_workspace", "validate_bindings");
+        }
         if (conformance_case_ids.count(id) == 0U) {
             throw MakeReject("SRB1-R-5404", "unknown case id: " + id, "spec_workspace", "validate_bindings");
         }

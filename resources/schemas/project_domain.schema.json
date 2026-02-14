@@ -1,0 +1,701 @@
+{
+  "$schema": "beta1b://schema/json/draft-2020-12",
+  "$id": "beta1b://schema/project_domain.schema.json",
+  "title": "ScratchRobin Project Domain Model",
+  "type": "object",
+  "required": [
+    "project"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "project": {
+      "$ref": "#/$defs/Project"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "local_timestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}$"
+    },
+    "timezone_iana": {
+      "type": "string",
+      "pattern": "^(UTC|[A-Za-z_]+(?:/[A-Za-z0-9_+\\-]+)+)$"
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!.*\\.\\.).*$"
+    },
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "DesignState": {
+      "type": "string",
+      "enum": [
+        "EXTRACTED",
+        "NEW",
+        "MODIFIED",
+        "DELETED",
+        "PENDING",
+        "APPROVED",
+        "REJECTED",
+        "IMPLEMENTED",
+        "CONFLICTED"
+      ]
+    },
+    "ObjectKind": {
+      "type": "string",
+      "enum": [
+        "schema",
+        "table",
+        "index",
+        "domain",
+        "sequence",
+        "view",
+        "trigger",
+        "procedure",
+        "function",
+        "package",
+        "job",
+        "user",
+        "role"
+      ]
+    },
+    "ScheduleKind": {
+      "type": "string",
+      "enum": [
+        "RRULE"
+      ]
+    },
+    "ChangeEntry": {
+      "type": "object",
+      "required": [
+        "timestamp",
+        "actor",
+        "action",
+        "state_before",
+        "state_after",
+        "note"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "actor": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "action": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "state_before": {
+          "$ref": "#/$defs/DesignState"
+        },
+        "state_after": {
+          "$ref": "#/$defs/DesignState"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ProjectObject": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "name",
+        "path",
+        "schema_name",
+        "design_state",
+        "has_source",
+        "source_snapshot",
+        "current_design",
+        "comments",
+        "change_history",
+        "design_file_path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "kind": {
+          "$ref": "#/$defs/ObjectKind"
+        },
+        "name": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "schema_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "design_state": {
+          "$ref": "#/$defs/DesignState"
+        },
+        "has_source": {
+          "type": "boolean"
+        },
+        "source_snapshot": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current_design": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "comments": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "change_history": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ChangeEntry"
+          }
+        },
+        "design_file_path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^(?!.*\\.\\.).*$"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "has_source": {
+                "const": true
+              }
+            },
+            "required": [
+              "has_source"
+            ]
+          },
+          "then": {
+            "properties": {
+              "source_snapshot": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "AiPolicy": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "require_review",
+        "allow_scopes",
+        "deny_scopes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "require_review": {
+          "type": "boolean"
+        },
+        "allow_scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "deny_scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "AuditPolicy": {
+      "type": "object",
+      "required": [
+        "level",
+        "retention_days",
+        "export_enabled"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "standard",
+            "verbose"
+          ]
+        },
+        "retention_days": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "export_enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "GovernancePolicy": {
+      "type": "object",
+      "required": [
+        "owners",
+        "stewards",
+        "review_min_approvals",
+        "allowed_roles_by_environment",
+        "ai_policy",
+        "audit_policy"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "owners": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "stewards": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "review_min_approvals": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "allowed_roles_by_environment": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          }
+        },
+        "ai_policy": {
+          "$ref": "#/$defs/AiPolicy"
+        },
+        "audit_policy": {
+          "$ref": "#/$defs/AuditPolicy"
+        }
+      }
+    },
+    "ProjectConfig": {
+      "type": "object",
+      "required": [
+        "default_environment_id",
+        "active_connection_id",
+        "connections_file_path",
+        "governance",
+        "security_mode",
+        "features"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "default_environment_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "active_connection_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "connections_file_path": {
+          "$ref": "#/$defs/path"
+        },
+        "governance": {
+          "$ref": "#/$defs/GovernancePolicy"
+        },
+        "security_mode": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "hardened"
+          ]
+        },
+        "features": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "GitSyncState": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "project_repo_head",
+        "project_repo_branch",
+        "database_repo_head",
+        "database_repo_branch",
+        "dirty_files",
+        "last_sync_at",
+        "sync_status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "project_repo_head": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "project_repo_branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "database_repo_head": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "database_repo_branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dirty_files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/path"
+          },
+          "uniqueItems": true
+        },
+        "last_sync_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+        },
+        "sync_status": {
+          "type": "string",
+          "enum": [
+            "clean",
+            "dirty",
+            "conflicted",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "ReportingAsset": {
+      "type": "object",
+      "required": [
+        "id",
+        "asset_type",
+        "name",
+        "collection_id",
+        "created_at",
+        "updated_at",
+        "created_by",
+        "updated_by",
+        "payload_json"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "asset_type": {
+          "type": "string",
+          "enum": [
+            "Question",
+            "Dashboard",
+            "Model",
+            "Metric",
+            "Segment",
+            "Alert",
+            "Subscription",
+            "Collection",
+            "Timeline"
+          ]
+        },
+        "name": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "collection_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "created_by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "updated_by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "payload_json": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "ReportingSchedule": {
+      "type": "object",
+      "required": [
+        "id",
+        "asset_id",
+        "schedule_kind",
+        "schedule_spec",
+        "schedule_dtstart_local",
+        "timezone",
+        "schedule_rdates_local",
+        "schedule_exdates_local",
+        "enabled",
+        "next_run_at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "asset_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "schedule_kind": {
+          "$ref": "#/$defs/ScheduleKind"
+        },
+        "schedule_spec": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^FREQ=(SECONDLY|MINUTELY|HOURLY|DAILY|WEEKLY|MONTHLY|YEARLY)(;(INTERVAL|COUNT|UNTIL|BYSECOND|BYMINUTE|BYHOUR|BYDAY|BYMONTHDAY|BYYEARDAY|BYWEEKNO|BYMONTH|BYSETPOS|WKST)=[^;]+)*$"
+        },
+        "schedule_dtstart_local": {
+          "$ref": "#/$defs/local_timestamp"
+        },
+        "timezone": {
+          "$ref": "#/$defs/timezone_iana"
+        },
+        "schedule_rdates_local": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/local_timestamp"
+          },
+          "uniqueItems": true
+        },
+        "schedule_exdates_local": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/local_timestamp"
+          },
+          "uniqueItems": true
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "next_run_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+        }
+      }
+    },
+    "ReportingCacheEntry": {
+      "type": "object",
+      "required": [
+        "id",
+        "cache_key",
+        "created_at",
+        "expires_at",
+        "metadata_json"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "cache_key": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "metadata_json": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "DataViewSnapshot": {
+      "type": "object",
+      "required": [
+        "id",
+        "source_ref",
+        "captured_at",
+        "schema_hash",
+        "payload_json"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "source_ref": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "captured_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "schema_hash": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "payload_json": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "Project": {
+      "type": "object",
+      "required": [
+        "project_id",
+        "name",
+        "created_at",
+        "updated_at",
+        "config",
+        "objects",
+        "objects_by_path",
+        "reporting_assets",
+        "reporting_schedules",
+        "data_view_snapshots",
+        "git_sync_state",
+        "audit_log_path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "name": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "config": {
+          "$ref": "#/$defs/ProjectConfig"
+        },
+        "objects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProjectObject"
+          }
+        },
+        "objects_by_path": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/path"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/uuid"
+          }
+        },
+        "reporting_assets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReportingAsset"
+          }
+        },
+        "reporting_schedules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReportingSchedule"
+          }
+        },
+        "data_view_snapshots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DataViewSnapshot"
+          }
+        },
+        "git_sync_state": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/GitSyncState"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "audit_log_path": {
+          "$ref": "#/$defs/path"
+        }
+      }
+    }
+  }
+}

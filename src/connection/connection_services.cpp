@@ -203,5 +203,68 @@ beta1b::SessionFingerprint BackendAdapterService::ConnectEnterprise(
                                      directory_bind);
 }
 
-}  // namespace scratchrobin::connection
+void BackendAdapterService::SetCredentialStore(const std::map<std::string, std::string>& credential_store) {
+    credential_store_ = credential_store;
+}
 
+void BackendAdapterService::SetSecretStore(const std::string& provider_mode,
+                                           const std::map<std::string, std::string>& secrets_by_ref) {
+    secret_stores_by_mode_[provider_mode] = secrets_by_ref;
+}
+
+void BackendAdapterService::SetFederatedIdentityPolicy(const std::string& provider_id,
+                                                       const std::set<std::string>& accepted_secrets) {
+    federated_identity_policy_[provider_id] = accepted_secrets;
+}
+
+void BackendAdapterService::SetDirectoryIdentityPolicy(const std::string& provider_id,
+                                                       const std::set<std::string>& accepted_secrets) {
+    directory_identity_policy_[provider_id] = accepted_secrets;
+}
+
+beta1b::SessionFingerprint BackendAdapterService::ConnectEnterprise(
+    const beta1b::EnterpriseConnectionProfile& profile,
+    const std::optional<std::string>& runtime_override) const {
+    const auto provider_fetch = [&](const beta1b::SecretProviderContract& provider) -> std::optional<std::string> {
+        auto mode_it = secret_stores_by_mode_.find(provider.mode);
+        if (mode_it == secret_stores_by_mode_.end()) {
+            return std::nullopt;
+        }
+        const std::string ref = provider.secret_ref.empty() ? "__default__" : provider.secret_ref;
+        auto secret_it = mode_it->second.find(ref);
+        if (secret_it == mode_it->second.end()) {
+            return std::nullopt;
+        }
+        return secret_it->second;
+    };
+    const auto credential_fetch = [&](const std::string& credential_id) -> std::optional<std::string> {
+        auto it = credential_store_.find(credential_id);
+        if (it == credential_store_.end()) {
+            return std::nullopt;
+        }
+        return it->second;
+    };
+    const auto federated_acquire = [&](const std::string& provider_id, const std::string& secret) -> bool {
+        auto it = federated_identity_policy_.find(provider_id);
+        if (it == federated_identity_policy_.end()) {
+            return false;
+        }
+        return it->second.count(secret) > 0U;
+    };
+    const auto directory_bind = [&](const std::string& provider_id, const std::string& secret) -> bool {
+        auto it = directory_identity_policy_.find(provider_id);
+        if (it == directory_identity_policy_.end()) {
+            return false;
+        }
+        return it->second.count(secret) > 0U;
+    };
+
+    return beta1b::ConnectEnterprise(profile,
+                                     runtime_override,
+                                     provider_fetch,
+                                     credential_fetch,
+                                     federated_acquire,
+                                     directory_bind);
+}
+
+}  // namespace scratchrobin::connection

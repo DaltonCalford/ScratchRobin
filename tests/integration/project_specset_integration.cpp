@@ -63,11 +63,13 @@ int main() {
                         namespace fs = std::filesystem;
                         const fs::path temp = fs::temp_directory_path() / "scratchrobin_schema_gate";
                         fs::remove_all(temp);
-                        WriteText(temp / "project_domain.schema.json", "{}");
-                        WriteText(temp / "scratchbird_specset.schema.json", "{}");
+                        WriteText(temp / "project_domain.schema.json",
+                                  R"({"$id":"beta1b://schema/project_domain.schema.json","type":"object"})");
+                        WriteText(temp / "scratchbird_specset.schema.json",
+                                  R"({"$id":"beta1b://schema/scratchbird_specset.schema.json","type":"object"})");
 
                         const auto project_payload = ParseJson(
-                            R"({"project":{"project_id":"123e4567-e89b-12d3-a456-426614174000","name":"x","created_at":"2026-02-14T00:00:00Z","updated_at":"2026-02-14T00:00:00Z","config":{},"objects":[],"objects_by_path":{},"reporting_assets":[],"reporting_schedules":[],"data_view_snapshots":[],"git_sync_state":null,"audit_log_path":"audit.log"}})");
+                            R"({"project":{"project_id":"123e4567-e89b-12d3-a456-426614174000","name":"x","created_at":"2026-02-14T00:00:00Z","updated_at":"2026-02-14T00:00:00Z","config":{"default_environment_id":"dev","active_connection_id":null,"connections_file_path":"config/connections.toml","governance":{"owners":["owner"],"stewards":[],"review_min_approvals":1,"allowed_roles_by_environment":{"dev":["owner"]},"ai_policy":{"enabled":true,"require_review":false,"allow_scopes":["design"],"deny_scopes":[]},"audit_policy":{"level":"standard","retention_days":30,"export_enabled":true}},"security_mode":"standard","features":{"sql_editor":true}},"objects":[],"objects_by_path":{},"reporting_assets":[],"reporting_schedules":[],"data_view_snapshots":[],"git_sync_state":null,"audit_log_path":"audit.log"}})");
                         const auto specset_payload = ParseJson(
                             R"({"spec_sets":[],"spec_files":[],"coverage_links":[],"conformance_bindings":[]})");
 
@@ -157,6 +159,20 @@ int main() {
                             "2026-02-14T00:00:00Z");
                         scratchrobin::tests::AssertTrue(index.files.size() == 2U, "expected two indexed files");
 
+                        ExpectReject("SRB1-R-5402", [&] {
+                            (void)specset.BuildIndex(
+                                (temp / "resources/specset_packages/sb_vnext_specset_manifest.example.json").string(),
+                                "not-a-timestamp");
+                        });
+
+                        WriteText(temp / "resources/specset_packages/custom_manifest.json",
+                                  R"({"set_id":"sb_vnext","package_root":"sb_vnext_payload","authoritative_inventory_relpath":"AUTHORITATIVE_SPEC_INVENTORY.md","version_stamp":"vnext","package_hash_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"})");
+                        ExpectReject("SRB1-R-5402", [&] {
+                            (void)specset.BuildIndex(
+                                (temp / "resources/specset_packages/custom_manifest.json").string(),
+                                "2026-02-14T00:00:00Z");
+                        });
+
                         specset.AssertCoverageComplete(index,
                                                       {{"sb_vnext:README.md", "design", "covered"},
                                                        {"sb_vnext:contracts/ONE.md", "design", "covered"}},
@@ -168,6 +184,12 @@ int main() {
                         });
 
                         specset.ValidateConformanceBindings({"A0-LNT-001"}, {"A0-LNT-001", "PKG-003"});
+                        ExpectReject("SRB1-R-5404", [&] {
+                            specset.ValidateConformanceBindings({"bad id"}, {"A0-LNT-001", "PKG-003"});
+                        });
+                        ExpectReject("SRB1-R-5404", [&] {
+                            specset.ValidateConformanceBindings({"A0-LNT-001", "A0-LNT-001"}, {"A0-LNT-001", "PKG-003"});
+                        });
                         auto summary = specset.CoverageSummary({{"a", "design", "covered"}, {"a", "design", "missing"}});
                         scratchrobin::tests::AssertTrue(summary["design:covered"] == 1, "coverage summary mismatch");
 
@@ -182,4 +204,3 @@ int main() {
 
     return scratchrobin::tests::RunTests(tests);
 }
-

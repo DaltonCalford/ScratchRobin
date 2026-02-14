@@ -63,6 +63,17 @@ public:
         const std::function<bool(const std::string&, const std::string&)>& federated_acquire,
         const std::function<bool(const std::string&, const std::string&)>& directory_bind) const;
 
+    void SetCredentialStore(const std::map<std::string, std::string>& credential_store);
+    void SetSecretStore(const std::string& provider_mode,
+                        const std::map<std::string, std::string>& secrets_by_ref);
+    void SetFederatedIdentityPolicy(const std::string& provider_id,
+                                    const std::set<std::string>& accepted_secrets);
+    void SetDirectoryIdentityPolicy(const std::string& provider_id,
+                                    const std::set<std::string>& accepted_secrets);
+
+    beta1b::SessionFingerprint ConnectEnterprise(const beta1b::EnterpriseConnectionProfile& profile,
+                                                 const std::optional<std::string>& runtime_override = std::nullopt) const;
+
 private:
     static std::map<std::string, std::set<std::string>> DefaultCapabilities();
     static std::string VersionForBackend(const std::string& backend);
@@ -72,7 +83,10 @@ private:
     std::set<std::string> subscribed_channels_;
     std::vector<std::pair<std::string, std::string>> notification_queue_;
     bool active_query_ = false;
+    std::map<std::string, std::string> credential_store_;
+    std::map<std::string, std::map<std::string, std::string>> secret_stores_by_mode_;
+    std::map<std::string, std::set<std::string>> federated_identity_policy_;
+    std::map<std::string, std::set<std::string>> directory_identity_policy_;
 };
 
 }  // namespace scratchrobin::connection
-

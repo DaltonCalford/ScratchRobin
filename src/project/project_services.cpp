@@ -3,6 +3,7 @@
 #include <array>
 #include <filesystem>
 #include <fstream>
+#include <regex>
 #include <sstream>
 
 #include "core/reject.h"
@@ -67,6 +68,11 @@ void WriteAuditBestEffort(const std::string& audit_path, const std::string& even
 
 std::string BoolJson(bool value) {
     return value ? "true" : "false";
+}
+
+bool IsRfc3339UtcTimestamp(const std::string& text) {
+    static const std::regex pattern(R"(^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$)");
+    return std::regex_match(text, pattern);
 }
 
 }  // namespace
@@ -184,12 +190,38 @@ void ValidateProjectPayloadWithSchema(const std::string& schema_path, const Json
     if (!std::filesystem::exists(schema_path)) {
         throw MakeReject("SRB1-R-3002", "project schema not found", "project", "validate_payload_schema", false, schema_path);
     }
+    std::ifstream in(schema_path, std::ios::binary);
+    std::string schema_text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    JsonParser parser(schema_text);
+    JsonValue schema;
+    std::string err;
+    if (!parser.Parse(&schema, &err) || schema.type != JsonValue::Type::Object) {
+        throw MakeReject("SRB1-R-3002", "project schema parse failure", "project", "validate_payload_schema", false, err);
+    }
+    const JsonValue* id_value = FindMember(schema, "$id");
+    std::string schema_id;
+    if (id_value == nullptr || !GetStringValue(*id_value, &schema_id) || schema_id.find("project_domain") == std::string::npos) {
+        throw MakeReject("SRB1-R-3002", "unexpected project schema id", "project", "validate_payload_schema", false, schema_path);
+    }
     beta1b::ValidateProjectPayload(payload);
 }
 
 void ValidateSpecsetPayloadWithSchema(const std::string& schema_path, const JsonValue& payload) {
     if (!std::filesystem::exists(schema_path)) {
         throw MakeReject("SRB1-R-5402", "specset schema not found", "spec_workspace", "validate_payload_schema", false, schema_path);
+    }
+    std::ifstream in(schema_path, std::ios::binary);
+    std::string schema_text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    JsonParser parser(schema_text);
+    JsonValue schema;
+    std::string err;
+    if (!parser.Parse(&schema, &err) || schema.type != JsonValue::Type::Object) {
+        throw MakeReject("SRB1-R-5402", "specset schema parse failure", "spec_workspace", "validate_payload_schema", false, err);
+    }
+    const JsonValue* id_value = FindMember(schema, "$id");
+    std::string schema_id;
+    if (id_value == nullptr || !GetStringValue(*id_value, &schema_id) || schema_id.find("scratchbird_specset") == std::string::npos) {
+        throw MakeReject("SRB1-R-5402", "unexpected specset schema id", "spec_workspace", "validate_payload_schema", false, schema_path);
     }
     beta1b::ValidateSpecsetPayload(payload);
 }
@@ -256,7 +288,7 @@ void ExecuteGovernedOperation(const GovernanceInput& input,
 }
 
 SpecSetIndex SpecSetService::BuildIndex(const std::string& manifest_path, const std::string& indexed_at_utc) const {
-    if (indexed_at_utc.empty()) {
+    if (!IsRfc3339UtcTimestamp(indexed_at_utc)) {
         throw MakeReject("SRB1-R-5402", "indexed_at_utc required", "spec_workspace", "build_index");
     }
     SpecSetIndex index;
@@ -264,6 +296,12 @@ SpecSetIndex SpecSetService::BuildIndex(const std::string& manifest_path, const 
     if (index.manifest.set_id != "sb_v3" && index.manifest.set_id != "sb_vnext" && index.manifest.set_id != "sb_beta1") {
         throw MakeReject("SRB1-R-5401", "unknown/unsupported ScratchBird specification set id", "spec_workspace", "build_index",
                          false, index.manifest.set_id);
+    }
+    const std::string filename = std::filesystem::path(manifest_path).filename().string();
+    const std::string expected_prefix = index.manifest.set_id + "_specset_manifest";
+    if (filename.rfind(expected_prefix, 0) != 0U) {
+        throw MakeReject("SRB1-R-5402", "specset manifest filename does not match set id",
+                         "spec_workspace", "build_index", false, filename);
     }
     index.files = beta1b::LoadSpecsetPackage(manifest_path);
     index.indexed_at_utc = indexed_at_utc;
@@ -295,4 +333,3 @@ std::string SpecSetService::ExportImplementationWorkPackage(
 }
 
 }  // namespace scratchrobin::project
-

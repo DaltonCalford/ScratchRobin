@@ -34,6 +34,14 @@ void WriteTextFile(const std::filesystem::path& path, const std::string& text) {
     out << text;
 }
 
+std::string ReadTextFile(const std::filesystem::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        return "";
+    }
+    return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
 std::uint32_t Crc32Local(const std::uint8_t* data, std::size_t len) {
     return Crc32(data, len);
 }
@@ -185,7 +193,7 @@ int main() {
                         WriteTextFile(temp / "alpha/deep/a.txt", "alpha");
 
                         const auto sample_project_payload = ParseJson(
-                            R"({"project":{"project_id":"123e4567-e89b-12d3-a456-426614174000","name":"x","created_at":"2026-02-14T00:00:00Z","updated_at":"2026-02-14T00:00:00Z","config":{},"objects":[],"objects_by_path":{},"reporting_assets":[],"reporting_schedules":[],"data_view_snapshots":[],"git_sync_state":null,"audit_log_path":"audit.log"}})");
+                            R"({"project":{"project_id":"123e4567-e89b-12d3-a456-426614174000","name":"x","created_at":"2026-02-14T00:00:00Z","updated_at":"2026-02-14T00:00:00Z","config":{"default_environment_id":"dev","active_connection_id":null,"connections_file_path":"config/connections.toml","governance":{"owners":["owner"],"stewards":[],"review_min_approvals":1,"allowed_roles_by_environment":{"dev":["owner"]},"ai_policy":{"enabled":true,"require_review":false,"allow_scopes":["design"],"deny_scopes":[]},"audit_policy":{"level":"standard","retention_days":30,"export_enabled":true}},"security_mode":"standard","features":{"sql_editor":true}},"objects":[],"objects_by_path":{},"reporting_assets":[],"reporting_schedules":[],"data_view_snapshots":[],"git_sync_state":null,"audit_log_path":"audit.log"}})");
                         const auto sample_specset_payload = ParseJson(
                             R"({"spec_sets":[],"spec_files":[],"coverage_links":[],"conformance_bindings":[]})");
                         const auto sample_manifest = ParseJson(
@@ -204,6 +212,26 @@ int main() {
                         checks["B1-CMP-001"] = [] {};
                         checks["B1-CMP-002"] = [] {};
                         checks["B1-CMP-003"] = [] {};
+                        checks["B1-CMP-004"] = [&] {
+                            const std::string cmake = ReadTextFile(repo_root / "CMakeLists.txt");
+                            const std::array<std::string, 8> required_options = {
+                                "SCRATCHROBIN_BUILD_UI",
+                                "SCRATCHROBIN_USE_SCRATCHBIRD",
+                                "SCRATCHROBIN_EMBED_SCRATCHBIRD_SERVER",
+                                "SCRATCHROBIN_USE_LIBPQ",
+                                "SCRATCHROBIN_USE_MYSQL",
+                                "SCRATCHROBIN_USE_FIREBIRD",
+                                "SCRATCHROBIN_USE_LIBSECRET",
+                                "SCRATCHROBIN_BUILD_TESTS"};
+                            for (const auto& opt : required_options) {
+                                AssertTrue(cmake.find(opt) != std::string::npos, "missing cmake option: " + opt);
+                            }
+                        };
+                        checks["B1-CMP-005"] = [&] {
+                            const std::string cmake = ReadTextFile(repo_root / "CMakeLists.txt");
+                            AssertTrue(cmake.find("add_executable(scratchrobin_perf_diagram") != std::string::npos,
+                                       "missing scratchrobin_perf_diagram target");
+                        };
                         checks["A0-LNT-001"] = [] { ValidateRejectCodeReferences({"SRB1-R-4001"}, {"SRB1-R-4001", "SRB1-R-5407"}); };
                         checks["A0-BLK-001"] = [] {
                             ValidateBlockerRows({{"BLK-0001", "P0", "open", "conformance_case", "A0-LNT-001",
@@ -460,6 +488,10 @@ int main() {
                         };
                         checks["ALPHA-DIA-001"] = [] {
                             ValidateSilverstonContinuity({"silverston/erd_core.md"}, {"silverston/erd_core.md"});
+                        };
+                        checks["ALPHA-DIA-002"] = [] {
+                            ValidateSilverstonContinuity({"silverston/erd_core.md", "silverston/appendix/deep_details.md"},
+                                                         {"silverston/erd_core.md", "silverston/appendix/deep_details.md"});
                         };
                         checks["ALPHA-INV-001"] = [] {
                             ValidateAlphaInventoryMapping({"EL1"}, {{"f.md", "EL1"}});

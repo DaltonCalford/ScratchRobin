@@ -82,6 +82,9 @@ int main() {
 
     tests.push_back({"integration/connection_enterprise_flow", [] {
                         BackendAdapterService svc;
+                        svc.SetCredentialStore({{"cred_ssh", "ssh_secret"}});
+                        svc.SetSecretStore("vault", {{"kv/data/x", "vault_secret"}});
+                        svc.SetFederatedIdentityPolicy("idp", {"vault_secret", "runtime_override"});
 
                         beta1b::EnterpriseConnectionProfile p;
                         p.profile_id = "prod";
@@ -92,18 +95,31 @@ int main() {
                         p.identity = beta1b::IdentityContract{"oidc", "idp", {"openid"}};
                         p.secret_provider = beta1b::SecretProviderContract{"vault", "kv/data/x"};
 
-                        const auto fp = svc.ConnectEnterprise(
-                            p,
-                            std::nullopt,
-                            [](const beta1b::SecretProviderContract&) { return std::optional<std::string>("secret"); },
-                            [](const std::string&) { return std::optional<std::string>("credential"); },
-                            [](const std::string&, const std::string&) { return true; },
-                            [](const std::string&, const std::string&) { return true; });
+                        const auto fp = svc.ConnectEnterprise(p);
 
                         scratchrobin::tests::AssertEq(fp.profile_id, "prod", "profile mismatch");
                         scratchrobin::tests::AssertEq(fp.transport_mode, "ssh_jump_chain", "transport mismatch");
+                        scratchrobin::tests::AssertTrue(
+                            fp.backend_route.find("ssh_jump_chain:1:bastion:22->db.internal:5432") == 0U,
+                            "backend route mismatch");
+
+                        p.identity = beta1b::IdentityContract{"oidc", "idp", {"openid", "profile"}};
+                        p.transport = beta1b::TransportContract{"direct", "required", 1000};
+                        p.ssh = std::nullopt;
+                        p.jump_hosts.clear();
+                        p.secret_provider = std::nullopt;
+                        p.allow_inline_secret = true;
+                        p.inline_secret = std::string("inline_secret");
+
+                        const auto direct = svc.ConnectEnterprise(p, std::optional<std::string>("runtime_override"));
+                        scratchrobin::tests::AssertEq(direct.backend_route, "direct", "direct backend route mismatch");
+
+                        p.allow_inline_secret = false;
+                        p.inline_secret = std::nullopt;
+                        ExpectReject("SRB1-R-4006", [&] {
+                            (void)svc.ConnectEnterprise(p);
+                        });
                     }});
 
     return scratchrobin::tests::RunTests(tests);
 }
-

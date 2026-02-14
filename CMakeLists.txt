@@ -5,6 +5,13 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(SCRATCHROBIN_BUILD_UI "Build desktop ScratchRobin UI executable" ON)
+option(SCRATCHROBIN_USE_SCRATCHBIRD "Enable ScratchBird protocol/client support" ON)
+option(SCRATCHROBIN_EMBED_SCRATCHBIRD_SERVER "Embed ScratchBird server binaries in full profile" ON)
+option(SCRATCHROBIN_USE_LIBPQ "Enable PostgreSQL adapter surface" ON)
+option(SCRATCHROBIN_USE_MYSQL "Enable MySQL/MariaDB adapter surface" ON)
+option(SCRATCHROBIN_USE_FIREBIRD "Enable Firebird adapter surface" ON)
+option(SCRATCHROBIN_USE_LIBSECRET "Enable credential-store integration surfaces" ON)
 option(SCRATCHROBIN_BUILD_TESTS "Build beta1b conformance-first tests" ON)
 
 add_library(scratchrobin_phase_scaffold STATIC
@@ -54,6 +61,10 @@ target_include_directories(scratchrobin_runtime PUBLIC
 
 target_link_libraries(scratchrobin_runtime PUBLIC scratchrobin_core_contracts)
 target_compile_features(scratchrobin_runtime PUBLIC cxx_std_20)
+target_compile_definitions(scratchrobin_runtime PUBLIC
+    SCRATCHROBIN_USE_SCRATCHBIRD=$<BOOL:${SCRATCHROBIN_USE_SCRATCHBIRD}>
+    SCRATCHROBIN_EMBED_SCRATCHBIRD_SERVER=$<BOOL:${SCRATCHROBIN_EMBED_SCRATCHBIRD_SERVER}>
+)
 
 add_library(scratchrobin_project STATIC
     src/project/project_services.cpp
@@ -78,6 +89,12 @@ target_include_directories(scratchrobin_connection PUBLIC
 
 target_link_libraries(scratchrobin_connection PUBLIC scratchrobin_core_contracts scratchrobin_runtime)
 target_compile_features(scratchrobin_connection PUBLIC cxx_std_20)
+target_compile_definitions(scratchrobin_connection PUBLIC
+    SCRATCHROBIN_USE_LIBPQ=$<BOOL:${SCRATCHROBIN_USE_LIBPQ}>
+    SCRATCHROBIN_USE_MYSQL=$<BOOL:${SCRATCHROBIN_USE_MYSQL}>
+    SCRATCHROBIN_USE_FIREBIRD=$<BOOL:${SCRATCHROBIN_USE_FIREBIRD}>
+    SCRATCHROBIN_USE_LIBSECRET=$<BOOL:${SCRATCHROBIN_USE_LIBSECRET}>
+)
 
 add_library(scratchrobin_ui STATIC
     src/ui/ui_workflow_services.cpp
@@ -161,21 +178,23 @@ target_include_directories(scratchrobin_release PUBLIC
 target_link_libraries(scratchrobin_release PUBLIC scratchrobin_core_contracts)
 target_compile_features(scratchrobin_release PUBLIC cxx_std_20)
 
-add_executable(scratchrobin src/main.cpp)
+if(SCRATCHROBIN_BUILD_UI)
+    add_executable(scratchrobin src/main.cpp)
 
-target_link_libraries(scratchrobin PRIVATE
-    scratchrobin_phase_scaffold
-    scratchrobin_core_contracts
-    scratchrobin_runtime
-    scratchrobin_project
-    scratchrobin_connection
-    scratchrobin_ui
-    scratchrobin_diagram
-    scratchrobin_reporting
-    scratchrobin_advanced
-    scratchrobin_packaging
-    scratchrobin_release
-)
+    target_link_libraries(scratchrobin PRIVATE
+        scratchrobin_phase_scaffold
+        scratchrobin_core_contracts
+        scratchrobin_runtime
+        scratchrobin_project
+        scratchrobin_connection
+        scratchrobin_ui
+        scratchrobin_diagram
+        scratchrobin_reporting
+        scratchrobin_advanced
+        scratchrobin_packaging
+        scratchrobin_release
+    )
+endif()
 
 if(SCRATCHROBIN_BUILD_TESTS)
     enable_testing()
@@ -368,4 +387,17 @@ if(SCRATCHROBIN_BUILD_TESTS)
     )
     target_link_libraries(scratchrobin_tests_conformance PRIVATE scratchrobin_core_contracts)
     add_test(NAME scratchrobin_tests_conformance COMMAND scratchrobin_tests_conformance)
+
+    add_executable(scratchrobin_perf_diagram
+        tests/perf/diagram_perf.cpp
+    )
+    target_include_directories(scratchrobin_perf_diagram PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(scratchrobin_perf_diagram PRIVATE
+        scratchrobin_core_contracts
+        scratchrobin_diagram
+    )
+    add_test(NAME scratchrobin_perf_diagram COMMAND scratchrobin_perf_diagram)
 endif()

@@ -206,7 +206,7 @@ int main() {
 
     tests.push_back({"project/validate_payload", [] {
                         auto json = ParseJson(
-                            R"({"project":{"project_id":"123e4567-e89b-12d3-a456-426614174000","name":"x","created_at":"2026-02-14T00:00:00Z","updated_at":"2026-02-14T00:00:00Z","config":{},"objects":[],"objects_by_path":{},"reporting_assets":[],"reporting_schedules":[],"data_view_snapshots":[],"git_sync_state":null,"audit_log_path":"audit.log"}})");
+                            R"({"project":{"project_id":"123e4567-e89b-12d3-a456-426614174000","name":"x","created_at":"2026-02-14T00:00:00Z","updated_at":"2026-02-14T00:00:00Z","config":{"default_environment_id":"dev","active_connection_id":null,"connections_file_path":"config/connections.toml","governance":{"owners":["owner"],"stewards":[],"review_min_approvals":1,"allowed_roles_by_environment":{"dev":["owner"]},"ai_policy":{"enabled":true,"require_review":false,"allow_scopes":["design"],"deny_scopes":[]},"audit_policy":{"level":"standard","retention_days":30,"export_enabled":true}},"security_mode":"standard","features":{"sql_editor":true}},"objects":[],"objects_by_path":{},"reporting_assets":[],"reporting_schedules":[],"data_view_snapshots":[],"git_sync_state":null,"audit_log_path":"audit.log"}})");
                         ValidateProjectPayload(json);
                     }});
 

@@ -78,6 +78,24 @@ int main() {
                         ExpectReject("SRB1-R-9002", [&] {
                             (void)svc.ValidateManifestJson(manifest_bad_backend, surfaces, backends);
                         });
+
+                        auto manifest_bad_platform = manifest;
+                        const std::string platform_needle = "\"platform\":\"linux\"";
+                        const auto platform_pos = manifest_bad_platform.find(platform_needle);
+                        scratchrobin::tests::AssertTrue(platform_pos != std::string::npos, "platform field missing");
+                        manifest_bad_platform.replace(platform_pos, platform_needle.size(), "\"platform\":\"solaris\"");
+                        ExpectReject("SRB1-R-9002", [&] {
+                            (void)svc.ValidateManifestJson(manifest_bad_platform, surfaces, backends);
+                        });
+
+                        auto manifest_bad_security = manifest;
+                        const std::string sec_needle = "\"security_mode\":\"standard\"";
+                        const auto sec_pos = manifest_bad_security.find(sec_needle);
+                        scratchrobin::tests::AssertTrue(sec_pos != std::string::npos, "security_mode field missing");
+                        manifest_bad_security.replace(sec_pos, sec_needle.size(), "\"security_mode\":\"invalid\"");
+                        ExpectReject("SRB1-R-9002", [&] {
+                            (void)svc.ValidateManifestJson(manifest_bad_security, surfaces, backends);
+                        });
                     }});
 
     tests.push_back({"integration/packaging_registry_and_artifacts", [] {

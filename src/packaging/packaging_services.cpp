@@ -33,6 +33,28 @@ const JsonValue& RequireObjectMember(const JsonValue& object,
     return *value;
 }
 
+void ValidateManifestSchemaContract(const JsonValue& schema) {
+    if (schema.type != JsonValue::Type::Object) {
+        throw MakeReject("SRB1-R-9002", "manifest schema must be object", "packaging", "validate_manifest_schema");
+    }
+    const JsonValue* id = FindMember(schema, "$id");
+    std::string schema_id;
+    if (id == nullptr || !GetStringValue(*id, &schema_id) ||
+        schema_id != "scratchrobin.package_profile_manifest.schema.json") {
+        throw MakeReject("SRB1-R-9002", "unexpected manifest schema id", "packaging", "validate_manifest_schema");
+    }
+    const JsonValue* props = FindMember(schema, "properties");
+    if (props == nullptr || props->type != JsonValue::Type::Object) {
+        throw MakeReject("SRB1-R-9002", "manifest schema missing properties", "packaging", "validate_manifest_schema");
+    }
+    for (const auto& required_key : {"profile_id", "enabled_backends", "surfaces", "security_defaults", "artifacts"}) {
+        if (FindMember(*props, required_key) == nullptr) {
+            throw MakeReject("SRB1-R-9002", "manifest schema missing required property", "packaging",
+                             "validate_manifest_schema", false, required_key);
+        }
+    }
+}
+
 std::vector<std::string> RequireStringArrayMember(const JsonValue& object,
                                                   const std::string& key,
                                                   const std::string& method) {
@@ -124,6 +146,7 @@ ManifestValidationSummary PackagingService::ValidateManifestFile(const std::stri
                                                                  const std::string& schema_json_path) const {
     const auto manifest_json = LoadTextFile(manifest_path);
     const auto surface_registry = LoadSurfaceRegistry(registry_json_path);
+    ValidateManifestSchemaContract(ParseJsonManifest(LoadTextFile(schema_json_path)));
     const auto backend_enum = LoadBackendEnumFromSchema(schema_json_path);
     return ValidateManifestJson(manifest_json, surface_registry, backend_enum);
 }

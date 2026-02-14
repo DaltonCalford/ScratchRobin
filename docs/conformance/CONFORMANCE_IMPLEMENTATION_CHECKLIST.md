@@ -4,15 +4,15 @@ Generated from beta1b `CONFORMANCE_VECTOR.csv` and mapped to local phase stubs (
 
 ## Summary
 
-- Total cases: `93`
+- Total cases: `96`
 - Implementation status:
-  - `Implemented`: `93`
+  - `Implemented`: `96`
   - `Partial`: `0`
   - `Planned`: `0`
   - `Stub`: `0`
 - Priority counts:
-  - `Critical`: `24`
-  - `High`: `54`
+  - `Critical`: `26`
+  - `High`: `55`
   - `Medium`: `15`
   - `Low`: `0`
 - Phase distribution:
@@ -23,8 +23,8 @@ Generated from beta1b `CONFORMANCE_VECTOR.csv` and mapped to local phase stubs (
   - `Phase 06` (Diagramming and Visual Modeling): `5`
   - `Phase 07` (Reporting and Governance Integration): `10`
   - `Phase 08` (Advanced Features and Integrations): `15`
-  - `Phase 09` (Build/Test/Packaging): `8`
-  - `Phase 10` (Conformance/Alpha/Release Gates): `14`
+  - `Phase 09` (Build/Test/Packaging): `10`
+  - `Phase 10` (Conformance/Alpha/Release Gates): `15`
 
 ## Evidence
 
@@ -44,3 +44,21 @@ Generated from beta1b `CONFORMANCE_VECTOR.csv` and mapped to local phase stubs (
 ## Full Data
 
 Use `docs/conformance/CONFORMANCE_IMPLEMENTATION_CHECKLIST.csv` as the authoritative checklist table for implementation tracking.
+
+## Progress Tracking (Mandatory)
+
+- Queue tracker: `docs/conformance/BETA1B_IMPLEMENTATION_PROGRESS_TRACKER.csv`
+- Append-only step log: `docs/conformance/BETA1B_IMPLEMENTATION_STEP_LOG.csv`
+- Protocol: `docs/conformance/IMPLEMENTATION_PROGRESS_TRACKING_PROTOCOL.md`
+
+Every implementation step must update tracker + step log using:
+
+`python3 tools/update_progress_tracker.py ...`
+
+Commit-time validation command:
+
+`./tools/check_progress_tracker.sh --staged`
+
+Optional hook installer:
+
+`./tools/install_progress_hook.sh`
