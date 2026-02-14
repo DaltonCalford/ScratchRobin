@@ -468,12 +468,44 @@ int main() {
 
                         const auto case_ids = ReadConformanceCaseIds(vector_csv);
                         AssertTrue(!case_ids.empty(), "conformance vector is empty");
+                        std::vector<std::string> failed_case_ids;
                         for (const auto& case_id : case_ids) {
                             auto it = checks.find(case_id);
                             if (it == checks.end()) {
-                                throw std::runtime_error("missing conformance runtime check for " + case_id);
+                                failed_case_ids.push_back(case_id);
+                                continue;
                             }
-                            it->second();
+                            try {
+                                it->second();
+                            } catch (...) {
+                                failed_case_ids.push_back(case_id);
+                            }
+                        }
+
+                        std::ostringstream conformance_summary;
+                        conformance_summary << "{\"total_cases\":" << case_ids.size()
+                                            << ",\"passed_cases\":" << (case_ids.size() - failed_case_ids.size())
+                                            << ",\"failed_cases\":" << failed_case_ids.size()
+                                            << ",\"failed_case_ids\":[";
+                        for (std::size_t i = 0; i < failed_case_ids.size(); ++i) {
+                            if (i > 0U) {
+                                conformance_summary << ',';
+                            }
+                            conformance_summary << "\"" << failed_case_ids[i] << "\"";
+                        }
+                        conformance_summary << "]}";
+                        std::cout << "ConformanceSummaryJson: " << conformance_summary.str() << '\n';
+
+                        if (!failed_case_ids.empty()) {
+                            std::ostringstream error;
+                            error << "conformance case failures: ";
+                            for (std::size_t i = 0; i < failed_case_ids.size(); ++i) {
+                                if (i > 0U) {
+                                    error << ",";
+                                }
+                                error << failed_case_ids[i];
+                            }
+                            throw std::runtime_error(error.str());
                         }
 
                         fs::remove_all(temp);
