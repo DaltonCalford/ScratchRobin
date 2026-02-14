@@ -24,6 +24,7 @@ Runtime verification commands:
 - `./build/scratchrobin --release-gate-check`
 - `./build/scratchrobin --validate-package-manifest=resources/templates/package_profile_manifest.example.json`
 - `./build/scratchrobin --check-package-artifacts=resources/templates/package_profile_manifest.example.json`
+- `./tools/run_conformance_gate.sh ./build`
 
 Developer/install guides:
 - `docs/developers_guide/README.md`

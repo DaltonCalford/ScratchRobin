@@ -20,6 +20,7 @@
 2. Conformance output:
    - test binaries emit `SummaryJson` records.
    - conformance vector test emits `ConformanceSummaryJson` with failed case ids.
+   - aggregate gate output with `tools/run_conformance_gate.sh`.
 3. Release gate:
    - `scratchrobin --release-gate-check`
 
