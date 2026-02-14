@@ -1,9 +1,12 @@
 #include "phases/phase_registry.h"
+#include "release/release_conformance_services.h"
 #include "runtime/runtime_services.h"
 
 #include <filesystem>
 #include <iostream>
+#include <optional>
 #include <string_view>
+#include <vector>
 
 int main(int argc, char** argv) {
     const auto has_arg = [](int argc_local, char** argv_local, std::string_view needle) {
@@ -14,33 +17,65 @@ int main(int argc, char** argv) {
         }
         return false;
     };
+    const auto arg_value = [](int argc_local, char** argv_local, std::string_view prefix) -> std::optional<std::string> {
+        for (int i = 1; i < argc_local; ++i) {
+            const std::string_view arg(argv_local[i]);
+            if (arg.rfind(prefix, 0) == 0U) {
+                return std::string(arg.substr(prefix.size()));
+            }
+        }
+        return std::nullopt;
+    };
+    const auto find_repo_root = [](const char* argv0) {
+        namespace fs = std::filesystem;
+        std::vector<fs::path> roots;
+        roots.push_back(fs::current_path());
+        roots.push_back(fs::current_path().parent_path());
+        if (argv0 != nullptr) {
+            std::error_code ec;
+            fs::path exe = fs::absolute(argv0, ec);
+            if (!ec) {
+                roots.push_back(exe.parent_path());
+                roots.push_back(exe.parent_path().parent_path());
+            }
+        }
+        for (const auto& candidate : roots) {
+            if (candidate.empty()) {
+                continue;
+            }
+            if (fs::exists(candidate / "config/scratchrobin.toml.example") &&
+                fs::exists(candidate / "config/connections.toml.example")) {
+                return candidate;
+            }
+        }
+        return fs::current_path();
+    };
+
+    if (argc > 0 && argv != nullptr && has_arg(argc, argv, "--release-gate-check")) {
+        namespace fs = std::filesystem;
+        const fs::path repo_root = find_repo_root(argc > 0 ? argv[0] : nullptr);
+        std::string blocker_register =
+            (repo_root.parent_path() /
+             "local_work/docs/specifications_beta1b/10_Execution_Tracks_and_Conformance/BLOCKER_REGISTER.csv")
+                .string();
+        if (const auto value = arg_value(argc, argv, "--blocker-register=")) {
+            blocker_register = *value;
+        }
+
+        try {
+            scratchrobin::release::ReleaseConformanceService service;
+            const auto rows = service.LoadBlockerRegister(blocker_register);
+            const auto verdict = service.EvaluatePromotability(rows);
+            std::cout << service.ExportPromotabilityJson(verdict) << "\n";
+            return verdict.promotable ? 0 : 3;
+        } catch (const std::exception& ex) {
+            std::cerr << "release gate check failed: " << ex.what() << "\n";
+            return 2;
+        }
+    }
 
     if (argc > 0 && argv != nullptr && has_arg(argc, argv, "--runtime-startup")) {
         namespace fs = std::filesystem;
-        const auto find_repo_root = [&](const char* argv0) {
-            std::vector<fs::path> roots;
-            roots.push_back(fs::current_path());
-            roots.push_back(fs::current_path().parent_path());
-            if (argv0 != nullptr) {
-                std::error_code ec;
-                fs::path exe = fs::absolute(argv0, ec);
-                if (!ec) {
-                    roots.push_back(exe.parent_path());
-                    roots.push_back(exe.parent_path().parent_path());
-                }
-            }
-            for (const auto& candidate : roots) {
-                if (candidate.empty()) {
-                    continue;
-                }
-                if (fs::exists(candidate / "config/scratchrobin.toml.example") &&
-                    fs::exists(candidate / "config/connections.toml.example")) {
-                    return candidate;
-                }
-            }
-            return fs::current_path();
-        };
-
         const fs::path repo_root = find_repo_root(argc > 0 ? argv[0] : nullptr);
         scratchrobin::runtime::ScratchRobinRuntime runtime;
         scratchrobin::runtime::StartupPaths paths;

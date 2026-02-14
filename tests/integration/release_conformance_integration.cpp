@@ -56,12 +56,21 @@ int main() {
                         scratchrobin::tests::AssertTrue(rc_gate.blocking_blocker_ids.size() == 2U,
                                                         "rc gate blocking ids mismatch");
 
+                        auto verdict = svc.EvaluatePromotability(rows);
+                        scratchrobin::tests::AssertTrue(!verdict.promotable, "verdict should fail while blockers unresolved");
+                        auto verdict_json = svc.ExportPromotabilityJson(verdict);
+                        scratchrobin::tests::AssertTrue(
+                            verdict_json.find("\"promotable\":false") != std::string::npos,
+                            "verdict json should include promotable=false");
+
                         rows[0].status = "closed";
                         rows[1].status = "closed";
                         phase_gate = svc.EvaluatePhaseAcceptance(rows);
                         rc_gate = svc.EvaluateRcEntry(rows);
                         scratchrobin::tests::AssertTrue(phase_gate.pass, "phase gate should pass after closure");
                         scratchrobin::tests::AssertTrue(rc_gate.pass, "rc gate should pass after closure");
+                        verdict = svc.EvaluatePromotability(rows);
+                        scratchrobin::tests::AssertTrue(verdict.promotable, "verdict should pass after blocker closure");
 
                         fs::remove_all(temp);
                     }});

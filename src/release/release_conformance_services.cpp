@@ -1,6 +1,7 @@
 #include "release/release_conformance_services.h"
 
 #include <fstream>
+#include <sstream>
 
 #include "core/reject.h"
 
@@ -30,6 +31,32 @@ std::vector<std::string> SplitBlockerCsvLine(const std::string& line) {
 
 bool IsUnresolved(const beta1b::BlockerRow& row) {
     return row.status == "open" || row.status == "mitigated";
+}
+
+std::string JsonEscape(const std::string& text) {
+    std::string out;
+    out.reserve(text.size() + 8);
+    for (char c : text) {
+        if (c == '\\') {
+            out += "\\\\";
+        } else if (c == '"') {
+            out += "\\\"";
+        } else {
+            out.push_back(c);
+        }
+    }
+    return out;
+}
+
+void WriteStringArray(std::ostringstream* out, const std::vector<std::string>& values) {
+    *out << "[";
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        if (i > 0U) {
+            *out << ",";
+        }
+        *out << "\"" << JsonEscape(values[i]) << "\"";
+    }
+    *out << "]";
 }
 
 }  // namespace
@@ -105,6 +132,33 @@ GateDecision ReleaseConformanceService::EvaluateRcEntry(const std::vector<beta1b
     out.pass = out.blocking_blocker_ids.empty();
     out.reason = out.pass ? "pass" : "unresolved_p0_p1_blockers";
     return out;
+}
+
+PromotabilityVerdict ReleaseConformanceService::EvaluatePromotability(
+    const std::vector<beta1b::BlockerRow>& rows) const {
+    PromotabilityVerdict verdict;
+    verdict.phase_gate = EvaluatePhaseAcceptance(rows);
+    verdict.rc_gate = EvaluateRcEntry(rows);
+    verdict.promotable = verdict.phase_gate.pass && verdict.rc_gate.pass;
+    return verdict;
+}
+
+std::string ReleaseConformanceService::ExportPromotabilityJson(const PromotabilityVerdict& verdict) const {
+    std::ostringstream out;
+    out << "{"
+        << "\"promotable\":" << (verdict.promotable ? "true" : "false")
+        << ",\"phase_gate\":{"
+        << "\"pass\":" << (verdict.phase_gate.pass ? "true" : "false")
+        << ",\"reason\":\"" << JsonEscape(verdict.phase_gate.reason) << "\""
+        << ",\"blocking_blocker_ids\":";
+    WriteStringArray(&out, verdict.phase_gate.blocking_blocker_ids);
+    out << "},\"rc_gate\":{"
+        << "\"pass\":" << (verdict.rc_gate.pass ? "true" : "false")
+        << ",\"reason\":\"" << JsonEscape(verdict.rc_gate.reason) << "\""
+        << ",\"blocking_blocker_ids\":";
+    WriteStringArray(&out, verdict.rc_gate.blocking_blocker_ids);
+    out << "}}";
+    return out.str();
 }
 
 void ReleaseConformanceService::ValidateAlphaMirrorPresence(

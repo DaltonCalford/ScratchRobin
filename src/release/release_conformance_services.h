@@ -15,6 +15,12 @@ struct GateDecision {
     std::vector<std::string> blocking_blocker_ids;
 };
 
+struct PromotabilityVerdict {
+    GateDecision phase_gate;
+    GateDecision rc_gate;
+    bool promotable = false;
+};
+
 class ReleaseConformanceService {
 public:
     std::vector<beta1b::BlockerRow> LoadBlockerRegister(const std::string& csv_path) const;
@@ -22,6 +28,8 @@ public:
 
     GateDecision EvaluatePhaseAcceptance(const std::vector<beta1b::BlockerRow>& rows) const;
     GateDecision EvaluateRcEntry(const std::vector<beta1b::BlockerRow>& rows) const;
+    PromotabilityVerdict EvaluatePromotability(const std::vector<beta1b::BlockerRow>& rows) const;
+    std::string ExportPromotabilityJson(const PromotabilityVerdict& verdict) const;
 
     void ValidateAlphaMirrorPresence(const std::string& mirror_root,
                                      const std::vector<beta1b::AlphaMirrorEntry>& entries) const;
