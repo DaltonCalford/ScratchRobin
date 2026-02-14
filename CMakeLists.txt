@@ -79,6 +79,52 @@ target_include_directories(scratchrobin_connection PUBLIC
 target_link_libraries(scratchrobin_connection PUBLIC scratchrobin_core_contracts scratchrobin_runtime)
 target_compile_features(scratchrobin_connection PUBLIC cxx_std_20)
 
+add_library(scratchrobin_ui STATIC
+    src/ui/ui_workflow_services.cpp
+)
+
+target_include_directories(scratchrobin_ui PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(scratchrobin_ui PUBLIC
+    scratchrobin_core_contracts
+    scratchrobin_runtime
+    scratchrobin_project
+    scratchrobin_connection
+)
+target_compile_features(scratchrobin_ui PUBLIC cxx_std_20)
+
+add_library(scratchrobin_diagram STATIC
+    src/diagram/diagram_services.cpp
+)
+
+target_include_directories(scratchrobin_diagram PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(scratchrobin_diagram PUBLIC scratchrobin_core_contracts)
+target_compile_features(scratchrobin_diagram PUBLIC cxx_std_20)
+
+add_library(scratchrobin_reporting STATIC
+    src/reporting/reporting_services.cpp
+)
+
+target_include_directories(scratchrobin_reporting PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(scratchrobin_reporting PUBLIC
+    scratchrobin_core_contracts
+    scratchrobin_runtime
+    scratchrobin_project
+    scratchrobin_connection
+)
+target_compile_features(scratchrobin_reporting PUBLIC cxx_std_20)
+
 add_executable(scratchrobin src/main.cpp)
 
 target_link_libraries(scratchrobin PRIVATE
@@ -87,6 +133,9 @@ target_link_libraries(scratchrobin PRIVATE
     scratchrobin_runtime
     scratchrobin_project
     scratchrobin_connection
+    scratchrobin_ui
+    scratchrobin_diagram
+    scratchrobin_reporting
 )
 
 if(SCRATCHROBIN_BUILD_TESTS)
@@ -124,6 +173,8 @@ if(SCRATCHROBIN_BUILD_TESTS)
         scratchrobin_runtime
         scratchrobin_project
         scratchrobin_connection
+        scratchrobin_ui
+        scratchrobin_diagram
     )
     add_test(NAME scratchrobin_tests_integration COMMAND scratchrobin_tests_integration)
 
@@ -139,6 +190,8 @@ if(SCRATCHROBIN_BUILD_TESTS)
         scratchrobin_runtime
         scratchrobin_project
         scratchrobin_connection
+        scratchrobin_ui
+        scratchrobin_diagram
     )
     add_test(NAME scratchrobin_tests_runtime_integration COMMAND scratchrobin_tests_runtime_integration)
 
@@ -154,6 +207,8 @@ if(SCRATCHROBIN_BUILD_TESTS)
         scratchrobin_runtime
         scratchrobin_project
         scratchrobin_connection
+        scratchrobin_ui
+        scratchrobin_diagram
     )
     add_test(NAME scratchrobin_tests_project_integration COMMAND scratchrobin_tests_project_integration)
 
@@ -169,8 +224,62 @@ if(SCRATCHROBIN_BUILD_TESTS)
         scratchrobin_runtime
         scratchrobin_project
         scratchrobin_connection
+        scratchrobin_ui
+        scratchrobin_diagram
     )
     add_test(NAME scratchrobin_tests_connection_integration COMMAND scratchrobin_tests_connection_integration)
+
+    add_executable(scratchrobin_tests_ui_integration
+        tests/integration/ui_workflow_integration.cpp
+    )
+    target_include_directories(scratchrobin_tests_ui_integration PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(scratchrobin_tests_ui_integration PRIVATE
+        scratchrobin_core_contracts
+        scratchrobin_runtime
+        scratchrobin_project
+        scratchrobin_connection
+        scratchrobin_ui
+        scratchrobin_diagram
+    )
+    add_test(NAME scratchrobin_tests_ui_integration COMMAND scratchrobin_tests_ui_integration)
+
+    add_executable(scratchrobin_tests_diagram_integration
+        tests/integration/diagram_workflow_integration.cpp
+    )
+    target_include_directories(scratchrobin_tests_diagram_integration PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(scratchrobin_tests_diagram_integration PRIVATE
+        scratchrobin_core_contracts
+        scratchrobin_runtime
+        scratchrobin_project
+        scratchrobin_connection
+        scratchrobin_ui
+        scratchrobin_diagram
+    )
+    add_test(NAME scratchrobin_tests_diagram_integration COMMAND scratchrobin_tests_diagram_integration)
+
+    add_executable(scratchrobin_tests_reporting_integration
+        tests/integration/reporting_workflow_integration.cpp
+    )
+    target_include_directories(scratchrobin_tests_reporting_integration PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(scratchrobin_tests_reporting_integration PRIVATE
+        scratchrobin_core_contracts
+        scratchrobin_runtime
+        scratchrobin_project
+        scratchrobin_connection
+        scratchrobin_ui
+        scratchrobin_diagram
+        scratchrobin_reporting
+    )
+    add_test(NAME scratchrobin_tests_reporting_integration COMMAND scratchrobin_tests_reporting_integration)
 
     add_executable(scratchrobin_tests_conformance
         tests/conformance/beta1b_conformance_vector.cpp
