@@ -19,6 +19,15 @@ Conformance evidence:
 - `docs/conformance/CONFORMANCE_IMPLEMENTATION_CHECKLIST.csv`
 - `tests/conformance/beta1b_conformance_vector.cpp`
 
+Runtime verification commands:
+- `./build/scratchrobin --runtime-startup`
+- `./build/scratchrobin --release-gate-check`
+- `./build/scratchrobin --validate-package-manifest=resources/templates/package_profile_manifest.example.json`
+
+Developer/install guides:
+- `docs/developers_guide/README.md`
+- `docs/installation_guide/README.md`
+
 ## Clone Resync Required
 
 Repository history was rewritten to remove build/test-build artifacts.

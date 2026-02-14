@@ -1,0 +1,5 @@
+ScratchRobin attribution and third-party notices are tracked in this file for packaged builds.
+
+Current baseline:
+- ScratchRobin project source authored and maintained by Dalton Calford.
+- Build/runtime dependencies are declared in repository configuration and package manifests.
