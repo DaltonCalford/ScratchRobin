@@ -1,0 +1,78 @@
+{
+  "description": "Large dataset fixture for performance testing",
+  "version": "1.0",
+  "queries": [
+    {
+      "match": "^select count\\(\\*\\) from large_table",
+      "match_type": "regex",
+      "result": {
+        "columns": [{ "name": "count", "wire_type": "INT64" }],
+        "rows": [[1000000]],
+        "command_tag": "SELECT 1"
+      }
+    },
+    {
+      "match": "^select \\* from large_table limit 1000",
+      "match_type": "regex",
+      "result": {
+        "columns": [
+          { "name": "id", "wire_type": "INT64" },
+          { "name": "data", "wire_type": "VARCHAR" },
+          { "name": "created_at", "wire_type": "TIMESTAMPTZ" }
+        ],
+        "rows": [
+          [1, "Sample data row 1", "2026-01-01 00:00:00+00"],
+          [2, "Sample data row 2", "2026-01-01 00:00:01+00"],
+          [3, "Sample data row 3", "2026-01-01 00:00:02+00"],
+          [4, "Sample data row 4", "2026-01-01 00:00:03+00"],
+          [5, "Sample data row 5", "2026-01-01 00:00:04+00"],
+          [6, "Sample data row 6", "2026-01-01 00:00:05+00"],
+          [7, "Sample data row 7", "2026-01-01 00:00:06+00"],
+          [8, "Sample data row 8", "2026-01-01 00:00:07+00"],
+          [9, "Sample data row 9", "2026-01-01 00:00:08+00"],
+          [10, "Sample data row 10", "2026-01-01 00:00:09+00"]
+        ],
+        "command_tag": "SELECT 1000"
+      }
+    },
+    {
+      "match": "^select pg_size_pretty",
+      "match_type": "regex",
+      "result": {
+        "columns": [{ "name": "pg_size_pretty", "wire_type": "VARCHAR" }],
+        "rows": [["1.2 GB"]],
+        "command_tag": "SELECT 1"
+      }
+    },
+    {
+      "match": "^explain analyze",
+      "match_type": "regex",
+      "result": {
+        "columns": [{ "name": "query_plan", "wire_type": "VARCHAR" }],
+        "rows": [
+          ["Seq Scan on large_table  (cost=0.00..18406.00 rows=1000000 width=50) (actual time=0.023..123.456 rows=1000000 loops=1)"],
+          ["Planning Time: 0.5 ms"],
+          ["Execution Time: 150.2 ms"]
+        ],
+        "command_tag": "EXPLAIN"
+      }
+    }
+  ],
+  "metadata": {
+    "schemas": [{ "name": "public", "owner": "mock_user" }],
+    "tables": [
+      {
+        "name": "large_table",
+        "schema": "public",
+        "estimated_rows": 1000000,
+        "size_bytes": 1073741824
+      },
+      {
+        "name": "huge_table",
+        "schema": "public", 
+        "estimated_rows": 10000000,
+        "size_bytes": 5368709120
+      }
+    ]
+  }
+}

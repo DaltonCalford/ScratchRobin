@@ -1,0 +1,41 @@
+[[connection]]
+name = "Local ScratchBird"
+host = "127.0.0.1"
+port = 3092
+database = "/data/scratchbird/demo.sdb"
+username = "sysdba"
+credential_id = "scratchrobin:local-sysdba"
+application_name = "scratchrobin"
+# role = "app_readonly"
+ssl_mode = "prefer"
+# ssl_root_cert = "/etc/ssl/certs/ca-certificates.crt"
+# ssl_cert = "/etc/ssl/certs/scratchrobin-client.crt"
+# ssl_key = "/etc/ssl/private/scratchrobin-client.key"
+# ssl_password = "optional-passphrase"
+# options = "-c search_path=users.public"
+# status_auto_poll = false
+# status_poll_interval_ms = 2000
+# status_request_default = "server"
+# status_category_order = "Request, General, engine, db"
+# status_category_filter = "All"
+# status_diff_enabled = false
+# status_diff_ignore_unchanged = true
+# status_diff_ignore_empty = true
+# backend = "scratchbird"
+# backend = "mock"
+# fixture_path = "config/fixtures/default.json"
+
+# External backend example (optional client libs required):
+# backend = "postgresql" # or "mysql" / "firebird"
+# host = "127.0.0.1"
+# port = 5432
+# database = "postgres"
+# username = "postgres"
+# credential_id = "env:PGPASSWORD"
+# application_name = "scratchrobin"
+# role = "reporting"
+# ssl_root_cert = "/etc/ssl/certs/ca-certificates.crt"
+# ssl_cert = "/etc/ssl/certs/pg-client.crt"
+# ssl_key = "/etc/ssl/private/pg-client.key"
+# ssl_password = "optional-passphrase"
+# options = "-c search_path=public"

@@ -1,0 +1,435 @@
+{
+  "description": "Comprehensive test fixture for ScratchRobin mock backend",
+  "version": "1.0",
+  "queries": [
+    {
+      "match": "^select 1",
+      "match_type": "regex",
+      "result": {
+        "columns": [{ "name": "?column?", "wire_type": "INT32" }],
+        "rows": [[1]],
+        "command_tag": "SELECT 1"
+      }
+    },
+    {
+      "match": "^select version\\(\\)",
+      "match_type": "regex",
+      "result": {
+        "columns": [{ "name": "version", "wire_type": "VARCHAR" }],
+        "rows": [["ScratchRobin Mock Backend 1.0"]],
+        "command_tag": "SELECT 1"
+      }
+    },
+    {
+      "match": "^select current_database\\(\\)",
+      "match_type": "regex",
+      "result": {
+        "columns": [{ "name": "current_database", "wire_type": "VARCHAR" }],
+        "rows": [["mock_test_db"]],
+        "command_tag": "SELECT 1"
+      }
+    },
+    {
+      "match": "^select current_user",
+      "match_type": "regex",
+      "result": {
+        "columns": [{ "name": "current_user", "wire_type": "VARCHAR" }],
+        "rows": [["mock_user"]],
+        "command_tag": "SELECT 1"
+      }
+    },
+    {
+      "match": "^select now\\(\\)",
+      "match_type": "regex",
+      "result": {
+        "columns": [{ "name": "now", "wire_type": "TIMESTAMPTZ" }],
+        "rows": [["2026-02-06 15:30:00+00"]],
+        "command_tag": "SELECT 1"
+      }
+    },
+    {
+      "match": "^select pg_catalog\\.obj_description",
+      "match_type": "regex",
+      "result": {
+        "columns": [{ "name": "obj_description", "wire_type": "VARCHAR" }],
+        "rows": [["Test table for mock backend"]],
+        "command_tag": "SELECT 1"
+      }
+    },
+    {
+      "match": "^select \\* from information_schema\\.tables",
+      "match_type": "regex",
+      "result": {
+        "columns": [
+          { "name": "table_catalog", "wire_type": "VARCHAR" },
+          { "name": "table_schema", "wire_type": "VARCHAR" },
+          { "name": "table_name", "wire_type": "VARCHAR" },
+          { "name": "table_type", "wire_type": "VARCHAR" }
+        ],
+        "rows": [
+          ["mock_test_db", "public", "customers", "BASE TABLE"],
+          ["mock_test_db", "public", "orders", "BASE TABLE"],
+          ["mock_test_db", "public", "products", "BASE TABLE"],
+          ["mock_test_db", "public", "order_items", "BASE TABLE"],
+          ["mock_test_db", "public", "categories", "BASE TABLE"],
+          ["mock_test_db", "public", "employees", "BASE TABLE"],
+          ["mock_test_db", "public", "departments", "BASE TABLE"],
+          ["mock_test_db", "public", "inventory", "BASE TABLE"],
+          ["mock_test_db", "public", "suppliers", "BASE TABLE"],
+          ["mock_test_db", "public", "shippings", "BASE TABLE"]
+        ],
+        "command_tag": "SELECT 10"
+      }
+    },
+    {
+      "match": "^select \\* from information_schema\\.columns",
+      "match_type": "regex",
+      "result": {
+        "columns": [
+          { "name": "table_schema", "wire_type": "VARCHAR" },
+          { "name": "table_name", "wire_type": "VARCHAR" },
+          { "name": "column_name", "wire_type": "VARCHAR" },
+          { "name": "data_type", "wire_type": "VARCHAR" },
+          { "name": "is_nullable", "wire_type": "VARCHAR" },
+          { "name": "column_default", "wire_type": "VARCHAR" }
+        ],
+        "rows": [
+          ["public", "customers", "id", "bigint", "NO", "nextval('customers_id_seq')"],
+          ["public", "customers", "first_name", "character varying", "NO", null],
+          ["public", "customers", "last_name", "character varying", "NO", null],
+          ["public", "customers", "email", "character varying", "NO", null],
+          ["public", "customers", "phone", "character varying", "YES", null],
+          ["public", "customers", "created_at", "timestamp with time zone", "NO", "now()"],
+          ["public", "orders", "id", "bigint", "NO", "nextval('orders_id_seq')"],
+          ["public", "orders", "customer_id", "bigint", "NO", null],
+          ["public", "orders", "order_date", "timestamp with time zone", "NO", "now()"],
+          ["public", "orders", "total_amount", "numeric", "NO", "0.00"],
+          ["public", "orders", "status", "character varying", "NO", "'pending'"],
+          ["public", "products", "id", "bigint", "NO", "nextval('products_id_seq')"],
+          ["public", "products", "name", "character varying", "NO", null],
+          ["public", "products", "sku", "character varying", "NO", null],
+          ["public", "products", "price", "numeric", "NO", "0.00"],
+          ["public", "products", "category_id", "bigint", "YES", null]
+        ],
+        "command_tag": "SELECT 16"
+      }
+    },
+    {
+      "match": "^select \\* from pg_catalog\\.pg_tables",
+      "match_type": "regex",
+      "result": {
+        "columns": [
+          { "name": "schemaname", "wire_type": "VARCHAR" },
+          { "name": "tablename", "wire_type": "VARCHAR" },
+          { "name": "tableowner", "wire_type": "VARCHAR" }
+        ],
+        "rows": [
+          ["public", "customers", "mock_user"],
+          ["public", "orders", "mock_user"],
+          ["public", "products", "mock_user"],
+          ["public", "order_items", "mock_user"],
+          ["public", "categories", "mock_user"]
+        ],
+        "command_tag": "SELECT 5"
+      }
+    },
+    {
+      "match": "^select \\* from pg_indexes",
+      "match_type": "regex",
+      "result": {
+        "columns": [
+          { "name": "schemaname", "wire_type": "VARCHAR" },
+          { "name": "tablename", "wire_type": "VARCHAR" },
+          { "name": "indexname", "wire_type": "VARCHAR" }
+        ],
+        "rows": [
+          ["public", "customers", "customers_pkey"],
+          ["public", "customers", "customers_email_key"],
+          ["public", "orders", "orders_pkey"],
+          ["public", "orders", "orders_customer_id_idx"],
+          ["public", "products", "products_pkey"]
+        ],
+        "command_tag": "SELECT 5"
+      }
+    },
+    {
+      "match": "^select \\* from information_schema\\.table_constraints",
+      "match_type": "regex",
+      "result": {
+        "columns": [
+          { "name": "constraint_schema", "wire_type": "VARCHAR" },
+          { "name": "constraint_name", "wire_type": "VARCHAR" },
+          { "name": "table_name", "wire_type": "VARCHAR" },
+          { "name": "constraint_type", "wire_type": "VARCHAR" }
+        ],
+        "rows": [
+          ["public", "customers_pkey", "customers", "PRIMARY KEY"],
+          ["public", "customers_email_key", "customers", "UNIQUE"],
+          ["public", "orders_pkey", "orders", "PRIMARY KEY"],
+          ["public", "orders_customer_id_fkey", "orders", "FOREIGN KEY"],
+          ["public", "products_pkey", "products", "PRIMARY KEY"]
+        ],
+        "command_tag": "SELECT 5"
+      }
+    },
+    {
+      "match": "select \\* from customers",
+      "result": {
+        "columns": [
+          { "name": "id", "wire_type": "INT64" },
+          { "name": "first_name", "wire_type": "VARCHAR" },
+          { "name": "last_name", "wire_type": "VARCHAR" },
+          { "name": "email", "wire_type": "VARCHAR" },
+          { "name": "phone", "wire_type": "VARCHAR" },
+          { "name": "created_at", "wire_type": "TIMESTAMPTZ" }
+        ],
+        "rows": [
+          [1, "John", "Smith", "john.smith@example.com", "555-0101", "2026-01-15 10:30:00+00"],
+          [2, "Jane", "Doe", "jane.doe@example.com", "555-0102", "2026-01-16 14:20:00+00"],
+          [3, "Bob", "Johnson", "bob.j@example.com", null, "2026-01-17 09:15:00+00"],
+          [4, "Alice", "Williams", "alice.w@example.com", "555-0104", "2026-01-18 16:45:00+00"],
+          [5, "Charlie", "Brown", "charlie.b@example.com", "555-0105", "2026-01-19 11:00:00+00"]
+        ],
+        "command_tag": "SELECT 5"
+      }
+    },
+    {
+      "match": "select \\* from orders",
+      "result": {
+        "columns": [
+          { "name": "id", "wire_type": "INT64" },
+          { "name": "customer_id", "wire_type": "INT64" },
+          { "name": "order_date", "wire_type": "TIMESTAMPTZ" },
+          { "name": "total_amount", "wire_type": "NUMERIC" },
+          { "name": "status", "wire_type": "VARCHAR" }
+        ],
+        "rows": [
+          [101, 1, "2026-02-01 09:00:00+00", 129.99, "completed"],
+          [102, 1, "2026-02-02 14:30:00+00", 45.50, "shipped"],
+          [103, 2, "2026-02-03 11:15:00+00", 299.00, "processing"],
+          [104, 3, "2026-02-04 16:45:00+00", 15.99, "pending"],
+          [105, 4, "2026-02-05 08:20:00+00", 89.95, "completed"]
+        ],
+        "command_tag": "SELECT 5"
+      }
+    },
+    {
+      "match": "^explain",
+      "match_type": "regex",
+      "result": {
+        "columns": [{ "name": "query_plan", "wire_type": "VARCHAR" }],
+        "rows": [
+          ["Seq Scan on customers  (cost=0.00..35.50 rows=2550 width=100)"],
+          ["  Filter: (id > 0)"]
+        ],
+        "command_tag": "EXPLAIN"
+      }
+    },
+    {
+      "match": "^show transaction",
+      "match_type": "regex",
+      "result": {
+        "columns": [{ "name": "transaction_isolation", "wire_type": "VARCHAR" }],
+        "rows": [["read committed"]],
+        "command_tag": "SHOW"
+      }
+    },
+    {
+      "match": "^select pg_size_pretty",
+      "match_type": "regex",
+      "result": {
+        "columns": [{ "name": "pg_size_pretty", "wire_type": "VARCHAR" }],
+        "rows": [["42 MB"]],
+        "command_tag": "SELECT 1"
+      }
+    },
+    {
+      "match": "^select count\\(\\*\\)",
+      "match_type": "regex",
+      "result": {
+        "columns": [{ "name": "count", "wire_type": "INT64" }],
+        "rows": [[42]],
+        "command_tag": "SELECT 1"
+      }
+    },
+    {
+      "match": "^insert",
+      "match_type": "regex",
+      "result": {
+        "rows_affected": 1,
+        "command_tag": "INSERT 0 1"
+      }
+    },
+    {
+      "match": "^update",
+      "match_type": "regex",
+      "result": {
+        "rows_affected": 1,
+        "command_tag": "UPDATE 1"
+      }
+    },
+    {
+      "match": "^delete",
+      "match_type": "regex",
+      "result": {
+        "rows_affected": 1,
+        "command_tag": "DELETE 1"
+      }
+    },
+    {
+      "match": "^create table",
+      "match_type": "regex",
+      "result": {
+        "command_tag": "CREATE TABLE",
+        "messages": [{ "severity": "notice", "message": "Table created successfully" }]
+      }
+    },
+    {
+      "match": "^drop table",
+      "match_type": "regex",
+      "result": {
+        "command_tag": "DROP TABLE",
+        "messages": [{ "severity": "notice", "message": "Table dropped successfully" }]
+      }
+    },
+    {
+      "match": "^alter table",
+      "match_type": "regex",
+      "result": {
+        "command_tag": "ALTER TABLE",
+        "messages": [{ "severity": "notice", "message": "Table altered successfully" }]
+      }
+    },
+    {
+      "match": "^create index",
+      "match_type": "regex",
+      "result": {
+        "command_tag": "CREATE INDEX",
+        "messages": [{ "severity": "notice", "message": "Index created successfully" }]
+      }
+    },
+    {
+      "match": "^begin",
+      "match_type": "regex",
+      "result": {
+        "command_tag": "BEGIN",
+        "messages": [{ "severity": "notice", "message": "Transaction started" }]
+      }
+    },
+    {
+      "match": "^commit",
+      "match_type": "regex",
+      "result": {
+        "command_tag": "COMMIT",
+        "messages": [{ "severity": "notice", "message": "Transaction committed" }]
+      }
+    },
+    {
+      "match": "^rollback",
+      "match_type": "regex",
+      "result": {
+        "command_tag": "ROLLBACK",
+        "messages": [{ "severity": "notice", "message": "Transaction rolled back" }]
+      }
+    }
+  ],
+  "metadata": {
+    "schemas": [
+      { "name": "public", "owner": "mock_user" },
+      { "name": "auth", "owner": "mock_user" },
+      { "name": "analytics", "owner": "mock_user" }
+    ],
+    "tables": [
+      {
+        "name": "customers",
+        "schema": "public",
+        "owner": "mock_user",
+        "estimated_rows": 10000,
+        "size_bytes": 1048576,
+        "columns": [
+          { "name": "id", "type": "bigint", "nullable": false, "primary_key": true },
+          { "name": "first_name", "type": "varchar(100)", "nullable": false },
+          { "name": "last_name", "type": "varchar(100)", "nullable": false },
+          { "name": "email", "type": "varchar(255)", "nullable": false, "unique": true },
+          { "name": "phone", "type": "varchar(20)", "nullable": true },
+          { "name": "created_at", "type": "timestamptz", "nullable": false, "default": "now()" }
+        ],
+        "indexes": [
+          { "name": "customers_pkey", "type": "btree", "columns": ["id"], "unique": true },
+          { "name": "customers_email_key", "type": "btree", "columns": ["email"], "unique": true },
+          { "name": "customers_name_idx", "type": "btree", "columns": ["last_name", "first_name"], "unique": false }
+        ],
+        "foreign_keys": [],
+        "triggers": [
+          { "name": "customers_updated_at", "event": "UPDATE", "timing": "BEFORE" }
+        ]
+      },
+      {
+        "name": "orders",
+        "schema": "public",
+        "owner": "mock_user",
+        "estimated_rows": 50000,
+        "size_bytes": 5242880,
+        "columns": [
+          { "name": "id", "type": "bigint", "nullable": false, "primary_key": true },
+          { "name": "customer_id", "type": "bigint", "nullable": false, "foreign_key": { "table": "customers", "column": "id" } },
+          { "name": "order_date", "type": "timestamptz", "nullable": false, "default": "now()" },
+          { "name": "total_amount", "type": "numeric(10,2)", "nullable": false, "default": "0.00" },
+          { "name": "status", "type": "varchar(50)", "nullable": false, "default": "'pending'" }
+        ],
+        "indexes": [
+          { "name": "orders_pkey", "type": "btree", "columns": ["id"], "unique": true },
+          { "name": "orders_customer_id_idx", "type": "btree", "columns": ["customer_id"], "unique": false },
+          { "name": "orders_date_idx", "type": "btree", "columns": ["order_date"], "unique": false }
+        ],
+        "foreign_keys": [
+          { "name": "orders_customer_id_fkey", "columns": ["customer_id"], "references": { "table": "customers", "columns": ["id"] } }
+        ]
+      },
+      {
+        "name": "products",
+        "schema": "public",
+        "owner": "mock_user",
+        "estimated_rows": 5000,
+        "size_bytes": 786432,
+        "columns": [
+          { "name": "id", "type": "bigint", "nullable": false, "primary_key": true },
+          { "name": "name", "type": "varchar(200)", "nullable": false },
+          { "name": "sku", "type": "varchar(50)", "nullable": false, "unique": true },
+          { "name": "price", "type": "numeric(10,2)", "nullable": false },
+          { "name": "category_id", "type": "bigint", "nullable": true }
+        ],
+        "indexes": [
+          { "name": "products_pkey", "type": "btree", "columns": ["id"], "unique": true },
+          { "name": "products_sku_key", "type": "btree", "columns": ["sku"], "unique": true }
+        ]
+      }
+    ],
+    "views": [
+      {
+        "name": "active_customers",
+        "schema": "public",
+        "definition": "SELECT * FROM customers WHERE created_at > now() - interval '1 year'"
+      },
+      {
+        "name": "order_summary",
+        "schema": "public",
+        "definition": "SELECT c.id, c.email, count(o.id) as order_count, sum(o.total_amount) as total_spent FROM customers c LEFT JOIN orders o ON c.id = o.customer_id GROUP BY c.id, c.email"
+      }
+    ],
+    "functions": [
+      {
+        "name": "get_customer_orders",
+        "schema": "public",
+        "language": "sql",
+        "return_type": "TABLE",
+        "arguments": [{ "name": "p_customer_id", "type": "bigint" }]
+      }
+    ],
+    "sequences": [
+      { "name": "customers_id_seq", "schema": "public", "current_value": 1000, "increment": 1 },
+      { "name": "orders_id_seq", "schema": "public", "current_value": 10000, "increment": 1 },
+      { "name": "products_id_seq", "schema": "public", "current_value": 500, "increment": 1 }
+    ]
+  }
+}

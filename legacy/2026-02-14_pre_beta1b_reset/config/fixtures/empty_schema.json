@@ -1,0 +1,82 @@
+{
+  "description": "Empty schema fixture for testing fresh database scenarios",
+  "version": "1.0",
+  "queries": [
+    {
+      "match": "^select 1",
+      "match_type": "regex",
+      "result": {
+        "columns": [{ "name": "?column?", "wire_type": "INT32" }],
+        "rows": [[1]],
+        "command_tag": "SELECT 1"
+      }
+    },
+    {
+      "match": "^select \\* from information_schema\\.tables",
+      "match_type": "regex",
+      "result": {
+        "columns": [
+          { "name": "table_catalog", "wire_type": "VARCHAR" },
+          { "name": "table_schema", "wire_type": "VARCHAR" },
+          { "name": "table_name", "wire_type": "VARCHAR" },
+          { "name": "table_type", "wire_type": "VARCHAR" }
+        ],
+        "rows": [],
+        "command_tag": "SELECT 0"
+      }
+    },
+    {
+      "match": "^select \\* from information_schema\\.columns",
+      "match_type": "regex",
+      "result": {
+        "columns": [
+          { "name": "table_schema", "wire_type": "VARCHAR" },
+          { "name": "table_name", "wire_type": "VARCHAR" },
+          { "name": "column_name", "wire_type": "VARCHAR" },
+          { "name": "data_type", "wire_type": "VARCHAR" }
+        ],
+        "rows": [],
+        "command_tag": "SELECT 0"
+      }
+    },
+    {
+      "match": "^insert",
+      "match_type": "regex",
+      "result": {
+        "rows_affected": 1,
+        "command_tag": "INSERT 0 1"
+      }
+    },
+    {
+      "match": "^update",
+      "match_type": "regex",
+      "result": {
+        "rows_affected": 0,
+        "command_tag": "UPDATE 0"
+      }
+    },
+    {
+      "match": "^delete",
+      "match_type": "regex",
+      "result": {
+        "rows_affected": 0,
+        "command_tag": "DELETE 0"
+      }
+    },
+    {
+      "match": "^create table",
+      "match_type": "regex",
+      "result": {
+        "command_tag": "CREATE TABLE",
+        "messages": [{ "severity": "notice", "message": "Table created in empty schema" }]
+      }
+    }
+  ],
+  "metadata": {
+    "schemas": [{ "name": "public", "owner": "mock_user" }],
+    "tables": [],
+    "views": [],
+    "functions": [],
+    "sequences": []
+  }
+}
