@@ -20,11 +20,13 @@ This guide covers installation of ScratchRobin beta1b application artifacts.
 Before release, validate package manifest contracts:
 
 - `scratchrobin --validate-package-manifest=manifest/profile_manifest.json`
+- `scratchrobin --check-package-artifacts=manifest/profile_manifest.json`
 
 Optional explicit resources:
 
 - `--surface-registry=resources/schemas/package_surface_id_registry.json`
 - `--manifest-schema=resources/schemas/package_profile_manifest.schema.json`
+- `--package-root=<path/to/package/root>` (artifact existence validation root)
 
 ## Release Gate
 

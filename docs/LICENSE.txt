@@ -1,0 +1,7 @@
+ScratchRobin is licensed under the Initial Developer's Public License Version 1.0.
+
+Authoritative license notice is in:
+- `LICENSE` (repository root)
+
+License URL:
+https://www.firebirdsql.org/en/initial-developer-s-public-license-version-1-0/

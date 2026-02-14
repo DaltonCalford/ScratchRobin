@@ -29,6 +29,9 @@ public:
     ManifestValidationSummary ValidateManifestFile(const std::string& manifest_path,
                                                    const std::string& registry_json_path,
                                                    const std::string& schema_json_path) const;
+    std::set<std::string> CollectManifestArtifactPaths(const std::string& manifest_json) const;
+    void ValidateManifestArtifactPathsExist(const std::string& manifest_json,
+                                            const std::string& package_root) const;
     void ValidateSurfaceRegistryJson(const std::string& manifest_json,
                                      const std::set<std::string>& surface_registry) const;
     void ValidatePackageArtifacts(const std::set<std::string>& packaged_paths) const;

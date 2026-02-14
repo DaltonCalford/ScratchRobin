@@ -1,6 +1,7 @@
 #include "packaging/packaging_services.h"
 
 #include <fstream>
+#include <filesystem>
 #include <sstream>
 
 #include "core/reject.h"
@@ -50,6 +51,20 @@ std::vector<std::string> RequireStringArrayMember(const JsonValue& object,
             throw MakeReject("SRB1-R-9002", "non-string array element", "packaging", method, false, key);
         }
         out.push_back(text);
+    }
+    return out;
+}
+
+std::string RequireStringMember(const JsonValue& object,
+                                const std::string& key,
+                                const std::string& method) {
+    if (object.type != JsonValue::Type::Object) {
+        throw MakeReject("SRB1-R-9002", "invalid json object", "packaging", method);
+    }
+    const JsonValue* value = FindMember(object, key);
+    std::string out;
+    if (value == nullptr || !GetStringValue(*value, &out) || out.empty()) {
+        throw MakeReject("SRB1-R-9002", "missing/invalid string member", "packaging", method, false, key);
     }
     return out;
 }
@@ -111,6 +126,41 @@ ManifestValidationSummary PackagingService::ValidateManifestFile(const std::stri
     const auto surface_registry = LoadSurfaceRegistry(registry_json_path);
     const auto backend_enum = LoadBackendEnumFromSchema(schema_json_path);
     return ValidateManifestJson(manifest_json, surface_registry, backend_enum);
+}
+
+std::set<std::string> PackagingService::CollectManifestArtifactPaths(const std::string& manifest_json) const {
+    const auto manifest = ParseJsonManifest(manifest_json);
+    const JsonValue& artifacts = RequireObjectMember(manifest, "artifacts", "collect_manifest_artifact_paths");
+
+    std::set<std::string> paths;
+    paths.insert(RequireStringMember(artifacts, "license_path", "collect_manifest_artifact_paths"));
+    paths.insert(RequireStringMember(artifacts, "attribution_path", "collect_manifest_artifact_paths"));
+    paths.insert(RequireStringMember(artifacts, "help_root_path", "collect_manifest_artifact_paths"));
+    paths.insert(RequireStringMember(artifacts, "config_template_path", "collect_manifest_artifact_paths"));
+    paths.insert(RequireStringMember(artifacts, "connections_template_path", "collect_manifest_artifact_paths"));
+
+    // Mandatory package docs required by PKG-002 remain explicit contracts.
+    paths.insert("LICENSE");
+    paths.insert("README.md");
+    paths.insert("docs/installation_guide/README.md");
+    paths.insert("docs/developers_guide/README.md");
+    return paths;
+}
+
+void PackagingService::ValidateManifestArtifactPathsExist(const std::string& manifest_json,
+                                                          const std::string& package_root) const {
+    if (package_root.empty()) {
+        throw MakeReject("SRB1-R-9003", "package root required", "packaging", "validate_manifest_artifact_paths");
+    }
+    const auto artifact_paths = CollectManifestArtifactPaths(manifest_json);
+    for (const auto& rel_path : artifact_paths) {
+        const std::filesystem::path abs = std::filesystem::path(package_root) / rel_path;
+        if (!std::filesystem::exists(abs)) {
+            throw MakeReject("SRB1-R-9003", "missing mandatory license/documentation artifacts", "packaging",
+                             "validate_manifest_artifact_paths", false, rel_path);
+        }
+    }
+    ValidatePackageArtifacts(artifact_paths);
 }
 
 void PackagingService::ValidateSurfaceRegistryJson(const std::string& manifest_json,

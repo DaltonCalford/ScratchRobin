@@ -30,3 +30,4 @@
 - `resources/templates/package_profile_manifest.example.json`
 
 Use `scratchrobin --validate-package-manifest=<path>` for file-based contract validation.
+Use `scratchrobin --check-package-artifacts=<path>` for filesystem artifact contract validation.

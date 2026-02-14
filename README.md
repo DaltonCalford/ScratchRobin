@@ -23,6 +23,7 @@ Runtime verification commands:
 - `./build/scratchrobin --runtime-startup`
 - `./build/scratchrobin --release-gate-check`
 - `./build/scratchrobin --validate-package-manifest=resources/templates/package_profile_manifest.example.json`
+- `./build/scratchrobin --check-package-artifacts=resources/templates/package_profile_manifest.example.json`
 
 Developer/install guides:
 - `docs/developers_guide/README.md`

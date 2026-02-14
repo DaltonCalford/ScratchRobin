@@ -100,6 +100,27 @@ int main(int argc, char** argv) {
         }
     }
 
+    if (argc > 0 && argv != nullptr && arg_value(argc, argv, "--check-package-artifacts=").has_value()) {
+        namespace fs = std::filesystem;
+        const fs::path repo_root = find_repo_root(argc > 0 ? argv[0] : nullptr);
+        const std::string manifest_path = *arg_value(argc, argv, "--check-package-artifacts=");
+        std::string package_root = repo_root.string();
+        if (const auto value = arg_value(argc, argv, "--package-root=")) {
+            package_root = *value;
+        }
+
+        try {
+            scratchrobin::packaging::PackagingService service;
+            const auto manifest_json = service.LoadTextFile(manifest_path);
+            service.ValidateManifestArtifactPathsExist(manifest_json, package_root);
+            std::cout << "{\"ok\":true}\n";
+            return 0;
+        } catch (const std::exception& ex) {
+            std::cerr << "artifact validation failed: " << ex.what() << "\n";
+            return 2;
+        }
+    }
+
     if (argc > 0 && argv != nullptr && has_arg(argc, argv, "--runtime-startup")) {
         namespace fs = std::filesystem;
         const fs::path repo_root = find_repo_root(argc > 0 ? argv[0] : nullptr);

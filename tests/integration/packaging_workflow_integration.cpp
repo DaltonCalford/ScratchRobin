@@ -211,11 +211,13 @@ int main() {
                         auto summary =
                             svc.ValidateManifestFile(template_path.string(), registry_path.string(), schema_path.string());
                         scratchrobin::tests::AssertTrue(summary.ok, "template manifest validation should pass");
+                        auto template_manifest_text = svc.LoadTextFile(template_path.string());
+                        svc.ValidateManifestArtifactPathsExist(template_manifest_text, repo_root.string());
 
                         const fs::path temp = fs::temp_directory_path() / "scratchrobin_manifest_file_validation";
                         fs::remove_all(temp);
                         fs::create_directories(temp);
-                        auto text = svc.LoadTextFile(template_path.string());
+                        auto text = template_manifest_text;
                         const std::string needle = "\"profile_id\": \"full\"";
                         const std::size_t pos = text.find(needle);
                         scratchrobin::tests::AssertTrue(pos != std::string::npos, "template profile_id not found");
@@ -225,6 +227,18 @@ int main() {
                             (void)svc.ValidateManifestFile((temp / "manifest_ga_invalid.json").string(),
                                                            registry_path.string(),
                                                            schema_path.string());
+                        });
+
+                        auto bad_artifacts = template_manifest_text;
+                        const std::string artifact_needle =
+                            "\"connections_template_path\": \"config/connections.toml.example\"";
+                        const std::size_t artifact_pos = bad_artifacts.find(artifact_needle);
+                        scratchrobin::tests::AssertTrue(artifact_pos != std::string::npos,
+                                                        "template artifact field not found");
+                        bad_artifacts.replace(artifact_pos, artifact_needle.size(),
+                                              "\"connections_template_path\": \"config/missing_connections.toml\"");
+                        ExpectReject("SRB1-R-9003", [&] {
+                            svc.ValidateManifestArtifactPathsExist(bad_artifacts, repo_root.string());
                         });
 
                         fs::remove_all(temp);
