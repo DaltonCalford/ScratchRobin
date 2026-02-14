@@ -125,6 +125,42 @@ target_link_libraries(scratchrobin_reporting PUBLIC
 )
 target_compile_features(scratchrobin_reporting PUBLIC cxx_std_20)
 
+add_library(scratchrobin_advanced STATIC
+    src/advanced/advanced_services.cpp
+)
+
+target_include_directories(scratchrobin_advanced PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(scratchrobin_advanced PUBLIC scratchrobin_core_contracts)
+target_compile_features(scratchrobin_advanced PUBLIC cxx_std_20)
+
+add_library(scratchrobin_packaging STATIC
+    src/packaging/packaging_services.cpp
+)
+
+target_include_directories(scratchrobin_packaging PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(scratchrobin_packaging PUBLIC scratchrobin_core_contracts)
+target_compile_features(scratchrobin_packaging PUBLIC cxx_std_20)
+
+add_library(scratchrobin_release STATIC
+    src/release/release_conformance_services.cpp
+)
+
+target_include_directories(scratchrobin_release PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(scratchrobin_release PUBLIC scratchrobin_core_contracts)
+target_compile_features(scratchrobin_release PUBLIC cxx_std_20)
+
 add_executable(scratchrobin src/main.cpp)
 
 target_link_libraries(scratchrobin PRIVATE
@@ -136,6 +172,9 @@ target_link_libraries(scratchrobin PRIVATE
     scratchrobin_ui
     scratchrobin_diagram
     scratchrobin_reporting
+    scratchrobin_advanced
+    scratchrobin_packaging
+    scratchrobin_release
 )
 
 if(SCRATCHROBIN_BUILD_TESTS)
@@ -280,6 +319,45 @@ if(SCRATCHROBIN_BUILD_TESTS)
         scratchrobin_reporting
     )
     add_test(NAME scratchrobin_tests_reporting_integration COMMAND scratchrobin_tests_reporting_integration)
+
+    add_executable(scratchrobin_tests_advanced_integration
+        tests/integration/advanced_workflow_integration.cpp
+    )
+    target_include_directories(scratchrobin_tests_advanced_integration PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(scratchrobin_tests_advanced_integration PRIVATE
+        scratchrobin_core_contracts
+        scratchrobin_advanced
+    )
+    add_test(NAME scratchrobin_tests_advanced_integration COMMAND scratchrobin_tests_advanced_integration)
+
+    add_executable(scratchrobin_tests_packaging_integration
+        tests/integration/packaging_workflow_integration.cpp
+    )
+    target_include_directories(scratchrobin_tests_packaging_integration PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(scratchrobin_tests_packaging_integration PRIVATE
+        scratchrobin_core_contracts
+        scratchrobin_packaging
+    )
+    add_test(NAME scratchrobin_tests_packaging_integration COMMAND scratchrobin_tests_packaging_integration)
+
+    add_executable(scratchrobin_tests_release_integration
+        tests/integration/release_conformance_integration.cpp
+    )
+    target_include_directories(scratchrobin_tests_release_integration PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(scratchrobin_tests_release_integration PRIVATE
+        scratchrobin_core_contracts
+        scratchrobin_release
+    )
+    add_test(NAME scratchrobin_tests_release_integration COMMAND scratchrobin_tests_release_integration)
 
     add_executable(scratchrobin_tests_conformance
         tests/conformance/beta1b_conformance_vector.cpp
