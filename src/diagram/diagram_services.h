@@ -26,6 +26,13 @@ struct DiagramSaveResult {
     std::size_t edge_count = 0;
 };
 
+struct ReverseModelSource {
+    std::string diagram_id;
+    std::string notation;
+    std::vector<beta1b::DiagramNode> nodes;
+    std::vector<beta1b::DiagramEdge> edges;
+};
+
 class DiagramService {
 public:
     void ValidateDiagramType(DiagramType type) const;
@@ -54,7 +61,10 @@ public:
     std::string ExportDiagram(const beta1b::DiagramDocument& document,
                               const std::string& format,
                               const std::string& profile_id) const;
+
+    beta1b::DiagramDocument ReverseEngineerModel(DiagramType type,
+                                                 const ReverseModelSource& source,
+                                                 bool from_fixture) const;
 };
 
 }  // namespace scratchrobin::diagram
-

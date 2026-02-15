@@ -13,14 +13,14 @@ This guide covers installation of ScratchRobin beta1b application artifacts.
    - `docs/LICENSE.txt`
    - `docs/ATTRIBUTION.txt`
 3. Start runtime validation:
-   - `scratchrobin --runtime-startup`
+   - `scratchrobin_tool --runtime-startup`
 
 ## Manifest Validation
 
 Before release, validate package manifest contracts:
 
-- `scratchrobin --validate-package-manifest=manifest/profile_manifest.json`
-- `scratchrobin --check-package-artifacts=manifest/profile_manifest.json`
+- `scratchrobin_tool --validate-package-manifest=manifest/profile_manifest.json`
+- `scratchrobin_tool --check-package-artifacts=manifest/profile_manifest.json`
 
 Optional explicit resources:
 
@@ -32,7 +32,7 @@ Optional explicit resources:
 
 Validate blocker-based promotability:
 
-- `scratchrobin --release-gate-check`
+- `scratchrobin_tool --release-gate-check`
 
 Override blocker register path:
 

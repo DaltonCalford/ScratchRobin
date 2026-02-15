@@ -303,6 +303,17 @@ struct DiagramNode {
     int width = 0;
     int height = 0;
     std::string logical_datatype;
+    std::string name;
+    std::vector<std::string> attributes;
+    std::string notes;
+    std::vector<std::string> tags;
+    std::vector<std::string> trace_refs;
+    std::string icon_slot;
+    std::string display_mode;
+    bool collapsed = false;
+    bool pinned = false;
+    bool ghosted = false;
+    int stack_count = 1;
 };
 
 struct DiagramEdge {
@@ -310,11 +321,23 @@ struct DiagramEdge {
     std::string from_node_id;
     std::string to_node_id;
     std::string relation_type;
+    std::string label;
+    std::string edge_type;
+    bool directed = true;
+    bool identifying = false;
+    std::string source_cardinality;
+    std::string target_cardinality;
 };
 
 struct DiagramDocument {
     std::string diagram_id;
     std::string notation;
+    std::string diagram_type;
+    int grid_size = 20;
+    std::string alignment_policy;
+    std::string drop_policy;
+    std::string resize_policy;
+    std::string display_profile;
     std::vector<DiagramNode> nodes;
     std::vector<DiagramEdge> edges;
 };
@@ -339,6 +362,11 @@ struct ReportingAsset {
     std::string asset_type;
     std::string name;
     std::string payload_json;
+    std::string collection_id;
+    std::string created_at_utc;
+    std::string updated_at_utc;
+    std::string created_by;
+    std::string updated_by;
 };
 
 struct ReportingSchedule {

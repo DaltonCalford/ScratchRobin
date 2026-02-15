@@ -363,22 +363,74 @@ int main() {
                             ValidateNotation("uml");
                             ValidateNotation("chen");
                         };
-                        checks["D1-CAN-001"] = [&] { ValidateCanvasOperation(diagram, "drag", "n1", "root"); };
+                        checks["D1-CAN-001"] = [&] {
+                            ValidateCanvasOperation(diagram, "drag", "n1", "root");
+                            ValidateCanvasOperation(diagram, "connect", "n1", "n2");
+                            ValidateCanvasOperation(diagram, "reparent", "n2", "");
+                            ExpectReject("SRB1-R-6201", [&] { ValidateCanvasOperation(diagram, "reparent", "n1", "n1"); });
+                            ExpectReject("SRB1-R-6201", [&] { ValidateCanvasOperation(diagram, "connect", "n1", "missing"); });
+                        };
                         checks["D1-ENG-001"] = [] { (void)ForwardEngineerDatatypes({"int"}, {{"int", "INTEGER"}}); };
                         checks["D1-EXP-001"] = [&] { (void)ExportDiagram(diagram, "png", "full"); };
                         checks["RPT-001"] = [] {
-                            (void)RunQuestion(true, "select 1", [](const std::string&) { return std::string("ok"); },
-                                              [](const std::string&) { return true; });
+                            std::string persisted;
+                            const auto out = RunQuestion(true,
+                                                         "select 1",
+                                                         [](const std::string&) {
+                                                             return std::string("{\"command_tag\":\"EXECUTE\",\"rows_affected\":1}");
+                                                         },
+                                                         [&](const std::string& payload) {
+                                                             persisted = payload;
+                                                             return true;
+                                                         });
+                            AssertTrue(out.find("\"success\":true") != std::string::npos, "question success contract missing");
+                            AssertTrue(out.find("\"query_result\"") != std::string::npos, "question result contract missing");
+                            AssertTrue(out.find("\"timing\"") != std::string::npos, "question timing contract missing");
+                            AssertTrue(out.find("\"cache\"") != std::string::npos, "question cache contract missing");
+                            AssertTrue(out.find("\"error\"") != std::string::npos, "question error contract missing");
+                            AssertEq(out, persisted, "question persisted payload mismatch");
+                            ExpectReject("SRB1-R-7002", [&] {
+                                (void)RunQuestion(true,
+                                                  "select 2",
+                                                  [](const std::string&) { return std::string("{\"ok\":true}"); },
+                                                  [](const std::string&) { return false; });
+                            });
                         };
-                        checks["RPT-002"] = [] { (void)RunDashboardRuntime("db", {{"w1", "ok"}}, true); };
+                        checks["RPT-002"] = [] {
+                            const auto out = RunDashboardRuntime("db", {{"w2", "ok:3"}, {"w1", "ok:2"}}, true);
+                            AssertTrue(out.find("\"executed_at_utc\"") != std::string::npos, "dashboard timestamp missing");
+                            AssertTrue(out.find("\"row_count\":2") != std::string::npos, "dashboard row_count missing");
+                            AssertTrue(out.find("\"cache_key\":\"dash:db\"") != std::string::npos, "dashboard cache key missing");
+                            const auto w1 = out.find("\"widget_id\":\"w1\"");
+                            const auto w2 = out.find("\"widget_id\":\"w2\"");
+                            AssertTrue(w1 != std::string::npos && w2 != std::string::npos && w1 < w2,
+                                       "dashboard widget order is not deterministic");
+                        };
                         checks["RPT-003"] = [] {
                             std::map<std::string, std::string> storage;
                             PersistResult("k", "v", &storage);
+                            AssertEq(storage["k"], "v", "persist result payload mismatch");
+                            ExpectReject("SRB1-R-7002", [&] {
+                                std::map<std::string, std::string>* null_storage = nullptr;
+                                PersistResult("k2", "x", null_storage);
+                            });
                         };
                         checks["RPT-004"] = [] {
-                            auto payload = ExportReportingRepository({{"a", "question", "q", "{}"}});
+                            ReportingAsset asset;
+                            asset.id = "a";
+                            asset.asset_type = "Question";
+                            asset.name = "q";
+                            asset.payload_json = "{}";
+                            asset.collection_id = "default";
+                            asset.created_at_utc = "2026-02-14T00:00:00Z";
+                            asset.updated_at_utc = "2026-02-14T00:00:01Z";
+                            asset.created_by = "tester";
+                            asset.updated_by = "tester";
+                            auto payload = ExportReportingRepository({asset});
                             auto out = ImportReportingRepository(payload);
                             AssertTrue(out.size() == 1U, "repository import size mismatch");
+                            AssertEq(out[0].collection_id, "default", "repository collection mismatch");
+                            AssertEq(out[0].created_by, "tester", "repository created_by mismatch");
                         };
                         checks["RPT-005"] = [] { (void)CanonicalizeRRule({{"FREQ", "DAILY"}, {"INTERVAL", "1"}}); };
                         checks["RPT-006"] = [] {

@@ -1,7 +1,9 @@
 #include "diagram/diagram_services.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <tuple>
 
 #include "core/reject.h"
 
@@ -156,13 +158,79 @@ std::vector<beta1b::SchemaCompareOperation> DiagramService::GenerateMigrationDif
                              false, op.operation_id);
         }
     }
-    return beta1b::StableSortOps(operations);
+    auto sorted = beta1b::StableSortOps(operations);
+    auto rank = [](const std::string& op_type) {
+        if (op_type == "add" || op_type == "create") {
+            return 0;
+        }
+        if (op_type == "alter") {
+            return 1;
+        }
+        if (op_type == "drop") {
+            return 2;
+        }
+        return 3;
+    };
+    std::stable_sort(sorted.begin(), sorted.end(), [&](const auto& a, const auto& b) {
+        return std::make_tuple(rank(a.operation_type), a.object_class, a.object_path, a.operation_id) <
+               std::make_tuple(rank(b.operation_type), b.object_class, b.object_path, b.operation_id);
+    });
+    return sorted;
 }
 
 std::string DiagramService::ExportDiagram(const beta1b::DiagramDocument& document,
                                           const std::string& format,
                                           const std::string& profile_id) const {
     return beta1b::ExportDiagram(document, format, profile_id);
+}
+
+beta1b::DiagramDocument DiagramService::ReverseEngineerModel(DiagramType type,
+                                                             const ReverseModelSource& source,
+                                                             bool from_fixture) const {
+    ValidateDiagramType(type);
+    beta1b::DiagramDocument doc;
+    doc.diagram_id = source.diagram_id;
+    doc.notation = source.notation;
+    doc.diagram_type = ToString(type);
+    if (doc.diagram_id.empty()) {
+        throw MakeReject("SRB1-R-6101", "reverse model missing diagram_id", "diagram", "reverse_engineer_model");
+    }
+    beta1b::ValidateNotation(doc.notation);
+
+    doc.nodes = source.nodes;
+    doc.edges = source.edges;
+    for (auto& node : doc.nodes) {
+        if (node.name.empty()) {
+            node.name = node.node_id;
+        }
+        if (node.stack_count <= 0) {
+            node.stack_count = 1;
+        }
+        std::sort(node.tags.begin(), node.tags.end());
+        node.tags.erase(std::unique(node.tags.begin(), node.tags.end()), node.tags.end());
+        std::sort(node.trace_refs.begin(), node.trace_refs.end());
+        node.trace_refs.erase(std::unique(node.trace_refs.begin(), node.trace_refs.end()), node.trace_refs.end());
+        if (from_fixture && node.trace_refs.empty()) {
+            node.trace_refs.push_back("fixture:" + node.node_id);
+        }
+    }
+    for (auto& edge : doc.edges) {
+        if (edge.edge_type.empty()) {
+            edge.edge_type = edge.relation_type.empty() ? "link" : edge.relation_type;
+        }
+        if (edge.label.empty()) {
+            edge.label = edge.edge_type;
+        }
+    }
+
+    std::sort(doc.nodes.begin(), doc.nodes.end(), [](const auto& a, const auto& b) {
+        return std::tie(a.object_type, a.name, a.node_id) < std::tie(b.object_type, b.name, b.node_id);
+    });
+    std::sort(doc.edges.begin(), doc.edges.end(), [](const auto& a, const auto& b) {
+        return std::tie(a.from_node_id, a.to_node_id, a.edge_type, a.edge_id) <
+               std::tie(b.from_node_id, b.to_node_id, b.edge_type, b.edge_id);
+    });
+    return doc;
 }
 
 }  // namespace scratchrobin::diagram

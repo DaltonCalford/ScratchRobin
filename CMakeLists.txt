@@ -12,6 +12,7 @@ option(SCRATCHROBIN_USE_LIBPQ "Enable PostgreSQL adapter surface" ON)
 option(SCRATCHROBIN_USE_MYSQL "Enable MySQL/MariaDB adapter surface" ON)
 option(SCRATCHROBIN_USE_FIREBIRD "Enable Firebird adapter surface" ON)
 option(SCRATCHROBIN_USE_LIBSECRET "Enable credential-store integration surfaces" ON)
+option(SCRATCHROBIN_BUILD_TOOLS "Build ScratchRobin CLI maintenance tools" ON)
 option(SCRATCHROBIN_BUILD_TESTS "Build beta1b conformance-first tests" ON)
 
 add_library(scratchrobin_phase_scaffold STATIC
@@ -179,9 +180,38 @@ target_link_libraries(scratchrobin_release PUBLIC scratchrobin_core_contracts)
 target_compile_features(scratchrobin_release PUBLIC cxx_std_20)
 
 if(SCRATCHROBIN_BUILD_UI)
-    add_executable(scratchrobin src/main.cpp)
+    find_package(wxWidgets REQUIRED COMPONENTS core base)
+    include(${wxWidgets_USE_FILE})
+
+    add_executable(scratchrobin
+        src/main.cpp
+        src/gui/scratchrobin_app.cpp
+        src/gui/main_frame.cpp
+        src/gui/diagram_canvas.cpp
+    )
 
     target_link_libraries(scratchrobin PRIVATE
+        ${wxWidgets_LIBRARIES}
+        scratchrobin_phase_scaffold
+        scratchrobin_core_contracts
+        scratchrobin_runtime
+        scratchrobin_project
+        scratchrobin_connection
+        scratchrobin_ui
+        scratchrobin_diagram
+        scratchrobin_reporting
+        scratchrobin_advanced
+        scratchrobin_packaging
+        scratchrobin_release
+    )
+endif()
+
+if(SCRATCHROBIN_BUILD_TOOLS)
+    add_executable(scratchrobin_tool
+        src/tools/scratchrobin_tool_main.cpp
+    )
+
+    target_link_libraries(scratchrobin_tool PRIVATE
         scratchrobin_phase_scaffold
         scratchrobin_core_contracts
         scratchrobin_runtime

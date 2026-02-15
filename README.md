@@ -20,10 +20,11 @@ Conformance evidence:
 - `tests/conformance/beta1b_conformance_vector.cpp`
 
 Runtime verification commands:
-- `./build/scratchrobin --runtime-startup`
-- `./build/scratchrobin --release-gate-check`
-- `./build/scratchrobin --validate-package-manifest=resources/templates/package_profile_manifest.example.json`
-- `./build/scratchrobin --check-package-artifacts=resources/templates/package_profile_manifest.example.json`
+- `./build/scratchrobin` (GUI app)
+- `./build/scratchrobin_tool --runtime-startup`
+- `./build/scratchrobin_tool --release-gate-check`
+- `./build/scratchrobin_tool --validate-package-manifest=resources/templates/package_profile_manifest.example.json`
+- `./build/scratchrobin_tool --check-package-artifacts=resources/templates/package_profile_manifest.example.json`
 - `./tools/run_conformance_gate.sh ./build`
 
 Developer/install guides:

@@ -1698,7 +1698,8 @@ std::string BuildSpecWorkspaceSummary(const std::map<std::string, int>& gap_coun
 
 void ValidateNotation(const std::string& notation) {
     static const std::set<std::string> allowed = {"crowsfoot", "idef1x", "uml", "chen"};
-    if (allowed.count(notation) == 0U) {
+    const std::string canonical = ToLower(Trim(notation));
+    if (allowed.count(canonical) == 0U) {
         throw MakeReject("SRB1-R-6101", "invalid/unresolvable diagram notation", "diagram", "validate_notation", false,
                          notation);
     }
@@ -1708,24 +1709,71 @@ void ValidateCanvasOperation(const DiagramDocument& doc,
                              const std::string& operation,
                              const std::string& node_id,
                              const std::string& target_parent_id) {
-    (void)target_parent_id;
     ValidateNotation(doc.notation);
-    const std::set<std::string> ops = {"drag", "resize", "connect"};
+    const std::set<std::string> ops = {
+        "drag", "resize", "connect", "reparent", "add_node", "remove_node", "add_edge", "remove_edge", "delete_node",
+        "delete_project"};
     if (ops.count(operation) == 0U) {
         throw MakeReject("SRB1-R-6201", "invalid diagram operation", "diagram", "canvas_operation");
     }
-    if (node_id.empty()) {
+
+    const auto node_it = std::find_if(doc.nodes.begin(), doc.nodes.end(), [&](const DiagramNode& n) { return n.node_id == node_id; });
+    const bool requires_node = operation != "add_node" && operation != "delete_project";
+    if (requires_node && node_id.empty()) {
         throw MakeReject("SRB1-R-6201", "missing node id", "diagram", "canvas_operation");
     }
-    bool found = false;
-    for (const auto& n : doc.nodes) {
-        if (n.node_id == node_id) {
-            found = true;
-            break;
+    if (requires_node && node_it == doc.nodes.end()) {
+        throw MakeReject("SRB1-R-6201", "node not found", "diagram", "canvas_operation", false, node_id);
+    }
+
+    if (operation == "connect" || operation == "add_edge" || operation == "remove_edge") {
+        if (target_parent_id.empty()) {
+            throw MakeReject("SRB1-R-6201", "missing edge target node", "diagram", "canvas_operation");
+        }
+        const auto target_it =
+            std::find_if(doc.nodes.begin(), doc.nodes.end(), [&](const DiagramNode& n) { return n.node_id == target_parent_id; });
+        if (target_it == doc.nodes.end()) {
+            throw MakeReject("SRB1-R-6201", "target node not found", "diagram", "canvas_operation", false, target_parent_id);
+        }
+        if (target_parent_id == node_id) {
+            throw MakeReject("SRB1-R-6201", "self edge not allowed", "diagram", "canvas_operation", false, node_id);
         }
     }
-    if (!found) {
-        throw MakeReject("SRB1-R-6201", "node not found", "diagram", "canvas_operation", false, node_id);
+
+    if (operation == "reparent") {
+        if (node_id.empty()) {
+            throw MakeReject("SRB1-R-6201", "missing node id", "diagram", "canvas_operation");
+        }
+        if (!target_parent_id.empty()) {
+            const auto target_it =
+                std::find_if(doc.nodes.begin(), doc.nodes.end(), [&](const DiagramNode& n) { return n.node_id == target_parent_id; });
+            if (target_it == doc.nodes.end()) {
+                throw MakeReject("SRB1-R-6201", "target parent not found", "diagram", "canvas_operation", false, target_parent_id);
+            }
+            if (target_parent_id == node_id) {
+                throw MakeReject("SRB1-R-6201", "self-parenting not allowed", "diagram", "canvas_operation", false, node_id);
+            }
+            std::map<std::string, std::string> parent_by_node;
+            for (const auto& n : doc.nodes) {
+                parent_by_node[n.node_id] = n.parent_node_id;
+            }
+            std::set<std::string> visited;
+            std::string cursor = target_parent_id;
+            while (!cursor.empty()) {
+                if (!visited.insert(cursor).second) {
+                    throw MakeReject("SRB1-R-6201", "parent cycle detected", "diagram", "canvas_operation", false, cursor);
+                }
+                if (cursor == node_id) {
+                    throw MakeReject("SRB1-R-6201", "invalid parent-child cycle", "diagram", "canvas_operation", false,
+                                     node_id + "->" + target_parent_id);
+                }
+                auto parent_it = parent_by_node.find(cursor);
+                if (parent_it == parent_by_node.end()) {
+                    break;
+                }
+                cursor = parent_it->second;
+            }
+        }
     }
 }
 
@@ -1734,9 +1782,33 @@ std::string SerializeDiagramModel(const DiagramDocument& doc) {
     if (doc.diagram_id.empty()) {
         throw MakeReject("SRB1-R-6101", "diagram_id required", "diagram", "serialize_model");
     }
+    const auto emit_string_array = [](std::ostringstream* out, const std::vector<std::string>& items) {
+        *out << "[";
+        for (size_t i = 0; i < items.size(); ++i) {
+            if (i > 0) {
+                *out << ",";
+            }
+            *out << "\"" << JsonEscape(items[i]) << "\"";
+        }
+        *out << "]";
+    };
+
     std::ostringstream out;
+    const int grid_size = doc.grid_size <= 0 ? 20 : doc.grid_size;
+    const std::string alignment_policy = doc.alignment_policy.empty() ? "free" : ToLower(Trim(doc.alignment_policy));
+    const std::string drop_policy = doc.drop_policy.empty() ? "containment" : ToLower(Trim(doc.drop_policy));
+    const std::string resize_policy = doc.resize_policy.empty() ? "free" : ToLower(Trim(doc.resize_policy));
+    const std::string display_profile = doc.display_profile.empty() ? "standard" : ToLower(Trim(doc.display_profile));
+
     out << "{\"diagram_id\":\"" << JsonEscape(doc.diagram_id)
-        << "\",\"notation\":\"" << JsonEscape(doc.notation) << "\",\"nodes\":[";
+        << "\",\"notation\":\"" << JsonEscape(ToLower(Trim(doc.notation)))
+        << "\",\"diagram_type\":\"" << JsonEscape(doc.diagram_type.empty() ? "Erd" : doc.diagram_type)
+        << "\",\"grid_size\":" << grid_size
+        << ",\"alignment_policy\":\"" << JsonEscape(alignment_policy)
+        << "\",\"drop_policy\":\"" << JsonEscape(drop_policy)
+        << "\",\"resize_policy\":\"" << JsonEscape(resize_policy)
+        << "\",\"display_profile\":\"" << JsonEscape(display_profile)
+        << "\",\"nodes\":[";
     for (size_t i = 0; i < doc.nodes.size(); ++i) {
         if (i > 0) {
             out << ",";
@@ -1745,14 +1817,40 @@ std::string SerializeDiagramModel(const DiagramDocument& doc) {
         if (n.node_id.empty() || n.object_type.empty()) {
             throw MakeReject("SRB1-R-6101", "invalid diagram node", "diagram", "serialize_model");
         }
+        if (n.stack_count <= 0) {
+            throw MakeReject("SRB1-R-6101", "stack_count must be >= 1", "diagram", "serialize_model");
+        }
+        std::vector<std::string> attributes = n.attributes;
+        std::vector<std::string> tags = n.tags;
+        std::vector<std::string> trace_refs = n.trace_refs;
+        std::sort(tags.begin(), tags.end());
+        tags.erase(std::unique(tags.begin(), tags.end()), tags.end());
+        std::sort(trace_refs.begin(), trace_refs.end());
+        trace_refs.erase(std::unique(trace_refs.begin(), trace_refs.end()), trace_refs.end());
+
         out << "{\"node_id\":\"" << JsonEscape(n.node_id)
+            << "\",\"name\":\"" << JsonEscape(n.name.empty() ? n.node_id : n.name)
             << "\",\"object_type\":\"" << JsonEscape(n.object_type)
             << "\",\"parent_node_id\":\"" << JsonEscape(n.parent_node_id)
             << "\",\"x\":" << n.x
             << ",\"y\":" << n.y
             << ",\"width\":" << n.width
             << ",\"height\":" << n.height
-            << ",\"logical_datatype\":\"" << JsonEscape(n.logical_datatype) << "\"}";
+            << ",\"logical_datatype\":\"" << JsonEscape(n.logical_datatype)
+            << "\",\"notes\":\"" << JsonEscape(n.notes)
+            << "\",\"icon_slot\":\"" << JsonEscape(n.icon_slot)
+            << "\",\"display_mode\":\"" << JsonEscape(n.display_mode.empty() ? "full" : ToLower(Trim(n.display_mode)))
+            << "\",\"collapsed\":" << (n.collapsed ? "true" : "false")
+            << ",\"pinned\":" << (n.pinned ? "true" : "false")
+            << ",\"ghosted\":" << (n.ghosted ? "true" : "false")
+            << ",\"stack_count\":" << n.stack_count
+            << ",\"attributes\":";
+        emit_string_array(&out, attributes);
+        out << ",\"tags\":";
+        emit_string_array(&out, tags);
+        out << ",\"trace_refs\":";
+        emit_string_array(&out, trace_refs);
+        out << "}";
     }
     out << "],\"edges\":[";
     for (size_t i = 0; i < doc.edges.size(); ++i) {
@@ -1766,7 +1864,13 @@ std::string SerializeDiagramModel(const DiagramDocument& doc) {
         out << "{\"edge_id\":\"" << JsonEscape(e.edge_id)
             << "\",\"from_node_id\":\"" << JsonEscape(e.from_node_id)
             << "\",\"to_node_id\":\"" << JsonEscape(e.to_node_id)
-            << "\",\"relation_type\":\"" << JsonEscape(e.relation_type) << "\"}";
+            << "\",\"relation_type\":\"" << JsonEscape(e.relation_type)
+            << "\",\"label\":\"" << JsonEscape(e.label)
+            << "\",\"edge_type\":\"" << JsonEscape(e.edge_type)
+            << "\",\"directed\":" << (e.directed ? "true" : "false")
+            << ",\"identifying\":" << (e.identifying ? "true" : "false")
+            << ",\"source_cardinality\":\"" << JsonEscape(e.source_cardinality)
+            << "\",\"target_cardinality\":\"" << JsonEscape(e.target_cardinality) << "\"}";
     }
     out << "]}";
     return out.str();
@@ -1782,7 +1886,89 @@ DiagramDocument ParseDiagramModel(const std::string& payload_json) {
     DiagramDocument doc;
     doc.diagram_id = RequireString(root, "diagram_id", "SRB1-R-6101", "diagram", "parse_model");
     doc.notation = RequireString(root, "notation", "SRB1-R-6101", "diagram", "parse_model");
+    doc.diagram_type = "Erd";
+    const JsonValue* type_v = FindMember(root, "diagram_type");
+    if (type_v != nullptr && type_v->type == JsonValue::Type::String && !type_v->string_value.empty()) {
+        doc.diagram_type = type_v->string_value;
+    }
+    doc.grid_size = 20;
+    doc.alignment_policy = "free";
+    doc.drop_policy = "containment";
+    doc.resize_policy = "free";
+    doc.display_profile = "standard";
+    const JsonValue* grid_size_v = FindMember(root, "grid_size");
+    if (grid_size_v != nullptr) {
+        int64_t parsed = 0;
+        if (!GetInt64Value(*grid_size_v, &parsed)) {
+            throw MakeReject("SRB1-R-6101", "invalid numeric field: grid_size", "diagram", "parse_model");
+        }
+        doc.grid_size = std::max<int>(1, static_cast<int>(parsed));
+    }
+    const JsonValue* align_v = FindMember(root, "alignment_policy");
+    if (align_v != nullptr && align_v->type == JsonValue::Type::String && !align_v->string_value.empty()) {
+        doc.alignment_policy = align_v->string_value;
+    }
+    const JsonValue* drop_v = FindMember(root, "drop_policy");
+    if (drop_v != nullptr && drop_v->type == JsonValue::Type::String && !drop_v->string_value.empty()) {
+        doc.drop_policy = drop_v->string_value;
+    }
+    const JsonValue* resize_v = FindMember(root, "resize_policy");
+    if (resize_v != nullptr && resize_v->type == JsonValue::Type::String && !resize_v->string_value.empty()) {
+        doc.resize_policy = resize_v->string_value;
+    }
+    const JsonValue* display_v = FindMember(root, "display_profile");
+    if (display_v != nullptr && display_v->type == JsonValue::Type::String && !display_v->string_value.empty()) {
+        doc.display_profile = display_v->string_value;
+    }
     ValidateNotation(doc.notation);
+
+    const auto read_int = [](const JsonValue& obj, const std::string& key, int fallback) {
+        const JsonValue* v = FindMember(obj, key);
+        if (v == nullptr) {
+            return fallback;
+        }
+        int64_t parsed = 0;
+        if (!GetInt64Value(*v, &parsed)) {
+            throw MakeReject("SRB1-R-6101", "invalid numeric field: " + key, "diagram", "parse_model");
+        }
+        return static_cast<int>(parsed);
+    };
+    const auto read_bool = [](const JsonValue& obj, const std::string& key, bool fallback) {
+        const JsonValue* v = FindMember(obj, key);
+        if (v == nullptr) {
+            return fallback;
+        }
+        bool parsed = false;
+        if (!GetBoolValue(*v, &parsed)) {
+            throw MakeReject("SRB1-R-6101", "invalid bool field: " + key, "diagram", "parse_model");
+        }
+        return parsed;
+    };
+    const auto read_string = [](const JsonValue& obj, const std::string& key) {
+        const JsonValue* v = FindMember(obj, key);
+        if (v == nullptr || v->type != JsonValue::Type::String) {
+            return std::string();
+        }
+        return v->string_value;
+    };
+    const auto read_string_array = [](const JsonValue& obj, const std::string& key) {
+        const JsonValue* v = FindMember(obj, key);
+        if (v == nullptr) {
+            return std::vector<std::string>{};
+        }
+        if (v->type != JsonValue::Type::Array) {
+            throw MakeReject("SRB1-R-6101", "invalid array field: " + key, "diagram", "parse_model");
+        }
+        std::vector<std::string> out;
+        out.reserve(v->array_value.size());
+        for (const auto& item : v->array_value) {
+            if (item.type != JsonValue::Type::String) {
+                throw MakeReject("SRB1-R-6101", "invalid array item: " + key, "diagram", "parse_model");
+            }
+            out.push_back(item.string_value);
+        }
+        return out;
+    };
 
     const JsonValue& nodes = RequireMember(root, "nodes", "SRB1-R-6101", "diagram", "parse_model");
     if (nodes.type != JsonValue::Type::Array) {
@@ -1795,12 +1981,23 @@ DiagramDocument ParseDiagramModel(const std::string& payload_json) {
         DiagramNode n;
         n.node_id = RequireString(v, "node_id", "SRB1-R-6101", "diagram", "parse_model");
         n.object_type = RequireString(v, "object_type", "SRB1-R-6101", "diagram", "parse_model");
-        n.parent_node_id = RequireString(v, "parent_node_id", "SRB1-R-6101", "diagram", "parse_model");
-        std::string dtype;
-        const JsonValue* dtv = FindMember(v, "logical_datatype");
-        if (dtv != nullptr && GetStringValue(*dtv, &dtype)) {
-            n.logical_datatype = dtype;
-        }
+        n.parent_node_id = read_string(v, "parent_node_id");
+        n.x = read_int(v, "x", 0);
+        n.y = read_int(v, "y", 0);
+        n.width = read_int(v, "width", 100);
+        n.height = read_int(v, "height", 50);
+        n.logical_datatype = read_string(v, "logical_datatype");
+        n.name = read_string(v, "name");
+        n.attributes = read_string_array(v, "attributes");
+        n.notes = read_string(v, "notes");
+        n.tags = read_string_array(v, "tags");
+        n.trace_refs = read_string_array(v, "trace_refs");
+        n.icon_slot = read_string(v, "icon_slot");
+        n.display_mode = read_string(v, "display_mode");
+        n.collapsed = read_bool(v, "collapsed", false);
+        n.pinned = read_bool(v, "pinned", false);
+        n.ghosted = read_bool(v, "ghosted", false);
+        n.stack_count = std::max(1, read_int(v, "stack_count", 1));
         doc.nodes.push_back(std::move(n));
     }
 
@@ -1816,11 +2013,13 @@ DiagramDocument ParseDiagramModel(const std::string& payload_json) {
         e.edge_id = RequireString(v, "edge_id", "SRB1-R-6101", "diagram", "parse_model");
         e.from_node_id = RequireString(v, "from_node_id", "SRB1-R-6101", "diagram", "parse_model");
         e.to_node_id = RequireString(v, "to_node_id", "SRB1-R-6101", "diagram", "parse_model");
-        std::string rel;
-        const JsonValue* rv = FindMember(v, "relation_type");
-        if (rv != nullptr && GetStringValue(*rv, &rel)) {
-            e.relation_type = rel;
-        }
+        e.relation_type = read_string(v, "relation_type");
+        e.label = read_string(v, "label");
+        e.edge_type = read_string(v, "edge_type");
+        e.directed = read_bool(v, "directed", true);
+        e.identifying = read_bool(v, "identifying", false);
+        e.source_cardinality = read_string(v, "source_cardinality");
+        e.target_cardinality = read_string(v, "target_cardinality");
         doc.edges.push_back(std::move(e));
     }
     return doc;
@@ -1860,7 +2059,7 @@ std::string ExportDiagram(const DiagramDocument& doc, const std::string& format,
 std::vector<ReportingAsset> CanonicalArtifactOrder(const std::vector<ReportingAsset>& rows) {
     auto out = rows;
     std::sort(out.begin(), out.end(), [](const ReportingAsset& a, const ReportingAsset& b) {
-        return std::tie(a.asset_type, a.id) < std::tie(b.asset_type, b.id);
+        return std::tie(a.asset_type, a.collection_id, a.id) < std::tie(b.asset_type, b.collection_id, b.id);
     });
     return out;
 }
@@ -2387,11 +2586,25 @@ std::string RunQuestion(bool question_exists,
     if (!question_exists) {
         throw MakeReject("SRB1-R-7001", "question not found", "reporting", "run_question");
     }
+    const auto started = std::chrono::steady_clock::now();
     const std::string result = exec(normalized_sql);
-    if (!persist_result_fn(result)) {
+    const auto finished = std::chrono::steady_clock::now();
+    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(finished - started).count();
+    const bool is_embedded_json = !result.empty() && (result.front() == '{' || result.front() == '[');
+    std::ostringstream payload;
+    payload << "{\"success\":true,\"query_result\":";
+    if (is_embedded_json) {
+        payload << result;
+    } else {
+        payload << "{\"message\":\"" << JsonEscape(result) << "\"}";
+    }
+    payload << ",\"timing\":{\"elapsed_ms\":" << elapsed_ms
+            << "},\"cache\":{\"hit\":false,\"cache_key\":\"\",\"ttl_seconds\":0},\"error\":{\"code\":\"\",\"message\":\"\"}}";
+    const std::string full_result = payload.str();
+    if (!persist_result_fn(full_result)) {
         throw MakeReject("SRB1-R-7002", "result storage failure", "reporting", "run_question");
     }
-    return result;
+    return full_result;
 }
 
 std::string RunDashboardRuntime(const std::string& dashboard_id,
@@ -2403,16 +2616,35 @@ std::string RunDashboardRuntime(const std::string& dashboard_id,
     auto sorted = widget_statuses;
     std::sort(sorted.begin(), sorted.end());
 
+    const auto now_ts = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    const std::string now_utc = FormatUtc(now_ts);
+
     std::ostringstream out;
-    out << "{\"dashboard_id\":\"" << JsonEscape(dashboard_id) << "\",\"widgets\":[";
+    out << "{\"dashboard_id\":\"" << JsonEscape(dashboard_id)
+        << "\",\"executed_at_utc\":\"" << now_utc
+        << "\",\"widgets\":[";
     for (size_t i = 0; i < sorted.size(); ++i) {
         if (i > 0) {
             out << ',';
         }
+        int row_count = 0;
+        if (sorted[i].second == "ok") {
+            row_count = 1;
+        }
+        const auto split_pos = sorted[i].second.find(':');
+        if (split_pos != std::string::npos) {
+            try {
+                row_count = std::max(0, std::stoi(sorted[i].second.substr(split_pos + 1)));
+            } catch (...) {
+                row_count = 0;
+            }
+        }
         out << "{\"widget_id\":\"" << JsonEscape(sorted[i].first) << "\",\"status\":\"" << JsonEscape(sorted[i].second)
-            << "\"}";
+            << "\",\"row_count\":" << row_count
+            << ",\"dataset_key\":\"" << JsonEscape("dataset:" + sorted[i].first) << "\"}";
     }
-    out << "],\"cache\":{\"hit\":" << (cache_hit ? "true" : "false") << "}}";
+    out << "],\"cache\":{\"hit\":" << (cache_hit ? "true" : "false")
+        << ",\"cache_key\":\"dash:" << JsonEscape(dashboard_id) << "\"}}";
     return out.str();
 }
 
@@ -2426,6 +2658,11 @@ void PersistResult(const std::string& key,
 }
 
 std::string ExportReportingRepository(const std::vector<ReportingAsset>& assets) {
+    static const std::set<std::string> kAllowedTypes = {"Question", "Dashboard", "Model", "Metric", "Segment",
+                                                        "Alert", "Subscription", "Collection", "Timeline",
+                                                        // Backward-compatible lowercase aliases from older fixtures/tests.
+                                                        "question", "dashboard", "model", "metric", "segment", "alert",
+                                                        "subscription", "collection", "timeline"};
     auto canonical = CanonicalArtifactOrder(assets);
     std::ostringstream out;
     out << "{\"assets\":[";
@@ -2437,16 +2674,29 @@ std::string ExportReportingRepository(const std::vector<ReportingAsset>& assets)
         if (a.id.empty() || a.asset_type.empty() || a.name.empty()) {
             throw MakeReject("SRB1-R-7003", "report artifact import/export fidelity failure", "reporting", "export_repository");
         }
+        if (kAllowedTypes.count(a.asset_type) == 0U) {
+            throw MakeReject("SRB1-R-7003", "unknown reporting artifact type", "reporting", "export_repository", false,
+                             a.asset_type);
+        }
         out << "{\"id\":\"" << JsonEscape(a.id)
             << "\",\"asset_type\":\"" << JsonEscape(a.asset_type)
             << "\",\"name\":\"" << JsonEscape(a.name)
-            << "\",\"payload_json\":\"" << JsonEscape(a.payload_json) << "\"}";
+            << "\",\"payload_json\":\"" << JsonEscape(a.payload_json)
+            << "\",\"collection_id\":\"" << JsonEscape(a.collection_id)
+            << "\",\"created_at_utc\":\"" << JsonEscape(a.created_at_utc)
+            << "\",\"updated_at_utc\":\"" << JsonEscape(a.updated_at_utc)
+            << "\",\"created_by\":\"" << JsonEscape(a.created_by)
+            << "\",\"updated_by\":\"" << JsonEscape(a.updated_by) << "\"}";
     }
     out << "]}";
     return out.str();
 }
 
 std::vector<ReportingAsset> ImportReportingRepository(const std::string& payload_json) {
+    static const std::set<std::string> kAllowedTypes = {"Question", "Dashboard", "Model", "Metric", "Segment",
+                                                        "Alert", "Subscription", "Collection", "Timeline",
+                                                        "question", "dashboard", "model", "metric", "segment", "alert",
+                                                        "subscription", "collection", "timeline"};
     JsonParser parser(payload_json);
     JsonValue root;
     std::string err;
@@ -2469,11 +2719,35 @@ std::vector<ReportingAsset> ImportReportingRepository(const std::string& payload
         a.id = RequireString(v, "id", "SRB1-R-7003", "reporting", "import_repository");
         a.asset_type = RequireString(v, "asset_type", "SRB1-R-7003", "reporting", "import_repository");
         a.name = RequireString(v, "name", "SRB1-R-7003", "reporting", "import_repository");
+        if (kAllowedTypes.count(a.asset_type) == 0U) {
+            throw MakeReject("SRB1-R-7003", "unknown reporting artifact type", "reporting", "import_repository", false,
+                             a.asset_type);
+        }
         const JsonValue& payload = RequireMember(v, "payload_json", "SRB1-R-7003", "reporting", "import_repository");
         if (payload.type != JsonValue::Type::String) {
             throw MakeReject("SRB1-R-7003", "invalid payload_json", "reporting", "import_repository");
         }
         a.payload_json = payload.string_value;
+        const JsonValue* collection_v = FindMember(v, "collection_id");
+        if (collection_v != nullptr && collection_v->type == JsonValue::Type::String) {
+            a.collection_id = collection_v->string_value;
+        }
+        const JsonValue* created_at_v = FindMember(v, "created_at_utc");
+        if (created_at_v != nullptr && created_at_v->type == JsonValue::Type::String) {
+            a.created_at_utc = created_at_v->string_value;
+        }
+        const JsonValue* updated_at_v = FindMember(v, "updated_at_utc");
+        if (updated_at_v != nullptr && updated_at_v->type == JsonValue::Type::String) {
+            a.updated_at_utc = updated_at_v->string_value;
+        }
+        const JsonValue* created_by_v = FindMember(v, "created_by");
+        if (created_by_v != nullptr && created_by_v->type == JsonValue::Type::String) {
+            a.created_by = created_by_v->string_value;
+        }
+        const JsonValue* updated_by_v = FindMember(v, "updated_by");
+        if (updated_by_v != nullptr && updated_by_v->type == JsonValue::Type::String) {
+            a.updated_by = updated_by_v->string_value;
+        }
         out.push_back(std::move(a));
     }
     return CanonicalArtifactOrder(out);

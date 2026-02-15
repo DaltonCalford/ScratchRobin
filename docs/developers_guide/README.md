@@ -22,7 +22,7 @@
    - conformance vector test emits `ConformanceSummaryJson` with failed case ids.
    - aggregate gate output with `tools/run_conformance_gate.sh`.
 3. Release gate:
-   - `scratchrobin --release-gate-check`
+   - `scratchrobin_tool --release-gate-check`
 
 ## Packaging Resources
 
@@ -30,5 +30,5 @@
 - `resources/schemas/package_surface_id_registry.json`
 - `resources/templates/package_profile_manifest.example.json`
 
-Use `scratchrobin --validate-package-manifest=<path>` for file-based contract validation.
-Use `scratchrobin --check-package-artifacts=<path>` for filesystem artifact contract validation.
+Use `scratchrobin_tool --validate-package-manifest=<path>` for file-based contract validation.
+Use `scratchrobin_tool --check-package-artifacts=<path>` for filesystem artifact contract validation.
