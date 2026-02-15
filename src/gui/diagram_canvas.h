@@ -40,6 +40,9 @@ public:
     bool ConnectSelectedToNext(std::string* error = nullptr);
     bool ReparentSelectedToNext(std::string* error = nullptr);
     bool AddNode(std::string* error = nullptr);
+    bool AddNodeOfTypeAt(const std::string& object_type,
+                         const wxPoint& screen_point,
+                         std::string* error = nullptr);
     bool DeleteSelectedNode(bool destructive, std::string* error = nullptr);
     bool Undo(std::string* error = nullptr);
     bool Redo(std::string* error = nullptr);

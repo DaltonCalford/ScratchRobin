@@ -17,6 +17,8 @@
 #include <wx/choice.h>
 #include <wx/clipbrd.h>
 #include <wx/dataobj.h>
+#include <wx/dnd.h>
+#include <wx/imaglist.h>
 #include <wx/listctrl.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
@@ -26,6 +28,7 @@
 #include <wx/splitter.h>
 #include <wx/stattext.h>
 #include <wx/textctrl.h>
+#include <wx/textdlg.h>
 #include <wx/toolbar.h>
 #include <wx/treectrl.h>
 
@@ -60,6 +63,16 @@ std::string ToLower(std::string value) {
 
 wxString ToWx(const std::string& value) {
     return wxString::FromUTF8(value);
+}
+
+double OverlapRatio(const wxRect& a, const wxRect& b) {
+    const wxRect overlap = a.Intersect(b);
+    if (overlap.IsEmpty()) {
+        return 0.0;
+    }
+    const double overlap_area = static_cast<double>(overlap.GetWidth()) * static_cast<double>(overlap.GetHeight());
+    const double a_area = std::max(1.0, static_cast<double>(a.GetWidth()) * static_cast<double>(a.GetHeight()));
+    return overlap_area / a_area;
 }
 
 bool SelectDiagramLinkByType(wxListCtrl* links, const std::string& type_name) {
@@ -249,6 +262,115 @@ bool ResolveSilverstonPreset(const std::string& preset_name, SilverstonPreset* p
         return true;
     }
     return false;
+}
+
+std::string Trim(const std::string& value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+        return "";
+    }
+    const auto last = value.find_last_not_of(" \t\r\n");
+    return value.substr(first, (last - first) + 1U);
+}
+
+std::string CanonicalDiagramType(const std::string& type_name) {
+    const std::string normalized = ToLower(Trim(type_name));
+    if (normalized == "erd" || normalized == "entity relationship diagram") {
+        return "Erd";
+    }
+    if (normalized == "silverston") {
+        return "Silverston";
+    }
+    if (normalized == "whiteboard") {
+        return "Whiteboard";
+    }
+    if (normalized == "mind map" || normalized == "mindmap") {
+        return "MindMap";
+    }
+    return "Erd";
+}
+
+std::string DiagramTypeDisplayName(const std::string& type_name) {
+    const std::string canonical = CanonicalDiagramType(type_name);
+    if (canonical == "Erd") {
+        return "ERD";
+    }
+    if (canonical == "MindMap") {
+        return "Mind Map";
+    }
+    return canonical;
+}
+
+std::string SlugifyDiagramName(const std::string& raw_name) {
+    const std::string trimmed = Trim(raw_name);
+    if (trimmed.empty()) {
+        return "untitled";
+    }
+    std::string out;
+    out.reserve(trimmed.size());
+    bool last_dash = false;
+    for (char ch : trimmed) {
+        const unsigned char uc = static_cast<unsigned char>(ch);
+        if (std::isalnum(uc)) {
+            out.push_back(static_cast<char>(std::tolower(uc)));
+            last_dash = false;
+        } else {
+            if (!last_dash) {
+                out.push_back('-');
+                last_dash = true;
+            }
+        }
+    }
+    while (!out.empty() && out.back() == '-') {
+        out.pop_back();
+    }
+    return out.empty() ? "untitled" : out;
+}
+
+std::string BuildDiagramHeadingText(const std::string& type_name, const std::string& diagram_name) {
+    return DiagramTypeDisplayName(type_name) + " : " + Trim(diagram_name);
+}
+
+std::vector<std::string> DefaultPaletteItemsForType(const std::string& type_name) {
+    const std::string canonical = CanonicalDiagramType(type_name);
+    if (canonical == "Silverston") {
+        return {"subject_area", "entity", "fact", "dimension", "lookup", "hub", "link", "satellite"};
+    }
+    if (canonical == "Whiteboard") {
+        return {"note", "task", "risk", "decision", "milestone"};
+    }
+    if (canonical == "MindMap") {
+        return {"topic", "branch", "idea", "question", "action"};
+    }
+    return {"table", "view", "index", "domain", "note", "relation"};
+}
+
+int PaletteIconIndexForItem(const std::string& item_type) {
+    const std::string t = ToLower(item_type);
+    if (t == "note" || t == "idea" || t == "question") {
+        return 1;
+    }
+    if (t == "relation" || t == "link" || t == "branch") {
+        return 2;
+    }
+    if (t == "task" || t == "action" || t == "milestone") {
+        return 3;
+    }
+    return 0;
+}
+
+wxString DefaultDiagramNameForType(const std::string& type_name) {
+    const std::string canonical = CanonicalDiagramType(type_name);
+    if (canonical == "Silverston") {
+        return "New Silverston Subject Area";
+    }
+    if (canonical == "Whiteboard") {
+        return "New Whiteboard";
+    }
+    if (canonical == "MindMap") {
+        return "New Mind Map";
+    }
+    return "New ERD";
 }
 
 beta1b::DiagramDocument BuildSampleDiagram(const std::string& diagram_id, const std::string& type_name) {
@@ -563,7 +685,7 @@ void MainFrame::BuildLayout() {
     workspace_notebook_ = new wxNotebook(workspace_panel, wxID_ANY);
     workspace_notebook_->AddPage(BuildSqlEditorTab(workspace_notebook_), "SQL Editor", true);
     workspace_notebook_->AddPage(BuildObjectEditorTab(workspace_notebook_), "Object Editor", false);
-    workspace_notebook_->AddPage(BuildDiagramTab(workspace_notebook_), "Diagram Links", false);
+    workspace_notebook_->AddPage(BuildDiagramTab(workspace_notebook_), "Diagrams", false);
     workspace_notebook_->AddPage(BuildPlanTab(workspace_notebook_), "Plan", false);
     workspace_notebook_->AddPage(BuildSpecWorkspaceTab(workspace_notebook_), "Spec Workspace", false);
     workspace_notebook_->AddPage(BuildMonitoringTab(workspace_notebook_), "Monitoring", false);
@@ -590,6 +712,7 @@ void MainFrame::BuildLayout() {
 
     tree_->Bind(wxEVT_TREE_ITEM_MENU, &MainFrame::OnTreeContext, this);
     tree_->Bind(wxEVT_TREE_ITEM_ACTIVATED, &MainFrame::OnTreeActivate, this);
+    workspace_notebook_->Bind(wxEVT_NOTEBOOK_PAGE_CHANGED, &MainFrame::OnWorkspaceNotebookPageChanged, this);
 }
 
 wxPanel* MainFrame::BuildSqlEditorTab(wxWindow* parent) {
@@ -683,18 +806,31 @@ wxPanel* MainFrame::BuildDiagramTab(wxWindow* parent) {
     auto* panel = new wxPanel(parent, wxID_ANY);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
-    diagram_links_ = new wxListCtrl(panel, wxID_ANY, wxDefaultPosition, wxSize(-1, 150), wxLC_REPORT | wxLC_SINGLE_SEL);
-    diagram_links_->InsertColumn(0, "Type", wxLIST_FORMAT_LEFT, 120);
-    diagram_links_->InsertColumn(1, "Name", wxLIST_FORMAT_LEFT, 260);
-    diagram_links_->InsertColumn(2, "Reference", wxLIST_FORMAT_LEFT, 360);
-    sizer->Add(new wxStaticText(panel, wxID_ANY, "Diagram Links"), 0, wxLEFT | wxRIGHT | wxTOP, 8);
-    sizer->Add(diagram_links_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+    diagram_links_ = nullptr;
+    diagram_heading_ = new wxStaticText(panel, wxID_ANY, "ERD : Core Domain ERD");
+    auto title_font = diagram_heading_->GetFont();
+    title_font.MakeBold();
+    title_font.SetPointSize(title_font.GetPointSize() + 1);
+    diagram_heading_->SetFont(title_font);
+    sizer->Add(diagram_heading_, 0, wxLEFT | wxRIGHT | wxTOP, 8);
 
     auto* row = new wxBoxSizer(wxHORIZONTAL);
-    row->Add(new wxButton(panel, kCmdOpenDiagramLink, "Open Link"), 0, wxRIGHT, 6);
+    diagram_type_choice_ = new wxChoice(panel, wxID_ANY);
+    diagram_type_choice_->Append("ERD");
+    diagram_type_choice_->Append("Silverston");
+    diagram_type_choice_->Append("Whiteboard");
+    diagram_type_choice_->Append("Mind Map");
+    diagram_type_choice_->SetSelection(0);
+    diagram_name_input_ = new wxTextCtrl(panel, wxID_ANY, "Core Domain ERD");
+    auto* new_diagram_btn = new wxButton(panel, wxID_ANY, "New Diagram");
+    row->Add(new wxStaticText(panel, wxID_ANY, "Type"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    row->Add(diagram_type_choice_, 0, wxRIGHT, 8);
+    row->Add(new wxStaticText(panel, wxID_ANY, "Name"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    row->Add(diagram_name_input_, 1, wxRIGHT, 8);
+    row->Add(new_diagram_btn, 0, wxRIGHT, 8);
     row->Add(new wxButton(panel, kCmdExportDiagramSvg, "Export SVG"), 0, wxRIGHT, 6);
     row->Add(new wxButton(panel, kCmdExportDiagramPng, "Export PNG"), 0, wxRIGHT, 6);
-    sizer->Add(row, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+    sizer->Add(row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
     auto* tools = new wxBoxSizer(wxHORIZONTAL);
     auto* nudge_left_btn = new wxButton(panel, wxID_ANY, "<");
@@ -816,18 +952,43 @@ wxPanel* MainFrame::BuildDiagramTab(wxWindow* parent) {
     silverston_preset_row->Add(silverston_validation_hint, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     sizer->Add(silverston_preset_row, 0, wxLEFT | wxRIGHT | wxTOP, 8);
 
-    diagram_canvas_ = new DiagramCanvasPanel(panel, &diagram_service_);
-    sizer->Add(new wxStaticText(panel, wxID_ANY, "Diagram Canvas"), 0, wxLEFT | wxRIGHT | wxTOP, 8);
-    sizer->Add(diagram_canvas_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+    diagram_splitter_ = new wxSplitterWindow(panel, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSP_LIVE_UPDATE);
+    diagram_splitter_->SetMinimumPaneSize(140);
+    diagram_splitter_->SetSashGravity(0.0);
 
-    diagram_output_ = new wxTextCtrl(panel,
+    diagram_palette_panel_docked_ = new wxPanel(diagram_splitter_, wxID_ANY);
+    auto* palette_sizer = new wxBoxSizer(wxVERTICAL);
+    auto* palette_top = new wxBoxSizer(wxHORIZONTAL);
+    auto* palette_detach_btn = new wxButton(diagram_palette_panel_docked_, wxID_ANY, "Detach");
+    palette_top->Add(new wxStaticText(diagram_palette_panel_docked_, wxID_ANY, "Palette"), 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    palette_top->Add(palette_detach_btn, 0, wxRIGHT, 2);
+    palette_sizer->Add(palette_top, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 6);
+    diagram_palette_list_docked_ = new wxListCtrl(diagram_palette_panel_docked_,
+                                                  wxID_ANY,
+                                                  wxDefaultPosition,
+                                                  wxDefaultSize,
+                                                  wxLC_ICON | wxLC_SINGLE_SEL | wxLC_AUTOARRANGE | wxLC_EDIT_LABELS | wxBORDER_SIMPLE);
+    palette_sizer->Add(diagram_palette_list_docked_, 1, wxEXPAND | wxALL, 6);
+    diagram_palette_panel_docked_->SetSizer(palette_sizer);
+
+    diagram_canvas_panel_ = new wxPanel(diagram_splitter_, wxID_ANY);
+    auto* canvas_panel_sizer = new wxBoxSizer(wxVERTICAL);
+    diagram_canvas_ = new DiagramCanvasPanel(diagram_canvas_panel_, &diagram_service_);
+    canvas_panel_sizer->Add(new wxStaticText(diagram_canvas_panel_, wxID_ANY, "Diagram Canvas"), 0, wxLEFT | wxRIGHT | wxTOP, 2);
+    canvas_panel_sizer->Add(diagram_canvas_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 4);
+
+    diagram_output_ = new wxTextCtrl(diagram_canvas_panel_,
                                      wxID_ANY,
                                      "",
                                      wxDefaultPosition,
                                      wxSize(-1, 100),
                                      wxTE_MULTILINE | wxTE_READONLY);
-    sizer->Add(new wxStaticText(panel, wxID_ANY, "Diagram Output"), 0, wxLEFT | wxRIGHT | wxTOP, 8);
-    sizer->Add(diagram_output_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 8);
+    canvas_panel_sizer->Add(new wxStaticText(diagram_canvas_panel_, wxID_ANY, "Diagram Output"), 0, wxLEFT | wxRIGHT | wxTOP, 4);
+    canvas_panel_sizer->Add(diagram_output_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 4);
+    diagram_canvas_panel_->SetSizer(canvas_panel_sizer);
+
+    diagram_splitter_->SplitVertically(diagram_palette_panel_docked_, diagram_canvas_panel_, 220);
+    sizer->Add(diagram_splitter_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 8);
 
     if (diagram_canvas_ != nullptr) {
         diagram_canvas_->SetStatusSink([this](const std::string& message) {
@@ -895,6 +1056,51 @@ wxPanel* MainFrame::BuildDiagramTab(wxWindow* parent) {
                 silverston_chamfer->SetValue(chamfer_notes);
                 refresh_silverston_hint();
             });
+    }
+    BindDiagramPaletteInteractions(diagram_palette_list_docked_);
+    RefreshDiagramPaletteControls("Erd");
+    if (palette_detach_btn != nullptr) {
+        palette_detach_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ToggleDiagramPaletteDetached(true); });
+    }
+    if (diagram_type_choice_ != nullptr) {
+        diagram_type_choice_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+            RefreshDiagramPaletteControls(diagram_type_choice_->GetStringSelection().ToStdString());
+            if (diagram_name_input_ != nullptr && diagram_name_input_->GetValue().ToStdString().empty()) {
+                diagram_name_input_->SetValue(DefaultDiagramNameForType(diagram_type_choice_->GetStringSelection().ToStdString()));
+            }
+        });
+    }
+    if (new_diagram_btn != nullptr) {
+        new_diagram_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+            std::string type_name = "ERD";
+            if (diagram_type_choice_ != nullptr) {
+                type_name = diagram_type_choice_->GetStringSelection().ToStdString();
+            }
+            std::string name;
+            if (diagram_name_input_ != nullptr) {
+                name = Trim(diagram_name_input_->GetValue().ToStdString());
+            }
+            if (name.empty()) {
+                wxTextEntryDialog dialog(this,
+                                         "Enter a diagram name",
+                                         "Create Diagram",
+                                         DefaultDiagramNameForType(type_name));
+                if (dialog.ShowModal() != wxID_OK) {
+                    return;
+                }
+                name = Trim(dialog.GetValue().ToStdString());
+                if (diagram_name_input_ != nullptr) {
+                    diagram_name_input_->SetValue(ToWx(name));
+                }
+            }
+            if (name.empty()) {
+                if (diagram_output_ != nullptr) {
+                    diagram_output_->SetValue("diagram name is required");
+                }
+                return;
+            }
+            OpenDiagramByTypeAndName(type_name, name, diagram_output_);
+        });
     }
 
     nudge_left_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
@@ -1191,13 +1397,14 @@ void MainFrame::SeedUiState() {
         AppendLogLine(ex.what());
     }
 
-    SeedDiagramLinks(diagram_links_);
     if (active_diagram_.diagram_id.empty()) {
         active_diagram_ = BuildSampleDiagram("active:startup", "Erd");
+        active_diagram_name_ = "Core Domain ERD";
     }
     if (diagram_canvas_ != nullptr) {
         diagram_canvas_->SetDocument(&active_diagram_);
     }
+    RefreshDiagramPresentation();
     RefreshCatalog();
     RefreshHistory();
     RefreshMonitoring();
@@ -1206,6 +1413,88 @@ void MainFrame::SeedUiState() {
     for (const auto& warning : startup_report_.warnings) {
         AppendLogLine(warning);
     }
+}
+
+void MainFrame::SelectWorkspacePage(int page_index) {
+    if (workspace_notebook_ == nullptr || page_index < 0) {
+        return;
+    }
+    const int page_count = static_cast<int>(workspace_notebook_->GetPageCount());
+    if (page_index >= page_count) {
+        return;
+    }
+    workspace_notebook_->SetSelection(page_index);
+}
+
+void MainFrame::EnsureDetachedSurfaceNotEmbedded(int page_index) {
+    if (workspace_notebook_ == nullptr) {
+        return;
+    }
+    const int selected_page = workspace_notebook_->GetSelection();
+    if (selected_page != page_index) {
+        return;
+    }
+    int fallback_page = kWorkspacePagePlan;
+    const int page_count = static_cast<int>(workspace_notebook_->GetPageCount());
+    if (fallback_page < 0 || fallback_page >= page_count || fallback_page == page_index) {
+        fallback_page = page_index == 0 ? 1 : 0;
+    }
+    if (fallback_page >= 0 && fallback_page < page_count && fallback_page != page_index) {
+        workspace_notebook_->SetSelection(fallback_page);
+    }
+}
+
+void MainFrame::CloseDetachedSurfaceForPage(int page_index) {
+    if (page_index == kWorkspacePageSql && sql_editor_frame_ != nullptr) {
+        sql_editor_frame_->Close();
+        return;
+    }
+    if (page_index == kWorkspacePageObject && object_editor_frame_ != nullptr) {
+        object_editor_frame_->Close();
+        return;
+    }
+    if (page_index == kWorkspacePageDiagram && diagram_frame_ != nullptr) {
+        diagram_frame_->Close();
+        return;
+    }
+    if (page_index == kWorkspacePageSpec && spec_workspace_frame_ != nullptr) {
+        spec_workspace_frame_->Close();
+        return;
+    }
+    if (page_index == kWorkspacePageMonitoring && monitoring_frame_ != nullptr) {
+        monitoring_frame_->Close();
+    }
+}
+
+void MainFrame::OnWorkspaceNotebookPageChanged(wxBookCtrlEvent& event) {
+    if (event.GetSelection() == kWorkspacePageDiagram) {
+        ToggleDiagramPaletteDetached(false);
+    }
+    CloseDetachedSurfaceForPage(event.GetSelection());
+    event.Skip();
+}
+
+void MainFrame::BindDetachedFrameDropDock(wxFrame* frame, int page_index) {
+    if (frame == nullptr) {
+        return;
+    }
+    const wxPoint initial_position = frame->GetScreenPosition();
+    auto move_armed = std::make_shared<bool>(false);
+    frame->Bind(wxEVT_MOVE, [this, frame, page_index, move_armed, initial_position](wxMoveEvent& event) {
+        const wxPoint current_position = frame->GetScreenPosition();
+        if (!*move_armed) {
+            if (current_position == initial_position) {
+                event.Skip();
+                return;
+            }
+            *move_armed = true;
+        }
+        const double overlap_ratio = OverlapRatio(GetScreenRect(), wxRect(current_position, frame->GetSize()));
+        if (overlap_ratio >= 0.70) {
+            SelectWorkspacePage(page_index);
+        }
+        event.Skip();
+    });
 }
 
 void MainFrame::PopulateHistoryList(wxListCtrl* target) {
@@ -1357,7 +1646,7 @@ void MainFrame::RefreshCatalog() {
     tree_->AppendItem(shell, "SQL Editor");
     tree_->AppendItem(shell, "Object Editor");
     tree_->AppendItem(shell, "Plan");
-    tree_->AppendItem(shell, "Diagram Links");
+    tree_->AppendItem(shell, "Diagrams");
     tree_->AppendItem(shell, "Spec Workspace");
     tree_->AppendItem(shell, "Monitoring");
 
@@ -1411,6 +1700,7 @@ void MainFrame::RefreshCatalog() {
 void MainFrame::RefreshHistory() {
     PopulateHistoryList(sql_history_);
     PopulateHistoryList(sql_history_detached_);
+    BindDetachedFrameDropDock(sql_editor_frame_, kWorkspacePageSql);
 }
 
 void MainFrame::RefreshMonitoring() {
@@ -1626,30 +1916,53 @@ void MainFrame::GenerateMigrationIntoControls(wxChoice* object_class,
 }
 
 void MainFrame::OpenDiagramFromControls(wxListCtrl* links, wxTextCtrl* output) {
-    if (links == nullptr || output == nullptr) {
+    if (output == nullptr) {
         return;
     }
 
-    long selected = links->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
-    if (selected == -1 && links->GetItemCount() > 0) {
-        selected = 0;
-        links->SetItemState(selected, wxLIST_STATE_SELECTED, wxLIST_STATE_SELECTED);
+    std::string type_name = "Erd";
+    std::string diagram_name = "Core Domain ERD";
+    if (links != nullptr) {
+        long selected = links->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+        if (selected == -1 && links->GetItemCount() > 0) {
+            selected = 0;
+            links->SetItemState(selected, wxLIST_STATE_SELECTED, wxLIST_STATE_SELECTED);
+        }
+        if (selected != -1) {
+            type_name = links->GetItemText(selected, 0).ToStdString();
+            diagram_name = links->GetItemText(selected, 1).ToStdString();
+        }
+    } else {
+        if (diagram_type_choice_ != nullptr) {
+            type_name = diagram_type_choice_->GetStringSelection().ToStdString();
+        }
+        if (diagram_name_input_ != nullptr) {
+            diagram_name = Trim(diagram_name_input_->GetValue().ToStdString());
+        }
     }
-    if (selected == -1) {
+    OpenDiagramByTypeAndName(type_name, diagram_name, output);
+}
+
+void MainFrame::OpenDiagramByTypeAndName(const std::string& type_name, const std::string& diagram_name, wxTextCtrl* output) {
+    if (output == nullptr) {
         return;
     }
-
-    const std::string type_name = links->GetItemText(selected, 0).ToStdString();
-    const std::string link_name = links->GetItemText(selected, 1).ToStdString();
-    const auto type = diagram::ParseDiagramType(type_name);
+    const std::string canonical_type = CanonicalDiagramType(type_name);
+    std::string cleaned_name = Trim(diagram_name);
+    if (cleaned_name.empty()) {
+        cleaned_name = DefaultDiagramNameForType(canonical_type).ToStdString();
+    }
+    const auto type = diagram::ParseDiagramType(canonical_type);
     diagram_service_.ValidateDiagramType(type);
-    auto source_model = BuildSampleDiagram("active:" + link_name, type_name);
+    auto source_model = BuildSampleDiagram("active:" + SlugifyDiagramName(cleaned_name), canonical_type);
+    source_model.diagram_type = canonical_type;
     diagram::ReverseModelSource reverse_source;
     reverse_source.diagram_id = source_model.diagram_id;
     reverse_source.notation = source_model.notation;
     reverse_source.nodes = source_model.nodes;
     reverse_source.edges = source_model.edges;
     active_diagram_ = diagram_service_.ReverseEngineerModel(type, reverse_source, true);
+    active_diagram_name_ = cleaned_name;
     const std::string payload = beta1b::SerializeDiagramModel(active_diagram_);
     output->SetValue(ToWx(payload));
     if (diagram_canvas_ != nullptr) {
@@ -1658,7 +1971,243 @@ void MainFrame::OpenDiagramFromControls(wxListCtrl* links, wxTextCtrl* output) {
     if (diagram_canvas_detached_ != nullptr) {
         diagram_canvas_detached_->SetDocument(&active_diagram_);
     }
-    AppendLogLine("Opened diagram link " + link_name + " type=" + type_name);
+    RefreshDiagramPresentation();
+    AppendLogLine("Opened diagram " + cleaned_name + " type=" + canonical_type);
+}
+
+void MainFrame::RefreshDiagramPresentation() {
+    const std::string canonical_type = CanonicalDiagramType(active_diagram_.diagram_type);
+    if (active_diagram_name_.empty()) {
+        active_diagram_name_ = DefaultDiagramNameForType(canonical_type).ToStdString();
+    }
+    const std::string heading = BuildDiagramHeadingText(canonical_type, active_diagram_name_);
+    if (diagram_heading_ != nullptr) {
+        diagram_heading_->SetLabel(ToWx(heading));
+    }
+    if (diagram_heading_detached_ != nullptr) {
+        diagram_heading_detached_->SetLabel(ToWx(heading));
+    }
+    if (diagram_frame_ != nullptr) {
+        diagram_frame_->SetTitle(ToWx(heading));
+    }
+    if (diagram_type_choice_ != nullptr) {
+        std::string choice_label = canonical_type;
+        if (canonical_type == "Erd") {
+            choice_label = "ERD";
+        } else if (canonical_type == "MindMap") {
+            choice_label = "Mind Map";
+        }
+        SelectChoiceValue(diagram_type_choice_, choice_label);
+    }
+    if (diagram_type_choice_detached_ != nullptr) {
+        std::string choice_label = canonical_type;
+        if (canonical_type == "Erd") {
+            choice_label = "ERD";
+        } else if (canonical_type == "MindMap") {
+            choice_label = "Mind Map";
+        }
+        SelectChoiceValue(diagram_type_choice_detached_, choice_label);
+    }
+    if (diagram_name_input_ != nullptr && !diagram_name_input_->HasFocus()) {
+        diagram_name_input_->SetValue(ToWx(active_diagram_name_));
+    }
+    if (diagram_name_input_detached_ != nullptr && !diagram_name_input_detached_->HasFocus()) {
+        diagram_name_input_detached_->SetValue(ToWx(active_diagram_name_));
+    }
+    RefreshDiagramPaletteControls(canonical_type);
+}
+
+void MainFrame::RefreshDiagramPaletteControls(const std::string& type_name) {
+    const std::string canonical_type = CanonicalDiagramType(type_name);
+    PopulateDiagramPaletteList(diagram_palette_list_docked_, canonical_type);
+    PopulateDiagramPaletteList(diagram_palette_list_floating_, canonical_type);
+    PopulateDiagramPaletteList(diagram_palette_list_detached_, canonical_type);
+}
+
+void MainFrame::PopulateDiagramPaletteList(wxListCtrl* list, const std::string& type_name) {
+    if (list == nullptr) {
+        return;
+    }
+    if (list->GetImageList(wxIMAGE_LIST_NORMAL) == nullptr) {
+        auto* image_list = new wxImageList(16, 16, true);
+        image_list->Add(wxArtProvider::GetBitmap(wxART_NORMAL_FILE, wxART_TOOLBAR, wxSize(16, 16)));  // default object
+        image_list->Add(wxArtProvider::GetBitmap(wxART_TIP, wxART_TOOLBAR, wxSize(16, 16)));          // note/idea
+        image_list->Add(wxArtProvider::GetBitmap(wxART_PLUS, wxART_TOOLBAR, wxSize(16, 16)));         // relation/link
+        image_list->Add(wxArtProvider::GetBitmap(wxART_EXECUTABLE_FILE, wxART_TOOLBAR, wxSize(16, 16)));  // task/action
+        list->AssignImageList(image_list, wxIMAGE_LIST_NORMAL);
+    }
+
+    const std::string canonical_type = CanonicalDiagramType(type_name);
+    std::vector<std::string> items = DefaultPaletteItemsForType(canonical_type);
+    const auto custom_it = diagram_palette_custom_items_.find(canonical_type);
+    if (custom_it != diagram_palette_custom_items_.end()) {
+        for (const auto& item : custom_it->second) {
+            const std::string token = ToLower(Trim(item));
+            if (!token.empty() && std::find(items.begin(), items.end(), token) == items.end()) {
+                items.push_back(token);
+            }
+        }
+    }
+
+    list->Freeze();
+    list->DeleteAllItems();
+    for (const auto& item : items) {
+        const long idx = list->InsertItem(list->GetItemCount(), ToWx(item), PaletteIconIndexForItem(item));
+        list->SetItemState(idx, 0, wxLIST_STATE_SELECTED);
+    }
+    list->Arrange();
+    list->Thaw();
+}
+
+void MainFrame::BindDiagramPaletteInteractions(wxListCtrl* list) {
+    if (list == nullptr) {
+        return;
+    }
+    list->Bind(wxEVT_LIST_BEGIN_DRAG, [this, list](wxListEvent& event) {
+        const long row = event.GetIndex();
+        if (row < 0) {
+            return;
+        }
+        const std::string token = ToLower(Trim(list->GetItemText(row).ToStdString()));
+        if (token.empty()) {
+            return;
+        }
+        wxTextDataObject data(ToWx("diagram_item:" + token));
+        wxDropSource source(list);
+        source.SetData(data);
+        source.DoDragDrop(wxDrag_CopyOnly);
+    });
+
+    list->Bind(wxEVT_CONTEXT_MENU, [this, list](wxContextMenuEvent& event) {
+        wxMenu menu;
+        const int add_id = wxWindow::NewControlId();
+        const int remove_id = wxWindow::NewControlId();
+        const int reset_id = wxWindow::NewControlId();
+        menu.Append(add_id, "Add Palette Item");
+        menu.Append(remove_id, "Remove Selected Item");
+        menu.Append(reset_id, "Reset Palette Type");
+        menu.Bind(wxEVT_MENU, [this](wxCommandEvent&) {
+            const std::string active_type = CanonicalDiagramType(active_diagram_.diagram_type);
+            wxTextEntryDialog dialog(this, "Enter palette item token", "Add Palette Item", "custom_item");
+            if (dialog.ShowModal() != wxID_OK) {
+                return;
+            }
+            const std::string token = ToLower(Trim(dialog.GetValue().ToStdString()));
+            if (token.empty()) {
+                return;
+            }
+            auto& custom = diagram_palette_custom_items_[active_type];
+            if (std::find(custom.begin(), custom.end(), token) == custom.end()) {
+                custom.push_back(token);
+                RefreshDiagramPaletteControls(active_type);
+                AppendLogLine("Palette item added: " + token + " type=" + active_type);
+            }
+        },
+                  add_id);
+        menu.Bind(wxEVT_MENU, [this, list](wxCommandEvent&) {
+            const long selected = list->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+            if (selected < 0) {
+                return;
+            }
+            const std::string token = ToLower(Trim(list->GetItemText(selected).ToStdString()));
+            const std::string active_type = CanonicalDiagramType(active_diagram_.diagram_type);
+            auto custom_it = diagram_palette_custom_items_.find(active_type);
+            if (custom_it == diagram_palette_custom_items_.end()) {
+                AppendLogLine("Palette remove ignored (no custom entries) for type=" + active_type);
+                return;
+            }
+            auto& custom = custom_it->second;
+            auto erase_it = std::find(custom.begin(), custom.end(), token);
+            if (erase_it == custom.end()) {
+                AppendLogLine("Palette remove ignored for default item: " + token);
+                return;
+            }
+            custom.erase(erase_it);
+            RefreshDiagramPaletteControls(active_type);
+            AppendLogLine("Palette item removed: " + token + " type=" + active_type);
+        },
+                  remove_id);
+        menu.Bind(wxEVT_MENU, [this](wxCommandEvent&) {
+            const std::string active_type = CanonicalDiagramType(active_diagram_.diagram_type);
+            diagram_palette_custom_items_.erase(active_type);
+            RefreshDiagramPaletteControls(active_type);
+            AppendLogLine("Palette reset for type=" + active_type);
+        },
+                  reset_id);
+
+        wxPoint point = event.GetPosition();
+        if (point == wxDefaultPosition) {
+            point = wxPoint(8, 8);
+        } else {
+            point = list->ScreenToClient(point);
+        }
+        list->PopupMenu(&menu, point);
+    });
+}
+
+void MainFrame::ToggleDiagramPaletteDetached(bool detach) {
+    if (detach) {
+        if (diagram_palette_frame_ != nullptr) {
+            diagram_palette_frame_->Show();
+            diagram_palette_frame_->Raise();
+            return;
+        }
+        if (diagram_splitter_ != nullptr && diagram_palette_panel_docked_ != nullptr && diagram_splitter_->IsSplit()) {
+            diagram_splitter_->Unsplit(diagram_palette_panel_docked_);
+        }
+
+        diagram_palette_frame_ = new wxFrame(this,
+                                             wxID_ANY,
+                                             "",
+                                             wxDefaultPosition,
+                                             wxSize(240, 460),
+                                             wxFRAME_TOOL_WINDOW | wxRESIZE_BORDER | wxCAPTION | wxCLOSE_BOX);
+        auto* panel = new wxPanel(diagram_palette_frame_, wxID_ANY);
+        auto* sizer = new wxBoxSizer(wxVERTICAL);
+        auto* bar = new wxBoxSizer(wxHORIZONTAL);
+        auto* attach_btn = new wxButton(panel, wxID_ANY, "Attach");
+        bar->AddSpacer(1);
+        bar->Add(attach_btn, 0, wxRIGHT, 2);
+        sizer->Add(bar, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 4);
+
+        diagram_palette_list_floating_ = new wxListCtrl(panel,
+                                                        wxID_ANY,
+                                                        wxDefaultPosition,
+                                                        wxDefaultSize,
+                                                        wxLC_ICON | wxLC_SINGLE_SEL | wxLC_AUTOARRANGE | wxLC_EDIT_LABELS |
+                                                            wxBORDER_SIMPLE);
+        sizer->Add(diagram_palette_list_floating_, 1, wxEXPAND | wxALL, 6);
+        panel->SetSizer(sizer);
+
+        BindDiagramPaletteInteractions(diagram_palette_list_floating_);
+        RefreshDiagramPaletteControls(active_diagram_.diagram_type);
+        attach_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ToggleDiagramPaletteDetached(false); });
+        diagram_palette_frame_->Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& event) {
+            if (diagram_palette_frame_ == nullptr) {
+                event.Skip();
+                return;
+            }
+            event.Veto();
+            ToggleDiagramPaletteDetached(false);
+        });
+
+        const wxPoint anchor = ClientToScreen(wxPoint(120, 160));
+        diagram_palette_frame_->SetPosition(anchor);
+        diagram_palette_frame_->Show();
+        return;
+    }
+
+    if (diagram_palette_frame_ != nullptr) {
+        wxFrame* frame = diagram_palette_frame_;
+        diagram_palette_frame_ = nullptr;
+        diagram_palette_list_floating_ = nullptr;
+        frame->Destroy();
+    }
+    if (diagram_splitter_ != nullptr && diagram_palette_panel_docked_ != nullptr && diagram_canvas_panel_ != nullptr &&
+        !diagram_splitter_->IsSplit()) {
+        diagram_splitter_->SplitVertically(diagram_palette_panel_docked_, diagram_canvas_panel_, 220);
+    }
+    RefreshDiagramPaletteControls(active_diagram_.diagram_type);
 }
 
 void MainFrame::ExportDiagramToOutput(const std::string& format, wxTextCtrl* output) {
@@ -1688,6 +2237,7 @@ void MainFrame::ExecuteCanvasAction(DiagramCanvasPanel* canvas,
 }
 
 void MainFrame::OpenOrFocusSqlEditorFrame() {
+    EnsureDetachedSurfaceNotEmbedded(kWorkspacePageSql);
     if (sql_editor_frame_ != nullptr) {
         sql_editor_frame_->Show();
         sql_editor_frame_->Raise();
@@ -1697,6 +2247,11 @@ void MainFrame::OpenOrFocusSqlEditorFrame() {
     sql_editor_frame_ = new wxFrame(this, wxID_ANY, "SqlEditorFrame", wxDefaultPosition, wxSize(1300, 860));
     auto* panel = new wxPanel(sql_editor_frame_, wxID_ANY);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
+    auto* dock_row = new wxBoxSizer(wxHORIZONTAL);
+    dock_row->Add(new wxStaticText(panel, wxID_ANY, "Detached SQL Editor"), 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    auto* dock_btn = new wxButton(panel, wxID_ANY, "Dock In Main");
+    dock_row->Add(dock_btn, 0, wxRIGHT, 4);
+    sizer->Add(dock_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 8);
 
     sql_editor_detached_ = new wxTextCtrl(panel,
                                           wxID_ANY,
@@ -1750,10 +2305,14 @@ void MainFrame::OpenOrFocusSqlEditorFrame() {
     export_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         ExportHistoryIntoStatus(sql_status_detached_, sql_history_detached_);
     });
+    dock_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { SelectWorkspacePage(kWorkspacePageSql); });
 
     PopulateHistoryList(sql_history_detached_);
 
     sql_editor_frame_->Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& event) {
+        if (sql_editor_ != nullptr && sql_editor_detached_ != nullptr) {
+            sql_editor_->SetValue(sql_editor_detached_->GetValue());
+        }
         sql_editor_frame_ = nullptr;
         sql_editor_detached_ = nullptr;
         sql_results_detached_ = nullptr;
@@ -1766,6 +2325,7 @@ void MainFrame::OpenOrFocusSqlEditorFrame() {
 }
 
 void MainFrame::OpenOrFocusObjectEditorFrame() {
+    EnsureDetachedSurfaceNotEmbedded(kWorkspacePageObject);
     if (object_editor_frame_ != nullptr) {
         object_editor_frame_->Show();
         object_editor_frame_->Raise();
@@ -1775,6 +2335,11 @@ void MainFrame::OpenOrFocusObjectEditorFrame() {
     object_editor_frame_ = new wxFrame(this, wxID_ANY, "ObjectEditorFrame", wxDefaultPosition, wxSize(1100, 760));
     auto* panel = new wxPanel(object_editor_frame_, wxID_ANY);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
+    auto* dock_row = new wxBoxSizer(wxHORIZONTAL);
+    dock_row->Add(new wxStaticText(panel, wxID_ANY, "Detached Object Editor"), 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    auto* dock_btn = new wxButton(panel, wxID_ANY, "Dock In Main");
+    dock_row->Add(dock_btn, 0, wxRIGHT, 4);
+    sizer->Add(dock_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
     auto* row = new wxBoxSizer(wxHORIZONTAL);
     row->Add(new wxStaticText(panel, wxID_ANY, "Class"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
@@ -1825,8 +2390,18 @@ void MainFrame::OpenOrFocusObjectEditorFrame() {
             wxMessageBox(ToWx(ex.what()), "Migration generation failed", wxOK | wxICON_ERROR, this);
         }
     });
+    dock_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { SelectWorkspacePage(kWorkspacePageObject); });
 
     object_editor_frame_->Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& event) {
+        if (object_class_ != nullptr && object_class_detached_ != nullptr) {
+            object_class_->SetSelection(object_class_detached_->GetSelection());
+        }
+        if (object_path_ != nullptr && object_path_detached_ != nullptr) {
+            object_path_->SetValue(object_path_detached_->GetValue());
+        }
+        if (object_ddl_ != nullptr && object_ddl_detached_ != nullptr) {
+            object_ddl_->SetValue(object_ddl_detached_->GetValue());
+        }
         object_editor_frame_ = nullptr;
         object_class_detached_ = nullptr;
         object_path_detached_ = nullptr;
@@ -1834,35 +2409,58 @@ void MainFrame::OpenOrFocusObjectEditorFrame() {
         event.Skip();
     });
 
+    BindDetachedFrameDropDock(object_editor_frame_, kWorkspacePageObject);
     object_editor_frame_->Show();
 }
 
 void MainFrame::OpenOrFocusDiagramFrame() {
+    EnsureDetachedSurfaceNotEmbedded(kWorkspacePageDiagram);
+    ToggleDiagramPaletteDetached(false);
     if (diagram_frame_ != nullptr) {
         diagram_frame_->Show();
         diagram_frame_->Raise();
         return;
     }
 
-    diagram_frame_ = new wxFrame(this, wxID_ANY, "DiagramFrame", wxDefaultPosition, wxSize(1200, 760));
+    const std::string frame_title =
+        BuildDiagramHeadingText(active_diagram_.diagram_type.empty() ? "Erd" : active_diagram_.diagram_type, active_diagram_name_);
+    diagram_frame_ = new wxFrame(this, wxID_ANY, ToWx(frame_title), wxDefaultPosition, wxSize(1200, 760));
     auto* panel = new wxPanel(diagram_frame_, wxID_ANY);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
-    diagram_links_detached_ =
-        new wxListCtrl(panel, wxID_ANY, wxDefaultPosition, wxSize(-1, 220), wxLC_REPORT | wxLC_SINGLE_SEL);
-    diagram_links_detached_->InsertColumn(0, "Type", wxLIST_FORMAT_LEFT, 120);
-    diagram_links_detached_->InsertColumn(1, "Name", wxLIST_FORMAT_LEFT, 260);
-    diagram_links_detached_->InsertColumn(2, "Reference", wxLIST_FORMAT_LEFT, 360);
-    sizer->Add(diagram_links_detached_, 0, wxEXPAND | wxALL, 8);
+    diagram_links_detached_ = nullptr;
+    diagram_heading_detached_ = new wxStaticText(panel, wxID_ANY, ToWx(frame_title));
+    auto heading_font = diagram_heading_detached_->GetFont();
+    heading_font.MakeBold();
+    heading_font.SetPointSize(heading_font.GetPointSize() + 1);
+    diagram_heading_detached_->SetFont(heading_font);
+    sizer->Add(diagram_heading_detached_, 0, wxLEFT | wxRIGHT | wxTOP, 8);
 
     auto* row = new wxBoxSizer(wxHORIZONTAL);
-    auto* open_btn = new wxButton(panel, wxID_ANY, "Open Link");
+    diagram_type_choice_detached_ = new wxChoice(panel, wxID_ANY);
+    diagram_type_choice_detached_->Append("ERD");
+    diagram_type_choice_detached_->Append("Silverston");
+    diagram_type_choice_detached_->Append("Whiteboard");
+    diagram_type_choice_detached_->Append("Mind Map");
+    SelectChoiceValue(diagram_type_choice_detached_, DiagramTypeDisplayName(active_diagram_.diagram_type));
+    if (diagram_type_choice_detached_->GetSelection() == wxNOT_FOUND) {
+        diagram_type_choice_detached_->SetSelection(0);
+    }
+    diagram_name_input_detached_ =
+        new wxTextCtrl(panel, wxID_ANY, ToWx(active_diagram_name_.empty() ? "Core Domain ERD" : active_diagram_name_));
+    auto* new_diagram_btn = new wxButton(panel, wxID_ANY, "New Diagram");
+    auto* dock_btn = new wxButton(panel, wxID_ANY, "Dock In Main");
     auto* svg_btn = new wxButton(panel, wxID_ANY, "Export SVG");
     auto* png_btn = new wxButton(panel, wxID_ANY, "Export PNG");
-    row->Add(open_btn, 0, wxRIGHT, 6);
+    row->Add(new wxStaticText(panel, wxID_ANY, "Type"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    row->Add(diagram_type_choice_detached_, 0, wxRIGHT, 8);
+    row->Add(new wxStaticText(panel, wxID_ANY, "Name"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    row->Add(diagram_name_input_detached_, 1, wxRIGHT, 8);
+    row->Add(new_diagram_btn, 0, wxRIGHT, 8);
+    row->Add(dock_btn, 0, wxRIGHT, 8);
     row->Add(svg_btn, 0, wxRIGHT, 6);
     row->Add(png_btn, 0, wxRIGHT, 6);
-    sizer->Add(row, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    sizer->Add(row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
     auto* tools = new wxBoxSizer(wxHORIZONTAL);
     auto* nudge_left_btn = new wxButton(panel, wxID_ANY, "<");
@@ -1984,20 +2582,43 @@ void MainFrame::OpenOrFocusDiagramFrame() {
     silverston_preset_row->Add(silverston_validation_hint, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
     sizer->Add(silverston_preset_row, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
-    diagram_canvas_detached_ = new DiagramCanvasPanel(panel, &diagram_service_);
-    sizer->Add(diagram_canvas_detached_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    auto* splitter = new wxSplitterWindow(panel, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSP_LIVE_UPDATE);
+    splitter->SetMinimumPaneSize(140);
+    splitter->SetSashGravity(0.0);
+    auto* palette_panel = new wxPanel(splitter, wxID_ANY);
+    auto* palette_sizer = new wxBoxSizer(wxVERTICAL);
+    auto* palette_bar = new wxBoxSizer(wxHORIZONTAL);
+    auto* attach_palette_btn = new wxButton(palette_panel, wxID_ANY, "Attach");
+    palette_bar->Add(new wxStaticText(palette_panel, wxID_ANY, ""), 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    palette_bar->Add(attach_palette_btn, 0, wxRIGHT, 2);
+    palette_sizer->Add(palette_bar, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 6);
+    diagram_palette_list_detached_ =
+        new wxListCtrl(palette_panel,
+                       wxID_ANY,
+                       wxDefaultPosition,
+                       wxDefaultSize,
+                       wxLC_ICON | wxLC_SINGLE_SEL | wxLC_AUTOARRANGE | wxLC_EDIT_LABELS | wxBORDER_SIMPLE);
+    palette_sizer->Add(diagram_palette_list_detached_, 1, wxEXPAND | wxALL, 6);
+    palette_panel->SetSizer(palette_sizer);
 
-    diagram_output_detached_ = new wxTextCtrl(panel,
+    auto* canvas_panel = new wxPanel(splitter, wxID_ANY);
+    auto* canvas_panel_sizer = new wxBoxSizer(wxVERTICAL);
+    diagram_canvas_detached_ = new DiagramCanvasPanel(canvas_panel, &diagram_service_);
+    canvas_panel_sizer->Add(new wxStaticText(canvas_panel, wxID_ANY, "Diagram Canvas"), 0, wxLEFT | wxRIGHT | wxTOP, 2);
+    canvas_panel_sizer->Add(diagram_canvas_detached_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 4);
+    diagram_output_detached_ = new wxTextCtrl(canvas_panel,
                                               wxID_ANY,
                                               "",
                                               wxDefaultPosition,
                                               wxSize(-1, 120),
                                               wxTE_MULTILINE | wxTE_READONLY);
-    sizer->Add(diagram_output_detached_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
+    canvas_panel_sizer->Add(new wxStaticText(canvas_panel, wxID_ANY, "Diagram Output"), 0, wxLEFT | wxRIGHT | wxTOP, 4);
+    canvas_panel_sizer->Add(diagram_output_detached_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 4);
+    canvas_panel->SetSizer(canvas_panel_sizer);
 
+    splitter->SplitVertically(palette_panel, canvas_panel, 220);
+    sizer->Add(splitter, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
     panel->SetSizer(sizer);
-
-    SeedDiagramLinks(diagram_links_detached_);
     if (active_diagram_.diagram_id.empty()) {
         active_diagram_ = BuildSampleDiagram("active:detached", "Erd");
     }
@@ -2015,6 +2636,7 @@ void MainFrame::OpenOrFocusDiagramFrame() {
             SetStatusText(ToWx("Diagram dirty: " + mutation), 0);
         });
     }
+    RefreshDiagramPresentation();
 
     auto refresh_silverston_hint =
         [silverston_type, silverston_icon_catalog, silverston_icon_slot, silverston_validation_hint]() {
@@ -2070,14 +2692,64 @@ void MainFrame::OpenOrFocusDiagramFrame() {
             });
     }
 
-    open_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
-        try {
-            OpenDiagramFromControls(diagram_links_detached_, diagram_output_detached_);
-        } catch (const RejectError& ex) {
-            diagram_output_detached_->SetValue(ToWx(ex.what()));
-            AppendLogLine(ex.what());
-        }
-    });
+    BindDiagramPaletteInteractions(diagram_palette_list_detached_);
+    RefreshDiagramPaletteControls(active_diagram_.diagram_type);
+
+    if (diagram_type_choice_detached_ != nullptr) {
+        diagram_type_choice_detached_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
+            if (diagram_type_choice_detached_ == nullptr) {
+                return;
+            }
+            RefreshDiagramPaletteControls(diagram_type_choice_detached_->GetStringSelection().ToStdString());
+            if (diagram_name_input_detached_ != nullptr && diagram_name_input_detached_->GetValue().ToStdString().empty()) {
+                diagram_name_input_detached_->SetValue(
+                    DefaultDiagramNameForType(diagram_type_choice_detached_->GetStringSelection().ToStdString()));
+            }
+        });
+    }
+    if (new_diagram_btn != nullptr) {
+        new_diagram_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+            std::string type_name = "ERD";
+            if (diagram_type_choice_detached_ != nullptr) {
+                type_name = diagram_type_choice_detached_->GetStringSelection().ToStdString();
+            }
+            std::string name;
+            if (diagram_name_input_detached_ != nullptr) {
+                name = Trim(diagram_name_input_detached_->GetValue().ToStdString());
+            }
+            if (name.empty()) {
+                wxTextEntryDialog dialog(this,
+                                         "Enter a diagram name",
+                                         "Create Diagram",
+                                         DefaultDiagramNameForType(type_name));
+                if (dialog.ShowModal() != wxID_OK) {
+                    return;
+                }
+                name = Trim(dialog.GetValue().ToStdString());
+                if (diagram_name_input_detached_ != nullptr) {
+                    diagram_name_input_detached_->SetValue(ToWx(name));
+                }
+            }
+            if (name.empty()) {
+                if (diagram_output_detached_ != nullptr) {
+                    diagram_output_detached_->SetValue("diagram name is required");
+                }
+                return;
+            }
+            OpenDiagramByTypeAndName(type_name, name, diagram_output_detached_);
+        });
+    }
+
+    auto dock_to_main = [this](wxCommandEvent&) {
+        SelectWorkspacePage(kWorkspacePageDiagram);
+    };
+    if (dock_btn != nullptr) {
+        dock_btn->Bind(wxEVT_BUTTON, dock_to_main);
+    }
+    if (attach_palette_btn != nullptr) {
+        attach_palette_btn->Bind(wxEVT_BUTTON, dock_to_main);
+    }
+
     svg_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         try {
             ExportDiagramToOutput("svg", diagram_output_detached_);
@@ -2316,8 +2988,22 @@ void MainFrame::OpenOrFocusDiagramFrame() {
     });
 
     diagram_frame_->Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& event) {
+        if (diagram_type_choice_detached_ != nullptr) {
+            active_diagram_.diagram_type = CanonicalDiagramType(diagram_type_choice_detached_->GetStringSelection().ToStdString());
+        }
+        if (diagram_name_input_detached_ != nullptr) {
+            const std::string detached_name = Trim(diagram_name_input_detached_->GetValue().ToStdString());
+            if (!detached_name.empty()) {
+                active_diagram_name_ = detached_name;
+            }
+        }
+        RefreshDiagramPresentation();
         diagram_frame_ = nullptr;
         diagram_links_detached_ = nullptr;
+        diagram_heading_detached_ = nullptr;
+        diagram_type_choice_detached_ = nullptr;
+        diagram_name_input_detached_ = nullptr;
+        diagram_palette_list_detached_ = nullptr;
         diagram_output_detached_ = nullptr;
         diagram_canvas_detached_ = nullptr;
         diagram_grid_toggle_detached_ = nullptr;
@@ -2325,10 +3011,12 @@ void MainFrame::OpenOrFocusDiagramFrame() {
         event.Skip();
     });
 
+    BindDetachedFrameDropDock(diagram_frame_, kWorkspacePageDiagram);
     diagram_frame_->Show();
 }
 
 void MainFrame::OpenOrFocusMonitoringFrame() {
+    EnsureDetachedSurfaceNotEmbedded(kWorkspacePageMonitoring);
     if (monitoring_frame_ != nullptr) {
         monitoring_frame_->Show();
         monitoring_frame_->Raise();
@@ -2338,9 +3026,12 @@ void MainFrame::OpenOrFocusMonitoringFrame() {
     monitoring_frame_ = new wxFrame(this, wxID_ANY, "MonitoringFrame", wxDefaultPosition, wxSize(980, 640));
     auto* panel = new wxPanel(monitoring_frame_, wxID_ANY);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
-
+    auto* top_row = new wxBoxSizer(wxHORIZONTAL);
     auto* refresh_btn = new wxButton(panel, wxID_ANY, "Refresh Metrics");
-    sizer->Add(refresh_btn, 0, wxALL, 8);
+    auto* dock_btn = new wxButton(panel, wxID_ANY, "Dock In Main");
+    top_row->Add(refresh_btn, 0, wxRIGHT, 6);
+    top_row->Add(dock_btn, 0, wxRIGHT, 6);
+    sizer->Add(top_row, 0, wxALL, 8);
 
     monitoring_rows_detached_ =
         new wxListCtrl(panel, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
@@ -2358,6 +3049,7 @@ void MainFrame::OpenOrFocusMonitoringFrame() {
             AppendLogLine(ex.what());
         }
     });
+    dock_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { SelectWorkspacePage(kWorkspacePageMonitoring); });
 
     RefreshMonitoringList(monitoring_rows_detached_);
 
@@ -2367,6 +3059,7 @@ void MainFrame::OpenOrFocusMonitoringFrame() {
         event.Skip();
     });
 
+    BindDetachedFrameDropDock(monitoring_frame_, kWorkspacePageMonitoring);
     monitoring_frame_->Show();
 }
 
@@ -2835,6 +3528,7 @@ void MainFrame::OpenOrFocusGitIntegrationFrame() {
 }
 
 void MainFrame::OpenOrFocusSpecWorkspaceFrame() {
+    EnsureDetachedSurfaceNotEmbedded(kWorkspacePageSpec);
     if (spec_workspace_frame_ != nullptr) {
         spec_workspace_frame_->Show();
         spec_workspace_frame_->Raise();
@@ -2856,6 +3550,8 @@ void MainFrame::OpenOrFocusSpecWorkspaceFrame() {
 
     auto* refresh_btn = new wxButton(panel, wxID_ANY, "Refresh Workspace");
     row->Add(refresh_btn, 0, wxRIGHT, 6);
+    auto* dock_btn = new wxButton(panel, wxID_ANY, "Dock In Main");
+    row->Add(dock_btn, 0, wxRIGHT, 6);
     sizer->Add(row, 0, wxEXPAND | wxALL, 8);
 
     spec_summary_detached_ =
@@ -2877,6 +3573,7 @@ void MainFrame::OpenOrFocusSpecWorkspaceFrame() {
                                      spec_dashboard_detached_,
                                      spec_work_package_detached_);
     });
+    dock_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { SelectWorkspacePage(kWorkspacePageSpec); });
 
     RefreshSpecWorkspaceControls(specset_choice_detached_,
                                  spec_summary_detached_,
@@ -2884,6 +3581,10 @@ void MainFrame::OpenOrFocusSpecWorkspaceFrame() {
                                  spec_work_package_detached_);
 
     spec_workspace_frame_->Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& event) {
+        if (specset_choice_ != nullptr && specset_choice_detached_ != nullptr) {
+            specset_choice_->SetSelection(specset_choice_detached_->GetSelection());
+            RefreshSpecWorkspace();
+        }
         spec_workspace_frame_ = nullptr;
         specset_choice_detached_ = nullptr;
         spec_summary_detached_ = nullptr;
@@ -2892,6 +3593,7 @@ void MainFrame::OpenOrFocusSpecWorkspaceFrame() {
         event.Skip();
     });
 
+    BindDetachedFrameDropDock(spec_workspace_frame_, kWorkspacePageSpec);
     spec_workspace_frame_->Show();
 }
 
@@ -3304,7 +4006,7 @@ wxMenu* MainFrame::BuildTreeContextMenu() const {
 void MainFrame::OnAboutMenu(wxCommandEvent& event) {
     (void)event;
     wxMessageBox("ScratchRobin Beta1b Workbench\n"
-                 "Includes main workbench and independent windows for SQL editor, object editor, diagram links,\n"
+                 "Includes main workbench and independent windows for SQL editor, object editor, diagrams,\n"
                  "monitoring, and spec workspace.",
                  "About ScratchRobin",
                  wxOK | wxICON_INFORMATION,
@@ -3409,25 +4111,21 @@ void MainFrame::OnRefreshMonitoring(wxCommandEvent& event) {
 
 void MainFrame::OnOpenSqlEditorFrame(wxCommandEvent& event) {
     (void)event;
-    workspace_notebook_->SetSelection(0);
     OpenOrFocusSqlEditorFrame();
 }
 
 void MainFrame::OnOpenObjectEditorFrame(wxCommandEvent& event) {
     (void)event;
-    workspace_notebook_->SetSelection(1);
     OpenOrFocusObjectEditorFrame();
 }
 
 void MainFrame::OnOpenDiagramFrame(wxCommandEvent& event) {
     (void)event;
-    workspace_notebook_->SetSelection(2);
     OpenOrFocusDiagramFrame();
 }
 
 void MainFrame::OnOpenMonitoringFrame(wxCommandEvent& event) {
     (void)event;
-    workspace_notebook_->SetSelection(5);
     OpenOrFocusMonitoringFrame();
 }
 
@@ -3453,7 +4151,6 @@ void MainFrame::OnOpenGitIntegrationFrame(wxCommandEvent& event) {
 
 void MainFrame::OnOpenSpecWorkspaceFrame(wxCommandEvent& event) {
     (void)event;
-    workspace_notebook_->SetSelection(4);
     OpenOrFocusSpecWorkspaceFrame();
 }
 
@@ -3480,34 +4177,35 @@ void MainFrame::OnTreeActivate(wxTreeEvent& event) {
         OpenOrFocusAdminManager(AdminManagerKeyForNodeLabel(label));
     } else if (label.find("Object") != std::string::npos || label.find("table:") != std::string::npos ||
                label.find("view:") != std::string::npos || label.find("index:") != std::string::npos) {
-        workspace_notebook_->SetSelection(1);
         OpenOrFocusObjectEditorFrame();
         if (object_path_ != nullptr && (label.find("table:") != std::string::npos || label.find("view:") != std::string::npos ||
                                         label.find("index:") != std::string::npos)) {
             object_path_->SetValue(ToWx(label));
         }
+        if (object_path_detached_ != nullptr &&
+            (label.find("table:") != std::string::npos || label.find("view:") != std::string::npos ||
+             label.find("index:") != std::string::npos)) {
+            object_path_detached_->SetValue(ToWx(label));
+        }
     } else if (label.find("Diagram") != std::string::npos || label.find("Erd") != std::string::npos ||
                label.find("Silverston") != std::string::npos || label.find("Whiteboard") != std::string::npos ||
                label.find("MindMap") != std::string::npos) {
-        auto open_typed_diagram = [this](const std::string& type_name) {
+        auto open_typed_diagram = [this](const std::string& type_name, const std::string& diagram_name) {
             OpenOrFocusDiagramFrame();
-            bool opened = false;
-            if (SelectDiagramLinkByType(diagram_links_detached_, type_name) && diagram_output_detached_ != nullptr) {
-                OpenDiagramFromControls(diagram_links_detached_, diagram_output_detached_);
-                opened = true;
-            }
-            if (!opened && SelectDiagramLinkByType(diagram_links_, type_name) && diagram_output_ != nullptr) {
-                OpenDiagramFromControls(diagram_links_, diagram_output_);
+            if (diagram_output_detached_ != nullptr) {
+                OpenDiagramByTypeAndName(type_name, diagram_name, diagram_output_detached_);
+            } else if (diagram_output_ != nullptr) {
+                OpenDiagramByTypeAndName(type_name, diagram_name, diagram_output_);
             }
         };
         if (label.find("MindMap") != std::string::npos) {
-            open_typed_diagram("MindMap");
+            open_typed_diagram("MindMap", "Implementation Map");
         } else if (label.find("Whiteboard") != std::string::npos) {
-            open_typed_diagram("Whiteboard");
+            open_typed_diagram("Whiteboard", "Migration Plan");
         } else if (label.find("Silverston") != std::string::npos) {
-            open_typed_diagram("Silverston");
+            open_typed_diagram("Silverston", "Subject Areas");
         } else {
-            open_typed_diagram("Erd");
+            open_typed_diagram("Erd", "Core Domain");
         }
     } else if (label.find("Reporting") != std::string::npos) {
         OpenOrFocusReportingFrame();

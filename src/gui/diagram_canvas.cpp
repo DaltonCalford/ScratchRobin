@@ -11,6 +11,7 @@
 #include <utility>
 
 #include <wx/dcbuffer.h>
+#include <wx/dnd.h>
 #include <wx/event.h>
 #include <wx/msgdlg.h>
 #include <wx/settings.h>
@@ -59,6 +60,30 @@ wxString ToWx(const std::string& value) {
     return wxString::FromUTF8(value);
 }
 
+class CanvasDropTarget final : public wxTextDropTarget {
+public:
+    explicit CanvasDropTarget(DiagramCanvasPanel* panel) : panel_(panel) {}
+
+    bool OnDropText(wxCoord x, wxCoord y, const wxString& data) override {
+        if (panel_ == nullptr) {
+            return false;
+        }
+        const std::string payload = data.ToStdString();
+        static const std::string kPrefix = "diagram_item:";
+        if (payload.rfind(kPrefix, 0) != 0U) {
+            return false;
+        }
+        std::string error;
+        if (!panel_->AddNodeOfTypeAt(payload.substr(kPrefix.size()), wxPoint(x, y), &error)) {
+            return false;
+        }
+        return true;
+    }
+
+private:
+    DiagramCanvasPanel* panel_ = nullptr;
+};
+
 }  // namespace
 
 DiagramCanvasPanel::DiagramCanvasPanel(wxWindow* parent, diagram::DiagramService* diagram_service)
@@ -73,6 +98,7 @@ DiagramCanvasPanel::DiagramCanvasPanel(wxWindow* parent, diagram::DiagramService
     Bind(wxEVT_MOTION, &DiagramCanvasPanel::OnMotion, this);
     Bind(wxEVT_MOUSEWHEEL, &DiagramCanvasPanel::OnMouseWheel, this);
     Bind(wxEVT_CHAR_HOOK, &DiagramCanvasPanel::OnCharHook, this);
+    SetDropTarget(new CanvasDropTarget(this));
 }
 
 void DiagramCanvasPanel::SetDocument(beta1b::DiagramDocument* document) {
@@ -213,20 +239,81 @@ bool DiagramCanvasPanel::ReparentSelectedToNext(std::string* error) {
 }
 
 bool DiagramCanvasPanel::AddNode(std::string* error) {
+    const wxSize canvas = GetClientSize();
+    const wxPoint drop_point(std::max(40, canvas.x / 3), std::max(48, canvas.y / 3));
+    return AddNodeOfTypeAt("", drop_point, error);
+}
+
+bool DiagramCanvasPanel::AddNodeOfTypeAt(const std::string& object_type,
+                                         const wxPoint& screen_point,
+                                         std::string* error) {
     if (document_ == nullptr) {
         SetError(error, "no active diagram loaded");
         return false;
     }
+    const std::string diagram_type = ToLower(document_->diagram_type);
+    std::string normalized_type = ToLower(object_type);
+    if (normalized_type.empty()) {
+        if (diagram_type == "silverston") {
+            normalized_type = "entity";
+        } else if (diagram_type == "whiteboard") {
+            normalized_type = "note";
+        } else if (diagram_type == "mindmap") {
+            normalized_type = "topic";
+        } else {
+            normalized_type = "table";
+        }
+    }
+
+    const auto icon_for_type = [](const std::string& node_type) {
+        if (node_type == "subject_area") {
+            return std::string("subject_generic");
+        }
+        if (node_type == "entity") {
+            return std::string("entity_generic");
+        }
+        if (node_type == "fact") {
+            return std::string("fact_measure");
+        }
+        if (node_type == "dimension") {
+            return std::string("dimension_time");
+        }
+        if (node_type == "lookup") {
+            return std::string("lookup_code");
+        }
+        if (node_type == "hub") {
+            return std::string("hub_business_key");
+        }
+        if (node_type == "link") {
+            return std::string("link_association");
+        }
+        if (node_type == "satellite") {
+            return std::string("satellite_context");
+        }
+        return std::string("");
+    };
     beta1b::DiagramDocument before = *document_;
     beta1b::DiagramNode node;
     node.node_id = NextNodeId();
-    node.object_type = "table";
-    node.name = "New Node " + node.node_id;
-    node.x = 40 + static_cast<int>(document_->nodes.size() * 30U);
-    node.y = 40 + static_cast<int>(document_->nodes.size() * 24U);
-    node.width = 220;
-    node.height = 120;
-    node.logical_datatype = "VARCHAR";
+    node.object_type = normalized_type;
+    node.name = normalized_type + " " + node.node_id;
+    node.width = (diagram_type == "mindmap") ? 230 : 220;
+    node.height = (diagram_type == "mindmap") ? 100 : 120;
+    if (normalized_type == "note" || normalized_type == "task" || normalized_type == "risk") {
+        node.width = 260;
+        node.height = 120;
+    }
+    node.x = ScaleToModel(screen_point.x) - (node.width / 2);
+    node.y = ScaleToModel(screen_point.y) - (node.height / 2);
+    node.x = std::max(10, node.x);
+    node.y = std::max(10, node.y);
+    if (snap_to_grid_) {
+        node.x = Snap(node.x);
+        node.y = Snap(node.y);
+    }
+    node.logical_datatype = (diagram_type == "erd" || diagram_type.empty()) ? "VARCHAR" : "N/A";
+    node.display_mode = "full";
+    node.icon_slot = icon_for_type(normalized_type);
     node.stack_count = 1;
     if (diagram_service_ != nullptr) {
         try {
@@ -245,7 +332,8 @@ bool DiagramCanvasPanel::AddNode(std::string* error) {
     if (!PushHistory(before, *document_, "add_node", error)) {
         return false;
     }
-    EmitStatus("added node " + node.node_id);
+    EmitMutation("add_node");
+    EmitStatus("added " + normalized_type + " node " + node.node_id);
     return true;
 }
 

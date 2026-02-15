@@ -4,6 +4,7 @@
 #include <functional>
 #include <map>
 #include <string>
+#include <vector>
 
 #include "advanced/advanced_services.h"
 #include "connection/connection_services.h"
@@ -20,10 +21,13 @@
 
 class wxChoice;
 class wxCheckBox;
+class wxBookCtrlEvent;
 class wxListCtrl;
 class wxMenu;
 class wxNotebook;
 class wxPanel;
+class wxSplitterWindow;
+class wxStaticText;
 class wxTextCtrl;
 
 namespace scratchrobin::gui {
@@ -116,11 +120,25 @@ private:
 
     void OpenDiagramFromControls(wxListCtrl* links,
                                  wxTextCtrl* output);
+    void OpenDiagramByTypeAndName(const std::string& type_name,
+                                  const std::string& diagram_name,
+                                  wxTextCtrl* output);
     void ExportDiagramToOutput(const std::string& format,
                                wxTextCtrl* output);
     void ExecuteCanvasAction(DiagramCanvasPanel* canvas,
                              wxTextCtrl* output,
                              const std::function<bool(std::string*)>& action);
+    void RefreshDiagramPresentation();
+    void RefreshDiagramPaletteControls(const std::string& type_name);
+    void PopulateDiagramPaletteList(wxListCtrl* list,
+                                    const std::string& type_name);
+    void ToggleDiagramPaletteDetached(bool detach);
+    void BindDiagramPaletteInteractions(wxListCtrl* list);
+    void SelectWorkspacePage(int page_index);
+    void EnsureDetachedSurfaceNotEmbedded(int page_index);
+    void CloseDetachedSurfaceForPage(int page_index);
+    void OnWorkspaceNotebookPageChanged(wxBookCtrlEvent& event);
+    void BindDetachedFrameDropDock(wxFrame* frame, int page_index);
 
     void OpenOrFocusSqlEditorFrame();
     void OpenOrFocusObjectEditorFrame();
@@ -201,6 +219,13 @@ private:
 
     std::int64_t next_query_id_ = 1;
     beta1b::DiagramDocument active_diagram_;
+    std::string active_diagram_name_ = "Core Domain ERD";
+    static constexpr int kWorkspacePageSql = 0;
+    static constexpr int kWorkspacePageObject = 1;
+    static constexpr int kWorkspacePageDiagram = 2;
+    static constexpr int kWorkspacePagePlan = 3;
+    static constexpr int kWorkspacePageSpec = 4;
+    static constexpr int kWorkspacePageMonitoring = 5;
 
     wxChoice* profile_choice_ = nullptr;
     wxTreeCtrl* tree_ = nullptr;
@@ -216,10 +241,20 @@ private:
     wxTextCtrl* object_ddl_ = nullptr;
 
     wxListCtrl* diagram_links_ = nullptr;
+    wxStaticText* diagram_heading_ = nullptr;
+    wxChoice* diagram_type_choice_ = nullptr;
+    wxTextCtrl* diagram_name_input_ = nullptr;
     wxTextCtrl* diagram_output_ = nullptr;
     DiagramCanvasPanel* diagram_canvas_ = nullptr;
     wxCheckBox* diagram_grid_toggle_ = nullptr;
     wxCheckBox* diagram_snap_toggle_ = nullptr;
+    wxSplitterWindow* diagram_splitter_ = nullptr;
+    wxPanel* diagram_palette_panel_docked_ = nullptr;
+    wxPanel* diagram_canvas_panel_ = nullptr;
+    wxListCtrl* diagram_palette_list_docked_ = nullptr;
+    wxFrame* diagram_palette_frame_ = nullptr;
+    wxListCtrl* diagram_palette_list_floating_ = nullptr;
+    std::map<std::string, std::vector<std::string>> diagram_palette_custom_items_;
 
     wxListCtrl* plan_rows_ = nullptr;
 
@@ -244,10 +279,14 @@ private:
 
     wxFrame* diagram_frame_ = nullptr;
     wxListCtrl* diagram_links_detached_ = nullptr;
+    wxStaticText* diagram_heading_detached_ = nullptr;
+    wxChoice* diagram_type_choice_detached_ = nullptr;
+    wxTextCtrl* diagram_name_input_detached_ = nullptr;
     wxTextCtrl* diagram_output_detached_ = nullptr;
     DiagramCanvasPanel* diagram_canvas_detached_ = nullptr;
     wxCheckBox* diagram_grid_toggle_detached_ = nullptr;
     wxCheckBox* diagram_snap_toggle_detached_ = nullptr;
+    wxListCtrl* diagram_palette_list_detached_ = nullptr;
 
     wxFrame* monitoring_frame_ = nullptr;
     wxListCtrl* monitoring_rows_detached_ = nullptr;
