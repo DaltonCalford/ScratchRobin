@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cctype>
 #include <ctime>
 #include <iomanip>
@@ -683,12 +684,24 @@ void MainFrame::BuildLayout() {
     auto* workspace_panel = new wxPanel(splitter, wxID_ANY);
     auto* workspace_sizer = new wxBoxSizer(wxVERTICAL);
     workspace_notebook_ = new wxNotebook(workspace_panel, wxID_ANY);
+    workspace_page_built_.fill(false);
     workspace_notebook_->AddPage(BuildSqlEditorTab(workspace_notebook_), "SQL Editor", true);
-    workspace_notebook_->AddPage(BuildObjectEditorTab(workspace_notebook_), "Object Editor", false);
-    workspace_notebook_->AddPage(BuildDiagramTab(workspace_notebook_), "Diagrams", false);
-    workspace_notebook_->AddPage(BuildPlanTab(workspace_notebook_), "Plan", false);
-    workspace_notebook_->AddPage(BuildSpecWorkspaceTab(workspace_notebook_), "Spec Workspace", false);
-    workspace_notebook_->AddPage(BuildMonitoringTab(workspace_notebook_), "Monitoring", false);
+    workspace_page_built_[kWorkspacePageSql] = true;
+    const auto add_placeholder_page = [this](const wxString& label) {
+        auto* placeholder = new wxPanel(workspace_notebook_, wxID_ANY);
+        auto* placeholder_sizer = new wxBoxSizer(wxVERTICAL);
+        placeholder_sizer->Add(new wxStaticText(placeholder, wxID_ANY, "Open this surface to load it."),
+                               1,
+                               wxALIGN_CENTER | wxALL,
+                               12);
+        placeholder->SetSizer(placeholder_sizer);
+        workspace_notebook_->AddPage(placeholder, label, false);
+    };
+    add_placeholder_page("Object Editor");
+    add_placeholder_page("Diagrams");
+    add_placeholder_page("Plan");
+    add_placeholder_page("Spec Workspace");
+    add_placeholder_page("Monitoring");
     workspace_sizer->Add(workspace_notebook_, 1, wxEXPAND | wxALL, 6);
     workspace_panel->SetSizer(workspace_sizer);
 
@@ -719,7 +732,15 @@ wxPanel* MainFrame::BuildSqlEditorTab(wxWindow* parent) {
     auto* panel = new wxPanel(parent, wxID_ANY);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
-    sizer->Add(new wxStaticText(panel, wxID_ANY, "SQL Editor"), 0, wxLEFT | wxTOP | wxRIGHT, 8);
+    auto* header_row = new wxBoxSizer(wxHORIZONTAL);
+    header_row->Add(new wxStaticText(panel, wxID_ANY, "SQL Editor"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    header_row->AddStretchSpacer(1);
+    auto* detach_handle = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxSize(28, 12), wxBORDER_SIMPLE);
+    detach_handle->SetToolTip("Drag to detach SQL editor");
+    header_row->Add(detach_handle, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(header_row, 0, wxEXPAND | wxLEFT | wxTOP | wxRIGHT, 8);
+    BindSurfaceDetachDrag(detach_handle, kWorkspacePageSql);
+
     sql_editor_ = new wxTextCtrl(panel,
                                  wxID_ANY,
                                  "SELECT id, name FROM customer WHERE active = 1 ORDER BY name LIMIT 25;",
@@ -767,6 +788,15 @@ wxPanel* MainFrame::BuildObjectEditorTab(wxWindow* parent) {
     auto* panel = new wxPanel(parent, wxID_ANY);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
+    auto* header_row = new wxBoxSizer(wxHORIZONTAL);
+    header_row->Add(new wxStaticText(panel, wxID_ANY, "Object Editor"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    header_row->AddStretchSpacer(1);
+    auto* detach_handle = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxSize(28, 12), wxBORDER_SIMPLE);
+    detach_handle->SetToolTip("Drag to detach object editor");
+    header_row->Add(detach_handle, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(header_row, 0, wxEXPAND | wxLEFT | wxTOP | wxRIGHT, 8);
+    BindSurfaceDetachDrag(detach_handle, kWorkspacePageObject);
+
     auto* row = new wxBoxSizer(wxHORIZONTAL);
     row->Add(new wxStaticText(panel, wxID_ANY, "Class"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
     object_class_ = new wxChoice(panel, wxID_ANY);
@@ -805,6 +835,15 @@ wxPanel* MainFrame::BuildObjectEditorTab(wxWindow* parent) {
 wxPanel* MainFrame::BuildDiagramTab(wxWindow* parent) {
     auto* panel = new wxPanel(parent, wxID_ANY);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
+
+    auto* header_row = new wxBoxSizer(wxHORIZONTAL);
+    header_row->Add(new wxStaticText(panel, wxID_ANY, "Diagrams"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    header_row->AddStretchSpacer(1);
+    auto* detach_handle = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxSize(28, 12), wxBORDER_SIMPLE);
+    detach_handle->SetToolTip("Drag to detach diagram surface");
+    header_row->Add(detach_handle, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(header_row, 0, wxEXPAND | wxLEFT | wxTOP | wxRIGHT, 8);
+    BindSurfaceDetachDrag(detach_handle, kWorkspacePageDiagram);
 
     diagram_links_ = nullptr;
     diagram_heading_ = new wxStaticText(panel, wxID_ANY, "ERD : Core Domain ERD");
@@ -959,9 +998,10 @@ wxPanel* MainFrame::BuildDiagramTab(wxWindow* parent) {
     diagram_palette_panel_docked_ = new wxPanel(diagram_splitter_, wxID_ANY);
     auto* palette_sizer = new wxBoxSizer(wxVERTICAL);
     auto* palette_top = new wxBoxSizer(wxHORIZONTAL);
-    auto* palette_detach_btn = new wxButton(diagram_palette_panel_docked_, wxID_ANY, "Detach");
+    auto* palette_drag_handle = new wxPanel(diagram_palette_panel_docked_, wxID_ANY, wxDefaultPosition, wxSize(22, 10), wxBORDER_SIMPLE);
+    palette_drag_handle->SetToolTip("Drag to detach palette");
     palette_top->Add(new wxStaticText(diagram_palette_panel_docked_, wxID_ANY, "Palette"), 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
-    palette_top->Add(palette_detach_btn, 0, wxRIGHT, 2);
+    palette_top->Add(palette_drag_handle, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 2);
     palette_sizer->Add(palette_top, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 6);
     diagram_palette_list_docked_ = new wxListCtrl(diagram_palette_panel_docked_,
                                                   wxID_ANY,
@@ -1059,9 +1099,7 @@ wxPanel* MainFrame::BuildDiagramTab(wxWindow* parent) {
     }
     BindDiagramPaletteInteractions(diagram_palette_list_docked_);
     RefreshDiagramPaletteControls("Erd");
-    if (palette_detach_btn != nullptr) {
-        palette_detach_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ToggleDiagramPaletteDetached(true); });
-    }
+    BindDiagramPaletteDetachDrag(palette_drag_handle);
     if (diagram_type_choice_ != nullptr) {
         diagram_type_choice_->Bind(wxEVT_CHOICE, [this](wxCommandEvent&) {
             RefreshDiagramPaletteControls(diagram_type_choice_->GetStringSelection().ToStdString());
@@ -1345,6 +1383,15 @@ wxPanel* MainFrame::BuildSpecWorkspaceTab(wxWindow* parent) {
     auto* panel = new wxPanel(parent, wxID_ANY);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
+    auto* header_row = new wxBoxSizer(wxHORIZONTAL);
+    header_row->Add(new wxStaticText(panel, wxID_ANY, "Spec Workspace"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    header_row->AddStretchSpacer(1);
+    auto* detach_handle = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxSize(28, 12), wxBORDER_SIMPLE);
+    detach_handle->SetToolTip("Drag to detach spec workspace");
+    header_row->Add(detach_handle, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(header_row, 0, wxEXPAND | wxLEFT | wxTOP | wxRIGHT, 8);
+    BindSurfaceDetachDrag(detach_handle, kWorkspacePageSpec);
+
     auto* row = new wxBoxSizer(wxHORIZONTAL);
     row->Add(new wxStaticText(panel, wxID_ANY, "Spec set"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
     specset_choice_ = new wxChoice(panel, wxID_ANY);
@@ -1375,6 +1422,15 @@ wxPanel* MainFrame::BuildSpecWorkspaceTab(wxWindow* parent) {
 wxPanel* MainFrame::BuildMonitoringTab(wxWindow* parent) {
     auto* panel = new wxPanel(parent, wxID_ANY);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
+
+    auto* header_row = new wxBoxSizer(wxHORIZONTAL);
+    header_row->Add(new wxStaticText(panel, wxID_ANY, "Monitoring"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    header_row->AddStretchSpacer(1);
+    auto* detach_handle = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxSize(28, 12), wxBORDER_SIMPLE);
+    detach_handle->SetToolTip("Drag to detach monitoring");
+    header_row->Add(detach_handle, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->Add(header_row, 0, wxEXPAND | wxLEFT | wxTOP | wxRIGHT, 8);
+    BindSurfaceDetachDrag(detach_handle, kWorkspacePageMonitoring);
 
     auto* row = new wxBoxSizer(wxHORIZONTAL);
     row->Add(new wxButton(panel, kCmdRefreshMonitoring, "Refresh Metrics"), 0, wxRIGHT, 6);
@@ -1423,7 +1479,206 @@ void MainFrame::SelectWorkspacePage(int page_index) {
     if (page_index >= page_count) {
         return;
     }
+    EnsureWorkspacePageBuilt(page_index);
     workspace_notebook_->SetSelection(page_index);
+}
+
+void MainFrame::EnsureWorkspacePageBuilt(int page_index) {
+    if (workspace_notebook_ == nullptr || page_index < 0 ||
+        page_index >= static_cast<int>(workspace_page_built_.size())) {
+        return;
+    }
+    const int page_count = static_cast<int>(workspace_notebook_->GetPageCount());
+    if (page_index >= page_count) {
+        return;
+    }
+    if (workspace_page_built_[page_index]) {
+        return;
+    }
+
+    wxPanel* built_page = nullptr;
+    switch (page_index) {
+        case kWorkspacePageSql:
+            built_page = BuildSqlEditorTab(workspace_notebook_);
+            break;
+        case kWorkspacePageObject:
+            built_page = BuildObjectEditorTab(workspace_notebook_);
+            break;
+        case kWorkspacePageDiagram:
+            built_page = BuildDiagramTab(workspace_notebook_);
+            break;
+        case kWorkspacePagePlan:
+            built_page = BuildPlanTab(workspace_notebook_);
+            break;
+        case kWorkspacePageSpec:
+            built_page = BuildSpecWorkspaceTab(workspace_notebook_);
+            break;
+        case kWorkspacePageMonitoring:
+            built_page = BuildMonitoringTab(workspace_notebook_);
+            break;
+        default:
+            return;
+    }
+    if (built_page == nullptr) {
+        return;
+    }
+
+    const wxString label = workspace_notebook_->GetPageText(page_index);
+    const bool selected = workspace_notebook_->GetSelection() == page_index;
+    wxWindow* old_page = workspace_notebook_->GetPage(page_index);
+    workspace_notebook_->RemovePage(page_index);
+    if (old_page != nullptr) {
+        old_page->Destroy();
+    }
+    workspace_notebook_->InsertPage(page_index, built_page, label, selected);
+    workspace_page_built_[page_index] = true;
+
+    if (page_index == kWorkspacePageDiagram) {
+        if (diagram_canvas_ != nullptr) {
+            diagram_canvas_->SetDocument(&active_diagram_);
+        }
+        RefreshDiagramPresentation();
+    } else if (page_index == kWorkspacePagePlan) {
+        if (sql_editor_ != nullptr) {
+            RefreshPlan(sql_editor_->GetValue().ToStdString());
+        }
+    } else if (page_index == kWorkspacePageSpec) {
+        RefreshSpecWorkspace();
+    } else if (page_index == kWorkspacePageMonitoring) {
+        RefreshMonitoring();
+    } else if (page_index == kWorkspacePageSql) {
+        RefreshHistory();
+    }
+}
+
+void MainFrame::DetachSurfaceByDrag(int page_index, const wxPoint& screen_pos) {
+    switch (page_index) {
+        case kWorkspacePageSql:
+            OpenOrFocusSqlEditorFrame();
+            break;
+        case kWorkspacePageObject:
+            OpenOrFocusObjectEditorFrame();
+            break;
+        case kWorkspacePageDiagram:
+            OpenOrFocusDiagramFrame();
+            break;
+        case kWorkspacePageSpec:
+            OpenOrFocusSpecWorkspaceFrame();
+            break;
+        case kWorkspacePageMonitoring:
+            OpenOrFocusMonitoringFrame();
+            break;
+        default:
+            return;
+    }
+
+    wxFrame* frame = nullptr;
+    if (page_index == kWorkspacePageSql) {
+        frame = sql_editor_frame_;
+    } else if (page_index == kWorkspacePageObject) {
+        frame = object_editor_frame_;
+    } else if (page_index == kWorkspacePageDiagram) {
+        frame = diagram_frame_;
+    } else if (page_index == kWorkspacePageSpec) {
+        frame = spec_workspace_frame_;
+    } else if (page_index == kWorkspacePageMonitoring) {
+        frame = monitoring_frame_;
+    }
+
+    if (frame != nullptr) {
+        frame->SetPosition(screen_pos - wxPoint(24, 12));
+        frame->Raise();
+    }
+}
+
+void MainFrame::BindSurfaceDetachDrag(wxWindow* handle, int page_index) {
+    if (handle == nullptr) {
+        return;
+    }
+    handle->SetCursor(wxCursor(wxCURSOR_SIZING));
+    auto drag_origin = std::make_shared<wxPoint>(wxDefaultPosition);
+    auto drag_armed = std::make_shared<bool>(false);
+
+    handle->Bind(wxEVT_LEFT_DOWN, [handle, drag_origin, drag_armed](wxMouseEvent& event) {
+        *drag_origin = event.GetPosition();
+        *drag_armed = true;
+        if (!handle->HasCapture()) {
+            handle->CaptureMouse();
+        }
+        event.Skip();
+    });
+    handle->Bind(wxEVT_MOTION, [this, handle, page_index, drag_origin, drag_armed](wxMouseEvent& event) {
+        if (!*drag_armed || !event.LeftIsDown()) {
+            event.Skip();
+            return;
+        }
+        const wxPoint p = event.GetPosition();
+        if (std::abs(p.x - drag_origin->x) < 6 && std::abs(p.y - drag_origin->y) < 6) {
+            event.Skip();
+            return;
+        }
+        *drag_armed = false;
+        if (handle->HasCapture()) {
+            handle->ReleaseMouse();
+        }
+        DetachSurfaceByDrag(page_index, handle->ClientToScreen(p));
+        event.Skip();
+    });
+    handle->Bind(wxEVT_LEFT_UP, [handle, drag_armed](wxMouseEvent& event) {
+        if (handle->HasCapture()) {
+            handle->ReleaseMouse();
+        }
+        *drag_armed = false;
+        event.Skip();
+    });
+    handle->Bind(wxEVT_MOUSE_CAPTURE_LOST, [drag_armed](wxMouseCaptureLostEvent&) { *drag_armed = false; });
+}
+
+void MainFrame::BindDiagramPaletteDetachDrag(wxWindow* handle) {
+    if (handle == nullptr) {
+        return;
+    }
+    handle->SetCursor(wxCursor(wxCURSOR_SIZING));
+    auto drag_origin = std::make_shared<wxPoint>(wxDefaultPosition);
+    auto drag_armed = std::make_shared<bool>(false);
+
+    handle->Bind(wxEVT_LEFT_DOWN, [handle, drag_origin, drag_armed](wxMouseEvent& event) {
+        *drag_origin = event.GetPosition();
+        *drag_armed = true;
+        if (!handle->HasCapture()) {
+            handle->CaptureMouse();
+        }
+        event.Skip();
+    });
+    handle->Bind(wxEVT_MOTION, [this, handle, drag_origin, drag_armed](wxMouseEvent& event) {
+        if (!*drag_armed || !event.LeftIsDown()) {
+            event.Skip();
+            return;
+        }
+        const wxPoint p = event.GetPosition();
+        if (std::abs(p.x - drag_origin->x) < 6 && std::abs(p.y - drag_origin->y) < 6) {
+            event.Skip();
+            return;
+        }
+        *drag_armed = false;
+        if (handle->HasCapture()) {
+            handle->ReleaseMouse();
+        }
+        ToggleDiagramPaletteDetached(true);
+        if (diagram_palette_frame_ != nullptr) {
+            diagram_palette_frame_->SetPosition(handle->ClientToScreen(p) - wxPoint(24, 12));
+            diagram_palette_frame_->Raise();
+        }
+        event.Skip();
+    });
+    handle->Bind(wxEVT_LEFT_UP, [handle, drag_armed](wxMouseEvent& event) {
+        if (handle->HasCapture()) {
+            handle->ReleaseMouse();
+        }
+        *drag_armed = false;
+        event.Skip();
+    });
+    handle->Bind(wxEVT_MOUSE_CAPTURE_LOST, [drag_armed](wxMouseCaptureLostEvent&) { *drag_armed = false; });
 }
 
 void MainFrame::EnsureDetachedSurfaceNotEmbedded(int page_index) {
@@ -1467,6 +1722,7 @@ void MainFrame::CloseDetachedSurfaceForPage(int page_index) {
 }
 
 void MainFrame::OnWorkspaceNotebookPageChanged(wxBookCtrlEvent& event) {
+    EnsureWorkspacePageBuilt(event.GetSelection());
     if (event.GetSelection() == kWorkspacePageDiagram) {
         ToggleDiagramPaletteDetached(false);
     }
@@ -1480,7 +1736,8 @@ void MainFrame::BindDetachedFrameDropDock(wxFrame* frame, int page_index) {
     }
     const wxPoint initial_position = frame->GetScreenPosition();
     auto move_armed = std::make_shared<bool>(false);
-    frame->Bind(wxEVT_MOVE, [this, frame, page_index, move_armed, initial_position](wxMoveEvent& event) {
+    auto moved_outside = std::make_shared<bool>(false);
+    frame->Bind(wxEVT_MOVE, [this, frame, page_index, move_armed, moved_outside, initial_position](wxMoveEvent& event) {
         const wxPoint current_position = frame->GetScreenPosition();
         if (!*move_armed) {
             if (current_position == initial_position) {
@@ -1490,8 +1747,21 @@ void MainFrame::BindDetachedFrameDropDock(wxFrame* frame, int page_index) {
             *move_armed = true;
         }
         const double overlap_ratio = OverlapRatio(GetScreenRect(), wxRect(current_position, frame->GetSize()));
-        if (overlap_ratio >= 0.70) {
-            SelectWorkspacePage(page_index);
+        if (overlap_ratio <= 0.40) {
+            *moved_outside = true;
+        }
+        if (*moved_outside && overlap_ratio >= 0.70) {
+            if (page_index >= 0) {
+                SelectWorkspacePage(page_index);
+            } else {
+                CallAfter([this, frame]() {
+                    if (frame != nullptr) {
+                        frame->Close();
+                    }
+                    Raise();
+                    SetFocus();
+                });
+            }
         }
         event.Skip();
     });
@@ -1721,6 +1991,9 @@ void MainFrame::RefreshSpecWorkspace() {
 }
 
 void MainFrame::RefreshPlan(const std::string& sql) {
+    if (plan_rows_ == nullptr) {
+        return;
+    }
     std::vector<beta1b::PlanNode> nodes;
     const std::string lowered = ToLower(sql);
     if (lowered.find("join") != std::string::npos) {
@@ -2164,11 +2437,10 @@ void MainFrame::ToggleDiagramPaletteDetached(bool detach) {
                                              wxFRAME_TOOL_WINDOW | wxRESIZE_BORDER | wxCAPTION | wxCLOSE_BOX);
         auto* panel = new wxPanel(diagram_palette_frame_, wxID_ANY);
         auto* sizer = new wxBoxSizer(wxVERTICAL);
-        auto* bar = new wxBoxSizer(wxHORIZONTAL);
-        auto* attach_btn = new wxButton(panel, wxID_ANY, "Attach");
-        bar->AddSpacer(1);
-        bar->Add(attach_btn, 0, wxRIGHT, 2);
-        sizer->Add(bar, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 4);
+        auto* drag_strip = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxSize(-1, 10), wxBORDER_SIMPLE);
+        drag_strip->SetCursor(wxCursor(wxCURSOR_SIZING));
+        drag_strip->SetToolTip("Drag this floating palette; drop over main window to dock");
+        sizer->Add(drag_strip, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 4);
 
         diagram_palette_list_floating_ = new wxListCtrl(panel,
                                                         wxID_ANY,
@@ -2181,7 +2453,32 @@ void MainFrame::ToggleDiagramPaletteDetached(bool detach) {
 
         BindDiagramPaletteInteractions(diagram_palette_list_floating_);
         RefreshDiagramPaletteControls(active_diagram_.diagram_type);
-        attach_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { ToggleDiagramPaletteDetached(false); });
+        const wxPoint initial_position = diagram_palette_frame_->GetScreenPosition();
+        auto move_armed = std::make_shared<bool>(false);
+        auto moved_outside = std::make_shared<bool>(false);
+        diagram_palette_frame_->Bind(wxEVT_MOVE, [this, move_armed, moved_outside, initial_position](wxMoveEvent& event) {
+            if (diagram_palette_frame_ == nullptr) {
+                event.Skip();
+                return;
+            }
+            const wxPoint current_position = diagram_palette_frame_->GetScreenPosition();
+            if (!*move_armed) {
+                if (current_position == initial_position) {
+                    event.Skip();
+                    return;
+                }
+                *move_armed = true;
+            }
+            const double overlap_ratio = OverlapRatio(GetScreenRect(), wxRect(current_position, diagram_palette_frame_->GetSize()));
+            if (overlap_ratio <= 0.40) {
+                *moved_outside = true;
+            }
+            if (*moved_outside && overlap_ratio >= 0.70) {
+                SelectWorkspacePage(kWorkspacePageDiagram);
+                CallAfter([this]() { ToggleDiagramPaletteDetached(false); });
+            }
+            event.Skip();
+        });
         diagram_palette_frame_->Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& event) {
             if (diagram_palette_frame_ == nullptr) {
                 event.Skip();
@@ -2247,11 +2544,10 @@ void MainFrame::OpenOrFocusSqlEditorFrame() {
     sql_editor_frame_ = new wxFrame(this, wxID_ANY, "SqlEditorFrame", wxDefaultPosition, wxSize(1300, 860));
     auto* panel = new wxPanel(sql_editor_frame_, wxID_ANY);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
-    auto* dock_row = new wxBoxSizer(wxHORIZONTAL);
-    dock_row->Add(new wxStaticText(panel, wxID_ANY, "Detached SQL Editor"), 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    auto* dock_btn = new wxButton(panel, wxID_ANY, "Dock In Main");
-    dock_row->Add(dock_btn, 0, wxRIGHT, 4);
-    sizer->Add(dock_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 8);
+    auto* drag_strip = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxSize(-1, 10), wxBORDER_SIMPLE);
+    drag_strip->SetCursor(wxCursor(wxCURSOR_SIZING));
+    drag_strip->SetToolTip("Drag this window; drop over main workspace to dock");
+    sizer->Add(drag_strip, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 8);
 
     sql_editor_detached_ = new wxTextCtrl(panel,
                                           wxID_ANY,
@@ -2305,7 +2601,6 @@ void MainFrame::OpenOrFocusSqlEditorFrame() {
     export_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         ExportHistoryIntoStatus(sql_status_detached_, sql_history_detached_);
     });
-    dock_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { SelectWorkspacePage(kWorkspacePageSql); });
 
     PopulateHistoryList(sql_history_detached_);
 
@@ -2335,11 +2630,10 @@ void MainFrame::OpenOrFocusObjectEditorFrame() {
     object_editor_frame_ = new wxFrame(this, wxID_ANY, "ObjectEditorFrame", wxDefaultPosition, wxSize(1100, 760));
     auto* panel = new wxPanel(object_editor_frame_, wxID_ANY);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
-    auto* dock_row = new wxBoxSizer(wxHORIZONTAL);
-    dock_row->Add(new wxStaticText(panel, wxID_ANY, "Detached Object Editor"), 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    auto* dock_btn = new wxButton(panel, wxID_ANY, "Dock In Main");
-    dock_row->Add(dock_btn, 0, wxRIGHT, 4);
-    sizer->Add(dock_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
+    auto* drag_strip = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxSize(-1, 10), wxBORDER_SIMPLE);
+    drag_strip->SetCursor(wxCursor(wxCURSOR_SIZING));
+    drag_strip->SetToolTip("Drag this window; drop over main workspace to dock");
+    sizer->Add(drag_strip, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 8);
 
     auto* row = new wxBoxSizer(wxHORIZONTAL);
     row->Add(new wxStaticText(panel, wxID_ANY, "Class"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
@@ -2390,8 +2684,6 @@ void MainFrame::OpenOrFocusObjectEditorFrame() {
             wxMessageBox(ToWx(ex.what()), "Migration generation failed", wxOK | wxICON_ERROR, this);
         }
     });
-    dock_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { SelectWorkspacePage(kWorkspacePageObject); });
-
     object_editor_frame_->Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& event) {
         if (object_class_ != nullptr && object_class_detached_ != nullptr) {
             object_class_->SetSelection(object_class_detached_->GetSelection());
@@ -2427,6 +2719,10 @@ void MainFrame::OpenOrFocusDiagramFrame() {
     diagram_frame_ = new wxFrame(this, wxID_ANY, ToWx(frame_title), wxDefaultPosition, wxSize(1200, 760));
     auto* panel = new wxPanel(diagram_frame_, wxID_ANY);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
+    auto* drag_strip = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxSize(-1, 10), wxBORDER_SIMPLE);
+    drag_strip->SetCursor(wxCursor(wxCURSOR_SIZING));
+    drag_strip->SetToolTip("Drag this window; drop over main workspace to dock");
+    sizer->Add(drag_strip, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
     diagram_links_detached_ = nullptr;
     diagram_heading_detached_ = new wxStaticText(panel, wxID_ANY, ToWx(frame_title));
@@ -2449,7 +2745,6 @@ void MainFrame::OpenOrFocusDiagramFrame() {
     diagram_name_input_detached_ =
         new wxTextCtrl(panel, wxID_ANY, ToWx(active_diagram_name_.empty() ? "Core Domain ERD" : active_diagram_name_));
     auto* new_diagram_btn = new wxButton(panel, wxID_ANY, "New Diagram");
-    auto* dock_btn = new wxButton(panel, wxID_ANY, "Dock In Main");
     auto* svg_btn = new wxButton(panel, wxID_ANY, "Export SVG");
     auto* png_btn = new wxButton(panel, wxID_ANY, "Export PNG");
     row->Add(new wxStaticText(panel, wxID_ANY, "Type"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
@@ -2457,7 +2752,6 @@ void MainFrame::OpenOrFocusDiagramFrame() {
     row->Add(new wxStaticText(panel, wxID_ANY, "Name"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
     row->Add(diagram_name_input_detached_, 1, wxRIGHT, 8);
     row->Add(new_diagram_btn, 0, wxRIGHT, 8);
-    row->Add(dock_btn, 0, wxRIGHT, 8);
     row->Add(svg_btn, 0, wxRIGHT, 6);
     row->Add(png_btn, 0, wxRIGHT, 6);
     sizer->Add(row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 8);
@@ -2588,9 +2882,11 @@ void MainFrame::OpenOrFocusDiagramFrame() {
     auto* palette_panel = new wxPanel(splitter, wxID_ANY);
     auto* palette_sizer = new wxBoxSizer(wxVERTICAL);
     auto* palette_bar = new wxBoxSizer(wxHORIZONTAL);
-    auto* attach_palette_btn = new wxButton(palette_panel, wxID_ANY, "Attach");
+    auto* detached_palette_drag = new wxPanel(palette_panel, wxID_ANY, wxDefaultPosition, wxSize(22, 10), wxBORDER_SIMPLE);
+    detached_palette_drag->SetCursor(wxCursor(wxCURSOR_SIZING));
+    detached_palette_drag->SetToolTip("Drag this window; drop over main workspace to dock");
     palette_bar->Add(new wxStaticText(palette_panel, wxID_ANY, ""), 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
-    palette_bar->Add(attach_palette_btn, 0, wxRIGHT, 2);
+    palette_bar->Add(detached_palette_drag, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 2);
     palette_sizer->Add(palette_bar, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 6);
     diagram_palette_list_detached_ =
         new wxListCtrl(palette_panel,
@@ -2738,16 +3034,6 @@ void MainFrame::OpenOrFocusDiagramFrame() {
             }
             OpenDiagramByTypeAndName(type_name, name, diagram_output_detached_);
         });
-    }
-
-    auto dock_to_main = [this](wxCommandEvent&) {
-        SelectWorkspacePage(kWorkspacePageDiagram);
-    };
-    if (dock_btn != nullptr) {
-        dock_btn->Bind(wxEVT_BUTTON, dock_to_main);
-    }
-    if (attach_palette_btn != nullptr) {
-        attach_palette_btn->Bind(wxEVT_BUTTON, dock_to_main);
     }
 
     svg_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
@@ -3026,11 +3312,13 @@ void MainFrame::OpenOrFocusMonitoringFrame() {
     monitoring_frame_ = new wxFrame(this, wxID_ANY, "MonitoringFrame", wxDefaultPosition, wxSize(980, 640));
     auto* panel = new wxPanel(monitoring_frame_, wxID_ANY);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
+    auto* drag_strip = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxSize(-1, 10), wxBORDER_SIMPLE);
+    drag_strip->SetCursor(wxCursor(wxCURSOR_SIZING));
+    drag_strip->SetToolTip("Drag this window; drop over main workspace to dock");
+    sizer->Add(drag_strip, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
     auto* top_row = new wxBoxSizer(wxHORIZONTAL);
     auto* refresh_btn = new wxButton(panel, wxID_ANY, "Refresh Metrics");
-    auto* dock_btn = new wxButton(panel, wxID_ANY, "Dock In Main");
     top_row->Add(refresh_btn, 0, wxRIGHT, 6);
-    top_row->Add(dock_btn, 0, wxRIGHT, 6);
     sizer->Add(top_row, 0, wxALL, 8);
 
     monitoring_rows_detached_ =
@@ -3049,7 +3337,6 @@ void MainFrame::OpenOrFocusMonitoringFrame() {
             AppendLogLine(ex.what());
         }
     });
-    dock_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { SelectWorkspacePage(kWorkspacePageMonitoring); });
 
     RefreshMonitoringList(monitoring_rows_detached_);
 
@@ -3073,6 +3360,10 @@ void MainFrame::OpenOrFocusReportingFrame() {
     reporting_frame_ = new wxFrame(this, wxID_ANY, "ReportingFrame", wxDefaultPosition, wxSize(1300, 860));
     auto* panel = new wxPanel(reporting_frame_, wxID_ANY);
     auto* root = new wxBoxSizer(wxVERTICAL);
+    auto* drag_strip = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxSize(-1, 10), wxBORDER_SIMPLE);
+    drag_strip->SetCursor(wxCursor(wxCURSOR_SIZING));
+    drag_strip->SetToolTip("Drag this window; drop over main workspace to dock");
+    root->Add(drag_strip, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
     auto* context_row = new wxBoxSizer(wxHORIZONTAL);
     auto* question_id = new wxTextCtrl(panel, wxID_ANY, "question:q1");
@@ -3295,6 +3586,7 @@ void MainFrame::OpenOrFocusReportingFrame() {
         event.Skip();
     });
 
+    BindDetachedFrameDropDock(reporting_frame_, -1);
     reporting_frame_->Show();
 }
 
@@ -3308,6 +3600,10 @@ void MainFrame::OpenOrFocusDataMaskingFrame() {
     data_masking_frame_ = new wxFrame(this, wxID_ANY, "DataMaskingFrame", wxDefaultPosition, wxSize(980, 640));
     auto* panel = new wxPanel(data_masking_frame_, wxID_ANY);
     auto* root = new wxBoxSizer(wxVERTICAL);
+    auto* drag_strip = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxSize(-1, 10), wxBORDER_SIMPLE);
+    drag_strip->SetCursor(wxCursor(wxCURSOR_SIZING));
+    drag_strip->SetToolTip("Drag this window; drop over main workspace to dock");
+    root->Add(drag_strip, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
     auto* profile_row = new wxBoxSizer(wxHORIZONTAL);
     auto* profile_id = new wxTextCtrl(panel, wxID_ANY, "default");
@@ -3395,6 +3691,7 @@ void MainFrame::OpenOrFocusDataMaskingFrame() {
         data_masking_frame_ = nullptr;
         event.Skip();
     });
+    BindDetachedFrameDropDock(data_masking_frame_, -1);
     data_masking_frame_->Show();
 }
 
@@ -3408,6 +3705,10 @@ void MainFrame::OpenOrFocusCdcConfigFrame() {
     cdc_config_frame_ = new wxFrame(this, wxID_ANY, "CdcConfigFrame", wxDefaultPosition, wxSize(980, 640));
     auto* panel = new wxPanel(cdc_config_frame_, wxID_ANY);
     auto* root = new wxBoxSizer(wxVERTICAL);
+    auto* drag_strip = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxSize(-1, 10), wxBORDER_SIMPLE);
+    drag_strip->SetCursor(wxCursor(wxCURSOR_SIZING));
+    drag_strip->SetToolTip("Drag this window; drop over main workspace to dock");
+    root->Add(drag_strip, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
     auto* max_attempts = new wxTextCtrl(panel, wxID_ANY, "3");
     auto* backoff_ms = new wxTextCtrl(panel, wxID_ANY, "10");
@@ -3477,6 +3778,7 @@ void MainFrame::OpenOrFocusCdcConfigFrame() {
         cdc_config_frame_ = nullptr;
         event.Skip();
     });
+    BindDetachedFrameDropDock(cdc_config_frame_, -1);
     cdc_config_frame_->Show();
 }
 
@@ -3490,6 +3792,10 @@ void MainFrame::OpenOrFocusGitIntegrationFrame() {
     git_integration_frame_ = new wxFrame(this, wxID_ANY, "GitIntegrationFrame", wxDefaultPosition, wxSize(840, 480));
     auto* panel = new wxPanel(git_integration_frame_, wxID_ANY);
     auto* root = new wxBoxSizer(wxVERTICAL);
+    auto* drag_strip = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxSize(-1, 10), wxBORDER_SIMPLE);
+    drag_strip->SetCursor(wxCursor(wxCURSOR_SIZING));
+    drag_strip->SetToolTip("Drag this window; drop over main workspace to dock");
+    root->Add(drag_strip, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
     auto* branch_selected = new wxCheckBox(panel, wxID_ANY, "Branch Selected");
     auto* remote_reachable = new wxCheckBox(panel, wxID_ANY, "Remote Reachable");
@@ -3524,6 +3830,7 @@ void MainFrame::OpenOrFocusGitIntegrationFrame() {
         git_integration_frame_ = nullptr;
         event.Skip();
     });
+    BindDetachedFrameDropDock(git_integration_frame_, -1);
     git_integration_frame_->Show();
 }
 
@@ -3538,6 +3845,10 @@ void MainFrame::OpenOrFocusSpecWorkspaceFrame() {
     spec_workspace_frame_ = new wxFrame(this, wxID_ANY, "SpecWorkspaceFrame", wxDefaultPosition, wxSize(1200, 760));
     auto* panel = new wxPanel(spec_workspace_frame_, wxID_ANY);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
+    auto* drag_strip = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxSize(-1, 10), wxBORDER_SIMPLE);
+    drag_strip->SetCursor(wxCursor(wxCURSOR_SIZING));
+    drag_strip->SetToolTip("Drag this window; drop over main workspace to dock");
+    sizer->Add(drag_strip, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
     auto* row = new wxBoxSizer(wxHORIZONTAL);
     row->Add(new wxStaticText(panel, wxID_ANY, "Spec set"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
@@ -3550,8 +3861,6 @@ void MainFrame::OpenOrFocusSpecWorkspaceFrame() {
 
     auto* refresh_btn = new wxButton(panel, wxID_ANY, "Refresh Workspace");
     row->Add(refresh_btn, 0, wxRIGHT, 6);
-    auto* dock_btn = new wxButton(panel, wxID_ANY, "Dock In Main");
-    row->Add(dock_btn, 0, wxRIGHT, 6);
     sizer->Add(row, 0, wxEXPAND | wxALL, 8);
 
     spec_summary_detached_ =
@@ -3573,7 +3882,6 @@ void MainFrame::OpenOrFocusSpecWorkspaceFrame() {
                                      spec_dashboard_detached_,
                                      spec_work_package_detached_);
     });
-    dock_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { SelectWorkspacePage(kWorkspacePageSpec); });
 
     RefreshSpecWorkspaceControls(specset_choice_detached_,
                                  spec_summary_detached_,
@@ -3859,6 +4167,10 @@ void MainFrame::OpenOrFocusAdminManager(const std::string& manager_key) {
 
     auto* panel = new wxPanel(frame, wxID_ANY);
     auto* root = new wxBoxSizer(wxVERTICAL);
+    auto* drag_strip = new wxPanel(panel, wxID_ANY, wxDefaultPosition, wxSize(-1, 10), wxBORDER_SIMPLE);
+    drag_strip->SetCursor(wxCursor(wxCURSOR_SIZING));
+    drag_strip->SetToolTip("Drag this window; drop over main workspace to dock");
+    root->Add(drag_strip, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, 8);
 
     root->Add(new wxStaticText(panel, wxID_ANY, ToWx(AdminManagerDescription(manager_key))), 0, wxALL, 8);
 
@@ -3965,6 +4277,7 @@ void MainFrame::OpenOrFocusAdminManager(const std::string& manager_key) {
         event.Skip();
     });
 
+    BindDetachedFrameDropDock(frame, -1);
     frame->Show();
 }
 

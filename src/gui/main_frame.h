@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -135,6 +136,10 @@ private:
     void ToggleDiagramPaletteDetached(bool detach);
     void BindDiagramPaletteInteractions(wxListCtrl* list);
     void SelectWorkspacePage(int page_index);
+    void EnsureWorkspacePageBuilt(int page_index);
+    void BindSurfaceDetachDrag(wxWindow* handle, int page_index);
+    void DetachSurfaceByDrag(int page_index, const wxPoint& screen_pos);
+    void BindDiagramPaletteDetachDrag(wxWindow* handle);
     void EnsureDetachedSurfaceNotEmbedded(int page_index);
     void CloseDetachedSurfaceForPage(int page_index);
     void OnWorkspaceNotebookPageChanged(wxBookCtrlEvent& event);
@@ -226,6 +231,7 @@ private:
     static constexpr int kWorkspacePagePlan = 3;
     static constexpr int kWorkspacePageSpec = 4;
     static constexpr int kWorkspacePageMonitoring = 5;
+    std::array<bool, 6> workspace_page_built_ = {{false, false, false, false, false, false}};
 
     wxChoice* profile_choice_ = nullptr;
     wxTreeCtrl* tree_ = nullptr;

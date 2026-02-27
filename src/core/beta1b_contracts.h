@@ -60,9 +60,16 @@ struct JumpHost {
 };
 
 struct IdentityContract {
-    std::string mode;  // local_password|oidc|saml|ldap|kerberos
+    std::string mode;  // local_password|oidc|saml|ldap|kerberos|ident|radius|pam
     std::string provider_id;
     std::vector<std::string> provider_scope;
+    std::string auth_method_id;  // optional canonical plugin method id (scratchbird.auth.*)
+    std::vector<std::string> auth_required_methods;
+    std::vector<std::string> auth_forbidden_methods;
+    bool auth_require_channel_binding = false;
+    std::string workload_identity_token;
+    std::string proxy_principal_assertion;
+    std::string provider_profile;
 };
 
 struct SecretProviderContract {
@@ -80,12 +87,22 @@ struct EnterpriseConnectionProfile {
     std::vector<JumpHost> jump_hosts;
     IdentityContract identity;
     std::optional<SecretProviderContract> secret_provider;
+    bool no_login_direct = false;
+    bool proxy_assertion_only = false;
+    std::string proxy_assertion_trust_profile;
 };
 
 struct SessionFingerprint {
     std::string profile_id;
     std::string transport_mode;
     std::string identity_mode;
+    std::string identity_method_id;
+    std::string identity_provider_profile;
+    bool auth_require_channel_binding = false;
+    std::vector<std::string> auth_required_methods;
+    std::vector<std::string> auth_forbidden_methods;
+    bool no_login_direct = false;
+    bool proxy_assertion_only = false;
     std::string backend_route;
 };
 
@@ -282,6 +299,15 @@ std::vector<std::pair<std::string, std::string>> BuildToolsMenu();
 std::string CoverageBadge(const std::string& design, const std::string& development, const std::string& management);
 void ApplySecurityPolicyAction(bool has_permission, const std::string& permission_key,
                                const std::function<void()>& action);
+struct SurfaceVisibilityState {
+    bool embedded_visible = false;
+    bool detached_visible = false;
+};
+void ValidateEmbeddedDetachedExclusivity(
+    const std::map<std::string, SurfaceVisibilityState>& visibility_by_surface);
+SurfaceVisibilityState ApplyDockingRule(bool detached_visible,
+                                        bool dock_action_requested,
+                                        double overlap_ratio);
 void ValidateUiWorkflowState(const std::string& workflow_id,
                              bool capability_ready,
                              bool state_ready);
@@ -342,6 +368,14 @@ struct DiagramDocument {
     std::vector<DiagramEdge> edges;
 };
 
+std::vector<std::string> PaletteTokensForDiagramType(const std::string& diagram_type);
+void ValidatePaletteModeExclusivity(bool docked_visible, bool floating_visible);
+DiagramNode BuildNodeFromPaletteToken(const std::string& diagram_type,
+                                      const std::string& token,
+                                      int x,
+                                      int y,
+                                      int width = 160,
+                                      int height = 80);
 void ValidateNotation(const std::string& notation);
 void ValidateCanvasOperation(const DiagramDocument& doc,
                              const std::string& operation,

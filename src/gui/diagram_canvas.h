@@ -84,6 +84,19 @@ private:
                      const beta1b::DiagramDocument& after,
                      const std::string& label,
                      std::string* error);
+    enum class ResizeHandle {
+        None,
+        N,
+        S,
+        E,
+        W,
+        NE,
+        NW,
+        SE,
+        SW,
+    };
+    ResizeHandle ResizeHandleForPoint(const beta1b::DiagramNode& node, const wxPoint& screen_point) const;
+    wxCursor CursorForResizeHandle(ResizeHandle handle) const;
 
     wxRect ScreenRectForNode(const beta1b::DiagramNode& node) const;
     wxPoint NodeCenter(const beta1b::DiagramNode& node) const;
@@ -121,6 +134,7 @@ private:
 
     bool dragging_ = false;
     bool resizing_ = false;
+    ResizeHandle resize_handle_ = ResizeHandle::None;
     wxPoint drag_anchor_;
     int drag_origin_x_ = 0;
     int drag_origin_y_ = 0;

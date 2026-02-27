@@ -175,6 +175,77 @@ int main() {
                             [](const std::string&, const std::string&) { return true; });
 
                         AssertEq(fp.identity_mode, "oidc", "identity mode mismatch");
+                        AssertEq(fp.identity_method_id, "scratchbird.auth.jwt_oidc", "identity method mismatch");
+                    }});
+
+    tests.push_back({"connection/enterprise_proxy_assertion_profile", [] {
+                        EnterpriseConnectionProfile p;
+                        p.profile_id = "proxy";
+                        p.username = "svc";
+                        p.transport = TransportContract{"direct", "required", 5000};
+                        p.identity = IdentityContract{"oidc", "idp", {"openid"}};
+                        p.identity.auth_method_id = "scratchbird.auth.proxy_assertion";
+                        p.identity.proxy_principal_assertion = "proxy.jwt";
+                        p.proxy_assertion_only = true;
+                        p.no_login_direct = true;
+
+                        auto fp = ConnectEnterprise(
+                            p,
+                            std::optional<std::string>("runtime_secret"),
+                            [](const SecretProviderContract&) { return std::optional<std::string>(); },
+                            [](const std::string&) { return std::optional<std::string>(); },
+                            [](const std::string&, const std::string&) { return true; },
+                            [](const std::string&, const std::string&) { return true; });
+
+                        AssertEq(fp.identity_method_id,
+                                 "scratchbird.auth.proxy_assertion",
+                                 "proxy assertion method mismatch");
+                        AssertTrue(fp.proxy_assertion_only, "proxy_assertion_only flag mismatch");
+                        AssertTrue(fp.no_login_direct, "no_login_direct flag mismatch");
+                    }});
+
+    tests.push_back({"connection/enterprise_proxy_assertion_rejects_non_proxy_method", [] {
+                        EnterpriseConnectionProfile p;
+                        p.profile_id = "bad_proxy";
+                        p.username = "svc";
+                        p.transport = TransportContract{"direct", "required", 5000};
+                        p.identity = IdentityContract{"oidc", "idp", {"openid"}};
+                        p.identity.auth_method_id = "scratchbird.auth.jwt_oidc";
+                        p.proxy_assertion_only = true;
+                        p.identity.proxy_principal_assertion = "proxy.jwt";
+                        ExpectReject("SRB1-R-4005", [&] {
+                            (void)ConnectEnterprise(
+                                p,
+                                std::optional<std::string>("runtime_secret"),
+                                [](const SecretProviderContract&) { return std::optional<std::string>(); },
+                                [](const std::string&) { return std::optional<std::string>(); },
+                                [](const std::string&, const std::string&) { return true; },
+                                [](const std::string&, const std::string&) { return true; });
+                        });
+                    }});
+
+    tests.push_back({"connection/enterprise_p2_identity_modes", [] {
+                        EnterpriseConnectionProfile p;
+                        p.profile_id = "ident_profile";
+                        p.username = "svc";
+                        p.transport = TransportContract{"direct", "required", 5000};
+                        p.allow_inline_secret = true;
+                        p.inline_secret = std::string("ident-secret");
+                        p.identity = IdentityContract{"ident", "ident_local", {}};
+                        p.identity.provider_profile = "ident_local_net";
+
+                        auto fp = ConnectEnterprise(
+                            p,
+                            std::nullopt,
+                            [](const SecretProviderContract&) { return std::optional<std::string>(); },
+                            [](const std::string&) { return std::optional<std::string>(); },
+                            [](const std::string&, const std::string&) { return true; },
+                            [](const std::string&, const std::string&) { return true; });
+
+                        AssertEq(fp.identity_method_id,
+                                 "scratchbird.auth.ident_rfc1413",
+                                 "ident mode default method mismatch");
+                        AssertEq(fp.identity_provider_profile, "ident_local_net", "provider profile mismatch");
                     }});
 
     tests.push_back({"connection/copy_io", [] {

@@ -257,7 +257,10 @@ int main() {
                             ValidateTransport(p);
                         };
                         checks["R1-ENT-002"] = [] {
-                            (void)RunIdentityHandshake({"oidc", "idp", {"openid"}}, "secret",
+                            IdentityContract identity{"oidc", "idp", {"openid"}};
+                            identity.auth_method_id = "scratchbird.auth.workload_identity";
+                            identity.workload_identity_token = "wl.jwt";
+                            (void)RunIdentityHandshake(identity, "secret",
                                                        [](const std::string&, const std::string&) { return true; },
                                                        [](const std::string&, const std::string&) { return true; });
                         };
@@ -269,6 +272,36 @@ int main() {
                                                 std::optional<std::string>("cred"),
                                                 std::nullopt,
                                                 false);
+                        };
+                        checks["R1-ENT-004"] = [] {
+                            EnterpriseConnectionProfile p;
+                            p.profile_id = "bad";
+                            p.username = "u";
+                            p.transport = {"direct", "required", 1000};
+                            p.identity = {"oidc", "idp", {"openid"}};
+                            p.identity.auth_required_methods = {"scratchbird.auth.scram_sha_256"};
+                            p.identity.auth_forbidden_methods = {"scratchbird.auth.scram_sha_256"};
+                            ExpectReject("SRB1-R-4005", [&] { ValidateTransport(p); });
+                        };
+                        checks["R1-ENT-005"] = [] {
+                            EnterpriseConnectionProfile p;
+                            p.profile_id = "radius";
+                            p.username = "u";
+                            p.transport = {"direct", "required", 1000};
+                            p.allow_inline_secret = true;
+                            p.inline_secret = std::string("radius-secret");
+                            p.identity = {"radius", "radius_primary", {}};
+                            p.identity.provider_profile = "radius_primary";
+                            const auto fp = ConnectEnterprise(
+                                p,
+                                std::nullopt,
+                                [](const SecretProviderContract&) { return std::optional<std::string>(); },
+                                [](const std::string&) { return std::optional<std::string>(); },
+                                [](const std::string&, const std::string&) { return true; },
+                                [](const std::string&, const std::string&) { return true; });
+                            AssertEq(fp.identity_method_id,
+                                     "scratchbird.auth.radius_pap",
+                                     "radius mode default method mismatch");
                         };
                         checks["R1-CPY-001"] = [] { (void)RunCopyIo("COPY t TO STDOUT", "stdin", "stdout", true, true); };
                         checks["R1-PRE-001"] = [] { (void)PrepareExecuteClose(true, "select 1", {}); };
@@ -348,6 +381,40 @@ int main() {
                             }
                             AssertTrue(found, "spec workspace menu missing");
                         };
+                        checks["U1-WIN-001"] = [] {
+                            const std::map<std::string, SurfaceVisibilityState> visibility = {
+                                {"sql", {.embedded_visible = true, .detached_visible = false}},
+                                {"object", {.embedded_visible = false, .detached_visible = true}},
+                                {"diagram", {.embedded_visible = true, .detached_visible = false}},
+                                {"spec_workspace", {.embedded_visible = false, .detached_visible = true}},
+                                {"monitoring", {.embedded_visible = true, .detached_visible = false}},
+                            };
+                            ValidateEmbeddedDetachedExclusivity(visibility);
+                            for (const auto& [surface, state] : visibility) {
+                                ValidateUiWorkflowState("window_exclusive:" + surface,
+                                                        true,
+                                                        !(state.embedded_visible && state.detached_visible));
+                            }
+                            ExpectReject("SRB1-R-5101", [] {
+                                ValidateEmbeddedDetachedExclusivity(
+                                    {{"diagram", {.embedded_visible = true, .detached_visible = true}}});
+                            });
+                        };
+                        checks["U1-WIN-002"] = [] {
+                            const auto keep_detached = ApplyDockingRule(true, false, 0.69);
+                            AssertTrue(!keep_detached.embedded_visible && keep_detached.detached_visible,
+                                       "detached window should remain detached below overlap threshold");
+
+                            const auto dock_by_overlap = ApplyDockingRule(true, false, 0.70);
+                            AssertTrue(dock_by_overlap.embedded_visible && !dock_by_overlap.detached_visible,
+                                       "window should dock when overlap threshold is met");
+
+                            const auto dock_by_action = ApplyDockingRule(true, true, 0.05);
+                            AssertTrue(dock_by_action.embedded_visible && !dock_by_action.detached_visible,
+                                       "dock action should force embedded mode");
+
+                            ExpectReject("SRB1-R-5101", [] { (void)ApplyDockingRule(true, false, 1.01); });
+                        };
                         checks["U1-INS-001"] = [] { ValidateUiWorkflowState("inspector_tabs", true, true); };
                         checks["U1-ICO-001"] = [] { (void)ResolveIconSlot("table", {}, "default.png"); };
                         checks["U1-SPW-001"] = [] { (void)BuildSpecWorkspaceSummary({{"design", 1}, {"development", 1}, {"management", 0}}); };
@@ -369,6 +436,35 @@ int main() {
                             ValidateCanvasOperation(diagram, "reparent", "n2", "");
                             ExpectReject("SRB1-R-6201", [&] { ValidateCanvasOperation(diagram, "reparent", "n1", "n1"); });
                             ExpectReject("SRB1-R-6201", [&] { ValidateCanvasOperation(diagram, "connect", "n1", "missing"); });
+                        };
+                        checks["D1-PAL-001"] = [] {
+                            ValidatePaletteModeExclusivity(true, false);
+                            ValidatePaletteModeExclusivity(false, true);
+                            ExpectReject("SRB1-R-6201", [] { ValidatePaletteModeExclusivity(true, true); });
+
+                            const std::map<std::string, std::set<std::string>> expected_tokens = {
+                                {"ERD", {"table", "view", "index", "domain", "note", "relation"}},
+                                {"Silverston", {"subject_area", "entity", "fact", "dimension", "lookup", "hub", "link", "satellite"}},
+                                {"Whiteboard", {"note", "task", "risk", "decision", "milestone"}},
+                                {"Mind Map", {"topic", "branch", "idea", "question", "action"}},
+                            };
+
+                            for (const auto& [diagram_type, expected] : expected_tokens) {
+                                const auto tokens = PaletteTokensForDiagramType(diagram_type);
+                                const std::set<std::string> actual(tokens.begin(), tokens.end());
+                                AssertTrue(actual.size() == expected.size(),
+                                           "palette token count mismatch for " + diagram_type);
+                                for (const auto& token : expected) {
+                                    AssertTrue(actual.count(token) == 1U,
+                                               "palette token missing for " + diagram_type + ": " + token);
+                                    const auto node = BuildNodeFromPaletteToken(diagram_type, token, 10, 20);
+                                    AssertEq(node.object_type, token, "palette token type mismatch");
+                                }
+                            }
+
+                            ExpectReject("SRB1-R-6201", [] { (void)PaletteTokensForDiagramType("DataFlow"); });
+                            ExpectReject("SRB1-R-6201", [] { (void)BuildNodeFromPaletteToken("ERD", "topic", 10, 20); });
+                            ExpectReject("SRB1-R-6201", [] { (void)BuildNodeFromPaletteToken("ERD", "table", 10, 20, 0, 80); });
                         };
                         checks["D1-ENG-001"] = [] { (void)ForwardEngineerDatatypes({"int"}, {{"int", "INTEGER"}}); };
                         checks["D1-EXP-001"] = [&] { (void)ExportDiagram(diagram, "png", "full"); };

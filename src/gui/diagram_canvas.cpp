@@ -109,6 +109,7 @@ void DiagramCanvasPanel::SetDocument(beta1b::DiagramDocument* document) {
     undo_stack_.clear();
     redo_stack_.clear();
     drag_before_document_.reset();
+    resize_handle_ = ResizeHandle::None;
     if (document_ != nullptr && document_->grid_size > 0) {
         grid_size_ = document_->grid_size;
     }
@@ -732,6 +733,29 @@ void DiagramCanvasPanel::OnPaint(wxPaintEvent& event) {
         } else {
             dc.DrawRoundedRectangle(rect, is_silverston ? 2 : 6);
         }
+        if (selected) {
+            const int hs = 7;
+            const int half = hs / 2;
+            const int left = rect.x;
+            const int right = rect.x + rect.width;
+            const int top = rect.y;
+            const int bottom = rect.y + rect.height;
+            const int cx = rect.x + (rect.width / 2);
+            const int cy = rect.y + (rect.height / 2);
+            dc.SetPen(wxPen(wxColour(38, 107, 255), 1));
+            dc.SetBrush(wxBrush(wxColour(255, 255, 255)));
+            const auto draw_handle = [&](int x, int y) {
+                dc.DrawRectangle(x - half, y - half, hs, hs);
+            };
+            draw_handle(left, top);
+            draw_handle(cx, top);
+            draw_handle(right, top);
+            draw_handle(left, cy);
+            draw_handle(right, cy);
+            draw_handle(left, bottom);
+            draw_handle(cx, bottom);
+            draw_handle(right, bottom);
+        }
         if (is_silverston) {
             dc.SetPen(wxPen(wxColour(56, 91, 145), 2));
             dc.DrawLine(rect.x, rect.y + 24, rect.x + rect.width, rect.y + 24);
@@ -792,7 +816,7 @@ void DiagramCanvasPanel::OnPaint(wxPaintEvent& event) {
         dc.DrawText("Connect source: " + connect_source_node_id_ + " (Ctrl+Click target node)", 10, size.y - 24);
     } else {
         dc.SetTextForeground(wxColour(100, 100, 100));
-        dc.DrawText("Click=select/drag  Shift+Click=multi-select  Alt+Drag=resize  Ctrl+Click=connect  Del/Shift+Del delete",
+        dc.DrawText("Click=select/drag  Border-drag=resize  Shift+Click=multi-select  Ctrl+Click=connect  Del/Shift+Del delete",
                     10, size.y - 24);
     }
 }
@@ -838,25 +862,35 @@ void DiagramCanvasPanel::OnLeftDown(wxMouseEvent& event) {
         selected_node_ids_.clear();
         connect_source_node_id_.clear();
         EmitSelection();
+        SetCursor(wxCursor(wxCURSOR_ARROW));
         Refresh();
         return;
     }
 
+    const ResizeHandle resize_handle = ResizeHandleForPoint(*node, event.GetPosition());
     selected_node_id_ = node->node_id;
-    if (!event.ShiftDown()) {
+    if (resize_handle != ResizeHandle::None) {
+        // Resize gesture always targets one node.
         selected_node_ids_.clear();
+        selected_node_ids_.insert(node->node_id);
+    } else {
+        if (!event.ShiftDown()) {
+            selected_node_ids_.clear();
+        }
+        selected_node_ids_.insert(node->node_id);
     }
-    selected_node_ids_.insert(node->node_id);
     EmitSelection();
     connect_source_node_id_.clear();
     dragging_ = true;
-    resizing_ = event.AltDown();
+    resizing_ = resize_handle != ResizeHandle::None;
+    resize_handle_ = resize_handle;
     drag_anchor_ = event.GetPosition();
     drag_origin_x_ = node->x;
     drag_origin_y_ = node->y;
     drag_origin_width_ = node->width;
     drag_origin_height_ = node->height;
     drag_before_document_ = *document_;
+    SetCursor(resizing_ ? CursorForResizeHandle(resize_handle_) : wxCursor(wxCURSOR_ARROW));
     CaptureMouse();
     Refresh();
 }
@@ -873,12 +907,16 @@ void DiagramCanvasPanel::OnLeftUp(wxMouseEvent& event) {
     dragging_ = false;
     if (document_ == nullptr || selected_node_id_.empty()) {
         resizing_ = false;
+        resize_handle_ = ResizeHandle::None;
+        SetCursor(wxCursor(wxCURSOR_ARROW));
         return;
     }
 
     beta1b::DiagramNode* node = SelectedNode();
     if (node == nullptr) {
         resizing_ = false;
+        resize_handle_ = ResizeHandle::None;
+        SetCursor(wxCursor(wxCURSOR_ARROW));
         return;
     }
 
@@ -909,11 +947,22 @@ void DiagramCanvasPanel::OnLeftUp(wxMouseEvent& event) {
         EmitStatus(ex.what());
     }
     resizing_ = false;
+    resize_handle_ = ResizeHandle::None;
+    SetCursor(wxCursor(wxCURSOR_ARROW));
     Refresh();
 }
 
 void DiagramCanvasPanel::OnMotion(wxMouseEvent& event) {
     if (!dragging_ || document_ == nullptr || selected_node_id_.empty() || !event.Dragging() || !event.LeftIsDown()) {
+        if (document_ != nullptr) {
+            beta1b::DiagramNode* hover_node = HitTestNode(event.GetPosition());
+            if (hover_node != nullptr) {
+                const ResizeHandle hover = ResizeHandleForPoint(*hover_node, event.GetPosition());
+                SetCursor(CursorForResizeHandle(hover));
+            } else {
+                SetCursor(wxCursor(wxCURSOR_ARROW));
+            }
+        }
         event.Skip();
         return;
     }
@@ -926,11 +975,73 @@ void DiagramCanvasPanel::OnMotion(wxMouseEvent& event) {
     const int delta_x = ScaleToModel(event.GetPosition().x - drag_anchor_.x);
     const int delta_y = ScaleToModel(event.GetPosition().y - drag_anchor_.y);
     if (resizing_) {
-        node->width = std::max(60, drag_origin_width_ + delta_x);
-        node->height = std::max(40, drag_origin_height_ + delta_y);
+        int new_x = drag_origin_x_;
+        int new_y = drag_origin_y_;
+        int new_width = drag_origin_width_;
+        int new_height = drag_origin_height_;
+        const bool adjust_left =
+            resize_handle_ == ResizeHandle::W || resize_handle_ == ResizeHandle::NW || resize_handle_ == ResizeHandle::SW;
+        const bool adjust_right =
+            resize_handle_ == ResizeHandle::E || resize_handle_ == ResizeHandle::NE || resize_handle_ == ResizeHandle::SE;
+        const bool adjust_top =
+            resize_handle_ == ResizeHandle::N || resize_handle_ == ResizeHandle::NE || resize_handle_ == ResizeHandle::NW;
+        const bool adjust_bottom =
+            resize_handle_ == ResizeHandle::S || resize_handle_ == ResizeHandle::SE || resize_handle_ == ResizeHandle::SW;
+
+        int right = drag_origin_x_ + drag_origin_width_;
+        int bottom = drag_origin_y_ + drag_origin_height_;
+        if (adjust_left) {
+            new_x = drag_origin_x_ + delta_x;
+        }
+        if (adjust_right) {
+            right = drag_origin_x_ + drag_origin_width_ + delta_x;
+        }
+        if (adjust_top) {
+            new_y = drag_origin_y_ + delta_y;
+        }
+        if (adjust_bottom) {
+            bottom = drag_origin_y_ + drag_origin_height_ + delta_y;
+        }
+
         if (snap_to_grid_) {
-            node->width = std::max(60, Snap(node->width));
-            node->height = std::max(40, Snap(node->height));
+            if (adjust_left) {
+                new_x = Snap(new_x);
+            }
+            if (adjust_right) {
+                right = Snap(right);
+            }
+            if (adjust_top) {
+                new_y = Snap(new_y);
+            }
+            if (adjust_bottom) {
+                bottom = Snap(bottom);
+            }
+        }
+
+        new_width = right - new_x;
+        new_height = bottom - new_y;
+        const int min_w = 60;
+        const int min_h = 40;
+        if (new_width < min_w) {
+            if (adjust_left && !adjust_right) {
+                new_x = right - min_w;
+            }
+            new_width = min_w;
+        }
+        if (new_height < min_h) {
+            if (adjust_top && !adjust_bottom) {
+                new_y = bottom - min_h;
+            }
+            new_height = min_h;
+        }
+
+        node->x = new_x;
+        node->y = new_y;
+        node->width = new_width;
+        node->height = new_height;
+        if (snap_to_grid_) {
+            node->x = Snap(node->x);
+            node->y = Snap(node->y);
         }
     } else {
         for (auto& candidate : document_->nodes) {
@@ -1307,6 +1418,69 @@ bool DiagramCanvasPanel::PushHistory(const beta1b::DiagramDocument& before,
         undo_stack_.erase(undo_stack_.begin());
     }
     return true;
+}
+
+DiagramCanvasPanel::ResizeHandle DiagramCanvasPanel::ResizeHandleForPoint(const beta1b::DiagramNode& node,
+                                                                           const wxPoint& screen_point) const {
+    const wxRect rect = ScreenRectForNode(node);
+    if (!rect.Contains(screen_point)) {
+        return ResizeHandle::None;
+    }
+    const int tol = std::max(5, static_cast<int>(std::lround(6.0 * zoom_)));
+    const int left = rect.x;
+    const int top = rect.y;
+    const int right = rect.x + rect.width;
+    const int bottom = rect.y + rect.height;
+    const bool near_left = std::abs(screen_point.x - left) <= tol;
+    const bool near_right = std::abs(screen_point.x - right) <= tol;
+    const bool near_top = std::abs(screen_point.y - top) <= tol;
+    const bool near_bottom = std::abs(screen_point.y - bottom) <= tol;
+
+    if (near_top && near_left) {
+        return ResizeHandle::NW;
+    }
+    if (near_top && near_right) {
+        return ResizeHandle::NE;
+    }
+    if (near_bottom && near_left) {
+        return ResizeHandle::SW;
+    }
+    if (near_bottom && near_right) {
+        return ResizeHandle::SE;
+    }
+    if (near_top) {
+        return ResizeHandle::N;
+    }
+    if (near_bottom) {
+        return ResizeHandle::S;
+    }
+    if (near_left) {
+        return ResizeHandle::W;
+    }
+    if (near_right) {
+        return ResizeHandle::E;
+    }
+    return ResizeHandle::None;
+}
+
+wxCursor DiagramCanvasPanel::CursorForResizeHandle(ResizeHandle handle) const {
+    switch (handle) {
+        case ResizeHandle::N:
+        case ResizeHandle::S:
+            return wxCursor(wxCURSOR_SIZENS);
+        case ResizeHandle::E:
+        case ResizeHandle::W:
+            return wxCursor(wxCURSOR_SIZEWE);
+        case ResizeHandle::NE:
+        case ResizeHandle::SW:
+            return wxCursor(wxCURSOR_SIZENESW);
+        case ResizeHandle::NW:
+        case ResizeHandle::SE:
+            return wxCursor(wxCURSOR_SIZENWSE);
+        case ResizeHandle::None:
+        default:
+            return wxCursor(wxCURSOR_ARROW);
+    }
 }
 
 wxRect DiagramCanvasPanel::ScreenRectForNode(const beta1b::DiagramNode& node) const {

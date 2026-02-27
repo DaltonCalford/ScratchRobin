@@ -85,6 +85,7 @@ int main() {
                         svc.SetCredentialStore({{"cred_ssh", "ssh_secret"}});
                         svc.SetSecretStore("vault", {{"kv/data/x", "vault_secret"}});
                         svc.SetFederatedIdentityPolicy("idp", {"vault_secret", "runtime_override"});
+                        svc.SetDirectoryIdentityPolicy("pam_local", {"runtime_override"});
 
                         beta1b::EnterpriseConnectionProfile p;
                         p.profile_id = "prod";
@@ -99,6 +100,9 @@ int main() {
 
                         scratchrobin::tests::AssertEq(fp.profile_id, "prod", "profile mismatch");
                         scratchrobin::tests::AssertEq(fp.transport_mode, "ssh_jump_chain", "transport mismatch");
+                        scratchrobin::tests::AssertEq(fp.identity_method_id,
+                                                      "scratchbird.auth.jwt_oidc",
+                                                      "identity method mismatch");
                         scratchrobin::tests::AssertTrue(
                             fp.backend_route.find("ssh_jump_chain:1:bastion:22->db.internal:5432") == 0U,
                             "backend route mismatch");
@@ -113,6 +117,25 @@ int main() {
 
                         const auto direct = svc.ConnectEnterprise(p, std::optional<std::string>("runtime_override"));
                         scratchrobin::tests::AssertEq(direct.backend_route, "direct", "direct backend route mismatch");
+
+                        p.identity.auth_method_id = "scratchbird.auth.proxy_assertion";
+                        p.identity.proxy_principal_assertion = "proxy.jwt";
+                        p.proxy_assertion_only = true;
+                        p.no_login_direct = true;
+                        const auto proxied = svc.ConnectEnterprise(p, std::optional<std::string>("runtime_override"));
+                        scratchrobin::tests::AssertEq(
+                            proxied.identity_method_id, "scratchbird.auth.proxy_assertion", "proxy method mismatch");
+                        scratchrobin::tests::AssertTrue(proxied.proxy_assertion_only, "proxy_assertion_only mismatch");
+
+                        p.identity = beta1b::IdentityContract{"pam", "pam_local", {}};
+                        p.identity.provider_profile = "pam_local_secure";
+                        p.proxy_assertion_only = false;
+                        p.no_login_direct = false;
+                        const auto pam = svc.ConnectEnterprise(p, std::optional<std::string>("runtime_override"));
+                        scratchrobin::tests::AssertEq(
+                            pam.identity_method_id, "scratchbird.auth.pam_conversation", "pam method mismatch");
+                        scratchrobin::tests::AssertEq(
+                            pam.identity_provider_profile, "pam_local_secure", "pam profile mismatch");
 
                         p.allow_inline_secret = false;
                         p.inline_secret = std::nullopt;

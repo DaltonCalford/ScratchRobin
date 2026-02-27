@@ -72,6 +72,53 @@ std::string Join(const std::vector<std::string>& parts, const std::string& delim
     return out.str();
 }
 
+std::string DefaultIdentityMethodForMode(const std::string& identity_mode) {
+    const std::string mode = ToLower(Trim(identity_mode));
+    if (mode == "local_password") {
+        return "scratchbird.auth.password_compat";
+    }
+    if (mode == "oidc" || mode == "saml") {
+        return "scratchbird.auth.jwt_oidc";
+    }
+    if (mode == "ldap") {
+        return "scratchbird.auth.ldap_bind";
+    }
+    if (mode == "kerberos") {
+        return "scratchbird.auth.kerberos_gssapi";
+    }
+    if (mode == "ident") {
+        return "scratchbird.auth.ident_rfc1413";
+    }
+    if (mode == "radius") {
+        return "scratchbird.auth.radius_pap";
+    }
+    if (mode == "pam") {
+        return "scratchbird.auth.pam_conversation";
+    }
+    return "";
+}
+
+bool HasMethodOverlap(const std::vector<std::string>& required,
+                      const std::vector<std::string>& forbidden,
+                      std::string& overlap_method) {
+    std::set<std::string> normalized_required;
+    for (const auto& method : required) {
+        const std::string normalized = ToLower(Trim(method));
+        if (!normalized.empty()) {
+            normalized_required.insert(normalized);
+        }
+    }
+    for (const auto& method : forbidden) {
+        const std::string normalized = ToLower(Trim(method));
+        if (!normalized.empty() && normalized_required.find(normalized) != normalized_required.end()) {
+            overlap_method = normalized;
+            return true;
+        }
+    }
+    overlap_method.clear();
+    return false;
+}
+
 std::string JsonEscape(std::string_view s) {
     std::string out;
     out.reserve(s.size() + 8);
@@ -475,15 +522,90 @@ void ValidateTransport(const EnterpriseConnectionProfile& profile) {
     }
 
     const auto& ident = profile.identity;
-    if (ident.mode != "local_password" && ident.mode != "oidc" && ident.mode != "saml" && ident.mode != "ldap" &&
-        ident.mode != "kerberos") {
+    const std::string mode = ToLower(Trim(ident.mode));
+    const std::string method_id = ToLower(Trim(ident.auth_method_id));
+
+    if (method_id.empty() && mode != "local_password" && mode != "oidc" && mode != "saml" && mode != "ldap" &&
+        mode != "kerberos" && mode != "ident" && mode != "radius" && mode != "pam") {
         throw MakeReject("SRB1-R-4005", "unknown identity mode", "connection", "validate_transport");
     }
-    if (ident.mode != "local_password" && ident.provider_id.empty()) {
+
+    std::string overlap_method;
+    if (HasMethodOverlap(ident.auth_required_methods, ident.auth_forbidden_methods, overlap_method)) {
+        throw MakeReject("SRB1-R-4005",
+                         "invalid auth pinning profile overlap",
+                         "connection",
+                         "validate_transport",
+                         false,
+                         overlap_method);
+    }
+
+    if (!method_id.empty() && method_id.rfind("scratchbird.auth.", 0) != 0) {
+        throw MakeReject("SRB1-R-4005",
+                         "identity auth_method_id must use scratchbird.auth.* namespace",
+                         "connection",
+                         "validate_transport",
+                         false,
+                         method_id);
+    }
+
+    if ((mode == "oidc" || mode == "saml") &&
+        method_id.empty() &&
+        ident.provider_scope.empty()) {
+        throw MakeReject("SRB1-R-4005", "provider_scope required", "connection", "validate_transport");
+    }
+
+    if (!mode.empty() && mode != "local_password" && ident.provider_id.empty() &&
+        method_id != "scratchbird.auth.proxy_assertion" &&
+        method_id != "scratchbird.auth.password_compat") {
         throw MakeReject("SRB1-R-4005", "provider_id required", "connection", "validate_transport");
     }
-    if ((ident.mode == "oidc" || ident.mode == "saml") && ident.provider_scope.empty()) {
-        throw MakeReject("SRB1-R-4005", "provider_scope required", "connection", "validate_transport");
+
+    if (profile.proxy_assertion_only) {
+        if (method_id != "scratchbird.auth.proxy_assertion") {
+            throw MakeReject("SRB1-R-4005",
+                             "proxy_assertion_only profile requires scratchbird.auth.proxy_assertion",
+                             "connection",
+                             "validate_transport");
+        }
+        if (ident.proxy_principal_assertion.empty()) {
+            throw MakeReject("SRB1-R-4005",
+                             "proxy_assertion_only profile requires proxy principal assertion payload",
+                             "connection",
+                             "validate_transport");
+        }
+    }
+
+    if (profile.no_login_direct && mode == "local_password" &&
+        method_id != "scratchbird.auth.proxy_assertion") {
+        throw MakeReject("SRB1-R-4005",
+                         "no_login_direct profile does not allow local_password identity",
+                         "connection",
+                         "validate_transport");
+    }
+
+    if (method_id == "scratchbird.auth.workload_identity" &&
+        ident.workload_identity_token.empty()) {
+        throw MakeReject("SRB1-R-4005",
+                         "workload identity method requires workload_identity_token",
+                         "connection",
+                         "validate_transport");
+    }
+    if (method_id == "scratchbird.auth.proxy_assertion" &&
+        ident.proxy_principal_assertion.empty()) {
+        throw MakeReject("SRB1-R-4005",
+                         "proxy assertion method requires proxy_principal_assertion",
+                         "connection",
+                         "validate_transport");
+    }
+    if ((method_id == "scratchbird.auth.ident_rfc1413" ||
+         method_id == "scratchbird.auth.radius_pap" ||
+         method_id == "scratchbird.auth.pam_conversation") &&
+        ident.provider_profile.empty()) {
+        throw MakeReject("SRB1-R-4005",
+                         "provider_profile required for enterprise identity method",
+                         "connection",
+                         "validate_transport");
     }
 
     if (profile.secret_provider.has_value()) {
@@ -529,25 +651,90 @@ std::string RunIdentityHandshake(const IdentityContract& identity,
                                  const std::string& secret,
                                  const std::function<bool(const std::string&, const std::string&)>& federated_acquire,
                                  const std::function<bool(const std::string&, const std::string&)>& directory_bind) {
-    if (identity.mode == "local_password") {
+    const std::string mode = ToLower(Trim(identity.mode));
+    std::string method_id = ToLower(Trim(identity.auth_method_id));
+    if (method_id.empty()) {
+        method_id = DefaultIdentityMethodForMode(mode);
+    }
+
+    if (method_id.empty()) {
+        throw MakeReject("SRB1-R-4005", "unknown identity mode", "connection", "identity_handshake");
+    }
+
+    if (method_id == "scratchbird.auth.password_compat" ||
+        method_id == "scratchbird.auth.scram" ||
+        method_id == "scratchbird.auth.scram_sha_256" ||
+        method_id == "scratchbird.auth.scram_sha_512") {
         if (secret.empty()) {
-            throw MakeReject("SRB1-R-4005", "local_password requires secret", "connection", "identity_handshake");
+            throw MakeReject("SRB1-R-4005",
+                             "password/scram method requires secret",
+                             "connection",
+                             "identity_handshake");
         }
         return "local-password-ok";
     }
-    if (identity.mode == "oidc" || identity.mode == "saml") {
+
+    if (method_id == "scratchbird.auth.jwt_oidc" ||
+        method_id == "scratchbird.auth.oauth_validator") {
         if (!federated_acquire(identity.provider_id, secret)) {
-            throw MakeReject("SRB1-R-4005", "federated token acquisition failed", "connection", "identity_handshake");
+            throw MakeReject("SRB1-R-4005",
+                             "federated token acquisition failed",
+                             "connection",
+                             "identity_handshake");
         }
         return "federated-ok";
     }
-    if (identity.mode == "ldap" || identity.mode == "kerberos") {
+
+    if (method_id == "scratchbird.auth.workload_identity") {
+        const std::string token =
+            !identity.workload_identity_token.empty() ? identity.workload_identity_token : secret;
+        if (token.empty()) {
+            throw MakeReject("SRB1-R-4005",
+                             "workload identity requires token payload",
+                             "connection",
+                             "identity_handshake");
+        }
+        if (!federated_acquire(identity.provider_id, token)) {
+            throw MakeReject("SRB1-R-4005",
+                             "workload identity token validation failed",
+                             "connection",
+                             "identity_handshake");
+        }
+        return "workload-identity-ok";
+    }
+
+    if (method_id == "scratchbird.auth.proxy_assertion") {
+        const std::string assertion =
+            !identity.proxy_principal_assertion.empty() ? identity.proxy_principal_assertion : secret;
+        if (assertion.empty()) {
+            throw MakeReject("SRB1-R-4005",
+                             "proxy assertion payload missing",
+                             "connection",
+                             "identity_handshake");
+        }
+        return "proxy-assertion-ok";
+    }
+
+    if (method_id == "scratchbird.auth.directory_bind" ||
+        method_id == "scratchbird.auth.ldap" ||
+        method_id == "scratchbird.auth.kerberos" ||
+        method_id == "scratchbird.auth.ldap_bind" ||
+        method_id == "scratchbird.auth.kerberos_gssapi" ||
+        method_id == "scratchbird.auth.ident_rfc1413" ||
+        method_id == "scratchbird.auth.radius_pap" ||
+        method_id == "scratchbird.auth.pam_conversation") {
         if (!directory_bind(identity.provider_id, secret)) {
             throw MakeReject("SRB1-R-4005", "directory bind failed", "connection", "identity_handshake");
         }
         return "directory-ok";
     }
-    throw MakeReject("SRB1-R-4005", "unknown identity mode", "connection", "identity_handshake");
+
+    throw MakeReject("SRB1-R-4005",
+                     "unsupported method/profile combination",
+                     "connection",
+                     "identity_handshake",
+                     false,
+                     method_id);
 }
 
 SessionFingerprint ConnectEnterprise(
@@ -576,7 +763,17 @@ SessionFingerprint ConnectEnterprise(
     SessionFingerprint out;
     out.profile_id = profile.profile_id;
     out.transport_mode = profile.transport.mode;
-    out.identity_mode = profile.identity.mode;
+    out.identity_mode = ToLower(Trim(profile.identity.mode));
+    out.identity_method_id = ToLower(Trim(profile.identity.auth_method_id));
+    out.identity_provider_profile = Trim(profile.identity.provider_profile);
+    if (out.identity_method_id.empty()) {
+        out.identity_method_id = DefaultIdentityMethodForMode(out.identity_mode);
+    }
+    out.auth_require_channel_binding = profile.identity.auth_require_channel_binding;
+    out.auth_required_methods = profile.identity.auth_required_methods;
+    out.auth_forbidden_methods = profile.identity.auth_forbidden_methods;
+    out.no_login_direct = profile.no_login_direct;
+    out.proxy_assertion_only = profile.proxy_assertion_only;
     if (profile.transport.mode == "direct") {
         out.backend_route = "direct";
     } else if (profile.transport.mode == "ssh_tunnel") {
@@ -1654,6 +1851,44 @@ void ApplySecurityPolicyAction(bool has_permission,
     action();
 }
 
+void ValidateEmbeddedDetachedExclusivity(
+    const std::map<std::string, SurfaceVisibilityState>& visibility_by_surface) {
+    if (visibility_by_surface.empty()) {
+        throw MakeReject("SRB1-R-5101", "no surface visibility states provided", "ui", "validate_window_exclusivity");
+    }
+    for (const auto& [surface_id, state] : visibility_by_surface) {
+        if (surface_id.empty()) {
+            throw MakeReject("SRB1-R-5101", "surface id is required", "ui", "validate_window_exclusivity");
+        }
+        if (state.embedded_visible && state.detached_visible) {
+            throw MakeReject("SRB1-R-5101",
+                             "embedded and detached surface visibility conflict",
+                             "ui",
+                             "validate_window_exclusivity",
+                             false,
+                             surface_id);
+        }
+    }
+}
+
+SurfaceVisibilityState ApplyDockingRule(bool detached_visible,
+                                        bool dock_action_requested,
+                                        double overlap_ratio) {
+    if (overlap_ratio < 0.0 || overlap_ratio > 1.0) {
+        throw MakeReject("SRB1-R-5101", "invalid overlap ratio", "ui", "apply_docking_rule");
+    }
+
+    if (dock_action_requested || (detached_visible && overlap_ratio >= 0.70)) {
+        return SurfaceVisibilityState{.embedded_visible = true, .detached_visible = false};
+    }
+
+    if (detached_visible) {
+        return SurfaceVisibilityState{.embedded_visible = false, .detached_visible = true};
+    }
+
+    return SurfaceVisibilityState{.embedded_visible = false, .detached_visible = false};
+}
+
 void ValidateUiWorkflowState(const std::string& workflow_id,
                              bool capability_ready,
                              bool state_ready) {
@@ -1695,6 +1930,57 @@ std::string BuildSpecWorkspaceSummary(const std::map<std::string, int>& gap_coun
 // -------------------------
 // Diagram contracts
 // -------------------------
+
+std::vector<std::string> PaletteTokensForDiagramType(const std::string& diagram_type) {
+    const std::string canonical = ToLower(Trim(diagram_type));
+    if (canonical == "erd") {
+        return {"table", "view", "index", "domain", "note", "relation"};
+    }
+    if (canonical == "silverston") {
+        return {"subject_area", "entity", "fact", "dimension", "lookup", "hub", "link", "satellite"};
+    }
+    if (canonical == "whiteboard") {
+        return {"note", "task", "risk", "decision", "milestone"};
+    }
+    if (canonical == "mindmap" || canonical == "mind map") {
+        return {"topic", "branch", "idea", "question", "action"};
+    }
+    throw MakeReject("SRB1-R-6201", "unsupported diagram type for palette", "diagram", "palette_tokens", false, diagram_type);
+}
+
+void ValidatePaletteModeExclusivity(bool docked_visible, bool floating_visible) {
+    if (docked_visible && floating_visible) {
+        throw MakeReject("SRB1-R-6201", "palette docked/floating mode conflict", "diagram", "validate_palette_mode");
+    }
+}
+
+DiagramNode BuildNodeFromPaletteToken(const std::string& diagram_type,
+                                      const std::string& token,
+                                      int x,
+                                      int y,
+                                      int width,
+                                      int height) {
+    const auto allowed_tokens = PaletteTokensForDiagramType(diagram_type);
+    const std::string canonical_token = ToLower(Trim(token));
+    if (canonical_token.empty() ||
+        std::find(allowed_tokens.begin(), allowed_tokens.end(), canonical_token) == allowed_tokens.end()) {
+        throw MakeReject("SRB1-R-6201", "invalid palette token payload", "diagram", "build_node_from_palette_token",
+                         false, token);
+    }
+    if (width <= 0 || height <= 0) {
+        throw MakeReject("SRB1-R-6201", "invalid palette drop geometry", "diagram", "build_node_from_palette_token");
+    }
+
+    DiagramNode node;
+    node.node_id = canonical_token + ":" + std::to_string(x) + ":" + std::to_string(y);
+    node.object_type = canonical_token;
+    node.parent_node_id = "";
+    node.x = x;
+    node.y = y;
+    node.width = width;
+    node.height = height;
+    return node;
+}
 
 void ValidateNotation(const std::string& notation) {
     static const std::set<std::string> allowed = {"crowsfoot", "idef1x", "uml", "chen"};
