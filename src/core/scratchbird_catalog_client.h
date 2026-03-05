@@ -32,7 +32,7 @@ struct ConnectionConfig {
   std::string database;
   std::string username;
   std::string password;
-  std::string application_name = "robin-migrate";
+  std::string application_name = "ScratchRobin";
   int connect_timeout_ms = 30000;
   bool ssl_mode = false;
 };

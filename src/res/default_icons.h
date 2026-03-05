@@ -10,7 +10,7 @@
 
 #pragma once
 
-// Default SVG icons for robin-migrate
+// Default SVG icons for ScratchRobin
 // These are placeholders until custom SVG icons are created for each object type
 // All icons are 16x16 viewBox and will scale to any size
 

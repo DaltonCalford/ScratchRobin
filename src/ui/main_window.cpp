@@ -3,7 +3,7 @@
 namespace scratchrobin::ui {
 
 std::string MainWindow::GetTitle() const {
-  return "robin-migrate (ScratchBird Native)";
+  return "ScratchRobin (ScratchBird Native)";
 }
 
 std::string MainWindow::GetLayoutModel() const {

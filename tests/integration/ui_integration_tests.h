@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Silverstone Data Systems
-// robin-migrate: UI Integration Tests
+// ScratchRobin: UI Integration Tests
 // Purpose: End-to-end testing framework for UI components
 
 #ifndef ROBIN_MIGRATE_TESTS_INTEGRATION_UI_INTEGRATION_TESTS_H_

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Silverstone Data Systems
-// robin-migrate: Unit Test Framework
+// ScratchRobin: Unit Test Framework
 
 #ifndef ROBIN_MIGRATE_TESTS_UNIT_TEST_FRAMEWORK_H_
 #define ROBIN_MIGRATE_TESTS_UNIT_TEST_FRAMEWORK_H_

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Silverstone Data Systems
-// robin-migrate: Query History Unit Tests
+// ScratchRobin: Query History Unit Tests
 
 #include "test_framework.h"
 #include "../../src/core/query_history.h"

@@ -329,7 +329,7 @@ std::string AppConfig::getConfigFilePath() const {
     if (!wxDirExists(config_dir)) {
         wxMkdir(config_dir, wxS_DIR_DEFAULT);
     }
-    return (config_dir + "/robin-migrate-config.cfg").ToStdString();
+    return (config_dir + "/scratchrobin-config.cfg").ToStdString();
 }
 
 bool AppConfig::configExists() const {
@@ -343,7 +343,7 @@ bool AppConfig::load(const std::string& key) {
     std::string filepath = getConfigFilePath();
     
     // Use wxFileConfig for simple key-value storage
-    wxFileConfig config(wxT("robin-migrate"), wxEmptyString,
+    wxFileConfig config(wxT("ScratchRobin"), wxEmptyString,
                         wxString::FromUTF8(filepath.c_str()),
                         wxEmptyString, wxCONFIG_USE_LOCAL_FILE);
     
@@ -496,7 +496,7 @@ bool AppConfig::save() {
     
     std::string filepath = getConfigFilePath();
     
-    wxFileConfig config(wxT("robin-migrate"), wxEmptyString,
+    wxFileConfig config(wxT("ScratchRobin"), wxEmptyString,
                         wxString::FromUTF8(filepath.c_str()),
                         wxEmptyString, wxCONFIG_USE_LOCAL_FILE);
     

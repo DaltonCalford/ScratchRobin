@@ -265,7 +265,7 @@ bool SavePreviewObjectMetadata(const std::string& file_path,
               return lhs.object_kind < rhs.object_kind;
             });
 
-  out << "# robin-migrate sql object metadata v1\n";
+  out << "# ScratchRobin sql object metadata v1\n";
   out << "# OBJECT\\t<schema_path>\\t<object_name>\\t<object_kind>\\t<description>\n";
   out << "# PROPERTY\\t<schema_path>\\t<object_name>\\t<object_kind>\\t<ordinal>"
          "\\t<property_name>\\t<property_type>\\t<property_value>\\t<notes>\n";

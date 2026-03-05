@@ -353,7 +353,7 @@ bool SavePreviewTableMetadata(const std::string& file_path,
               return lhs.table_name < rhs.table_name;
             });
 
-  out << "# robin-migrate preview metadata v2\n";
+  out << "# ScratchRobin preview metadata v2\n";
   out << "# TABLE\\t<schema_path>\\t<table_name>\\t<description>\n";
   out << "# COLUMN\\t<schema_path>\\t<table_name>\\t<ordinal>\\t<column_name>\\t<data_type>"
          "\\t<nullable:1|0>\\t<default_value>\\t<notes>\\t<domain_name>\\t<pk:1|0>"

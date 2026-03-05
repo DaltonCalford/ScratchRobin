@@ -2106,9 +2106,9 @@ void MainFrame::OnSettingsChanged() {
 
 void MainFrame::OnMenuAbout(wxCommandEvent&) {
   wxMessageBox(
-      "robin-migrate\n\nFlameRobin-style client scaffold for ScratchBird.\n"
+      "ScratchRobin\n\nFlameRobin-style client scaffold for ScratchBird.\n"
       "Execution path remains parser/native-adapter -> ServerSession boundary.",
-      "About robin-migrate", wxOK | wxICON_INFORMATION, this);
+      "About ScratchRobin", wxOK | wxICON_INFORMATION, this);
 }
 
 void MainFrame::OnTreeSelectionChanged(wxTreeEvent&) {

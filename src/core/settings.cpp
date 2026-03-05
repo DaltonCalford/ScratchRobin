@@ -31,12 +31,12 @@ std::string Settings::getConfigPath() const {
     if (!wxDirExists(config_dir)) {
         wxMkdir(config_dir, wxS_DIR_DEFAULT);
     }
-    return (config_dir + "/robin-migrate-settings.ini").ToStdString();
+    return (config_dir + "/scratchrobin-settings.ini").ToStdString();
 }
 
 void Settings::load() {
     wxFileName config_path(wxString::FromUTF8(getConfigPath().c_str()));
-    wxConfig config(wxT("robin-migrate"), wxEmptyString, 
+    wxConfig config(wxT("ScratchRobin"), wxEmptyString, 
                     config_path.GetFullPath(),
                     wxEmptyString, wxCONFIG_USE_LOCAL_FILE);
     
@@ -67,7 +67,7 @@ void Settings::load() {
 
 void Settings::save() const {
     wxFileName config_path(wxString::FromUTF8(getConfigPath().c_str()));
-    wxConfig config(wxT("robin-migrate"), wxEmptyString,
+    wxConfig config(wxT("ScratchRobin"), wxEmptyString,
                     config_path.GetFullPath(),
                     wxEmptyString, wxCONFIG_USE_LOCAL_FILE);
     
