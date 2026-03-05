@@ -1,40 +1,62 @@
-# ScratchRobin (Beta Implementation)
+# robin-migrate
 
-ScratchRobin is now in Beta implementation.
+`robin-migrate` is a FlameRobin-style database administration client skeleton
+retargeted to ScratchBird.
 
-All Alpha specification goals have been met, and the first Beta specification set now has a contract-complete runtime with case-ID conformance coverage.
+This repository is the migration workspace for a ScratchBird-native client with
+similar look and feel to FlameRobin, while enforcing ScratchBird execution
+contracts:
 
-Authoritative specification source:
-- /home/dcalford/CliWork/local_work/docs/specifications_beta1b/
+1. Engine execution boundary is `ServerSession` only.
+2. Engine executes validated SBLR bytecode, not SQL text.
+3. `native_adapter` is parser/wire translation, not a second engine path.
+4. One dialect parser per configured port, with no parser auto-detect fallback.
+5. Native ScratchBird parser is the only parser supported by this project.
 
-Legacy implementation snapshot preserved at:
-- legacy/2026-02-14_pre_beta1b_reset/
+## Current State
 
-Implementation intent:
-1. Remove implementation drift from prior alpha work.
-2. Implement deterministically from beta1b contracts and conformance rows.
-3. Keep legacy material available for reference only.
+This is an implementation skeleton with:
+- CMake build wiring
+- backend contracts encoded as compile-time structure
+- SBWP transport integration points for ScratchBird native listener
+- wxWidgets desktop shell with FlameRobin-style split layout
+- task-oriented specs in `docs/`
 
-Conformance evidence:
-- `docs/conformance/CONFORMANCE_IMPLEMENTATION_CHECKLIST.csv`
-- `tests/conformance/beta1b_conformance_vector.cpp`
+## Build
 
-Runtime verification commands:
-- `./build/scratchrobin` (GUI app)
-- `./build/scratchrobin_tool --runtime-startup`
-- `./build/scratchrobin_tool --release-gate-check`
-- `./build/scratchrobin_tool --validate-package-manifest=resources/templates/package_profile_manifest.example.json`
-- `./build/scratchrobin_tool --check-package-artifacts=resources/templates/package_profile_manifest.example.json`
-- `./tools/run_conformance_gate.sh ./build`
+```bash
+cmake -S . -B build
+cmake --build build
+ctest --test-dir build --output-on-failure
+./build/src/robin-migrate            # preview mode (default, no server required)
+./build/src/robin-migrate --mode=managed   # auto-start managed listener/server
+./build/src/robin-migrate --mode=listener-only  # connect to local listener on configured port
+./build/src/robin-migrate --mode=ipc-only      # connect via IPC/socket path
+./build/src/robin-migrate --mode=embedded      # embedded mode (single local engine instance)
+./build/robin-migrate                 # CLI binary
+./build/src/robin-migrate              # also available in build/src
+./build/robin-migrate-gui              # GUI binary
+./build/src/robin-migrate-gui          # also available in build/src
+```
 
-Developer/install guides:
-- `docs/developers_guide/README.md`
-- `docs/installation_guide/README.md`
+## Review Mode
 
-## Clone Resync Required
+`robin-migrate` now defaults to a non-connected preview mode so UI/flow review
+can proceed while parser/native listener work is in progress.
 
-Repository history was rewritten to remove build/test-build artifacts.
+- CLI: preview by default, use `--mode=` to pick the transport mode:
+  - `managed` (auto-start/auto-discover)
+  - `listener-only` (TCP localhost)
+  - `ipc-only` (socket/pipe)
+  - `embedded` (single-connection, no-server maintenance mode)
+  - `--live` remains supported as an alias for `listener-only`.
+- GUI: FlameRobin-style main window (tree + search bar + menus), open SQL editor via
+  `Database -> Open new Volatile SQL Editor...`
+- GUI mode switch: `Database -> Use Preview Mode (No Connection)` (default),
+  `Managed`, `Listener-Only`, `IPC-Only`, or `Embedded`.
 
-All local clones should re-sync with rewritten history:
-- `git fetch origin && git reset --hard origin/main`
-- or use a fresh clone.
+## Repository Layout
+
+- `src/`: executable and core/backend/UI scaffolding
+- `tests/`: contract-focused test skeletons
+- `docs/`: goals, architecture, migration specs, execution contracts, tests, plans

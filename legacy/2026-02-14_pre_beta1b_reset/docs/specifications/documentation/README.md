@@ -1,4 +1,0 @@
-# Documentation Specifications
-
-- `AUTOMATED_DOCUMENTATION_SYSTEM.md`
-- `GENERATED_METHODS_AND_OPERATIONS_SPEC.md`

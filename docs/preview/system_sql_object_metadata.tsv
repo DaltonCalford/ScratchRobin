@@ -1,0 +1,3 @@
+# robin-migrate sql object metadata v1
+# OBJECT	<schema_path>	<object_name>	<object_kind>	<description>
+# PROPERTY	<schema_path>	<object_name>	<object_kind>	<ordinal>	<property_name>	<property_type>	<property_value>	<notes>

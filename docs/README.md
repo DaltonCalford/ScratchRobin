@@ -1,6 +1,12 @@
-# ScratchRobin Local Docs
+# Docs Index
 
-Implementation contracts are defined in the beta1b spec tree:
-- /home/dcalford/CliWork/local_work/docs/specifications_beta1b/
+This directory contains migration goals and working specifications for
+`robin-migrate`.
 
-This docs directory should only contain implementation-facing notes derived from authoritative beta1b contracts.
+Subdirectories are organized by task area:
+- `goals/`: product intent, scope, and non-goals
+- `architecture/`: system and boundary contracts
+- `migration/`: FlameRobin-to-ScratchBird mapping and sequencing
+- `execution-contracts/`: normative execution-path constraints
+- `testing/`: validation strategy and conformance matrix
+- `plans/`: staged delivery and work breakdown

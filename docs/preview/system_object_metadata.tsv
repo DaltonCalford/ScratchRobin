@@ -1,0 +1,5 @@
+# robin-migrate preview metadata v2
+# TABLE	<schema_path>	<table_name>	<description>
+# COLUMN	<schema_path>	<table_name>	<ordinal>	<column_name>	<data_type>	<nullable:1|0>	<default_value>	<notes>	<domain_name>	<pk:1|0>	<fk:1|0>	<ref_schema>	<ref_table>	<ref_column>
+# INDEX	<schema_path>	<table_name>	<ordinal>	<index_name>	<unique:1|0>	<method>	<target>	<notes>
+# TRIGGER	<schema_path>	<table_name>	<ordinal>	<trigger_name>	<timing>	<event>	<notes>
