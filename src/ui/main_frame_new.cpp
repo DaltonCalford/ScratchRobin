@@ -77,7 +77,7 @@ wxBEGIN_EVENT_TABLE(MainFrame, wxFrame)
 wxEND_EVENT_TABLE()
 
 MainFrame::MainFrame(backend::SessionClient* session_client)
-    : wxFrame(nullptr, wxID_ANY, _("Robin-Migrate - Database Administration Tool"),
+    : wxFrame(nullptr, wxID_ANY, _("ScratchRobin - Database Administration Tool"),
               wxDefaultPosition, wxSize(1280, 800)),
       session_client_(session_client) {
   runtime_config_.mode = backend::TransportMode::kPreview;
