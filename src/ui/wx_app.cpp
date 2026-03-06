@@ -15,7 +15,6 @@
 #include <wx/init.h>
 #include <wx/display.h>
 #include <wx/msgdlg.h>
-#include <wx/log.h>
 
 #include "backend/scratchbird_runtime_config.h"
 #include "core/app_config.h"
@@ -30,21 +29,13 @@ bool ScratchbirdWxApp::OnInit() {
     return false;
   }
 
-  // Enable log output to stderr
-  wxLog::SetActiveTarget(new wxLogStderr());
-  wxLogMessage("WXAPP: Starting OnInit");
-  
   // Show splash screen immediately
   splash_ = new SplashScreen(nullptr);
-  wxLogMessage("WXAPP: SplashScreen created");
   splash_->ShowSplash();
-  wxLogMessage("WXAPP: SplashScreen shown");
   splash_->BeginLoading();
-  wxLogMessage("WXAPP: BeginLoading done");
 
   // Initialize backend
   splash_->SetStepConfigLoad();
-  wxLogMessage("WXAPP: Initializing backend...");
   registry_ = std::make_unique<backend::ParserPortRegistry>();
   compiler_ = std::make_unique<backend::NativeParserCompiler>();
   session_ = std::make_unique<backend::ServerSessionGateway>();
@@ -63,19 +54,16 @@ bool ScratchbirdWxApp::OnInit() {
   runtime.port = 4044;
   runtime.database = "default";
   session_client_->ConfigureRuntime(runtime);
-  wxLogMessage("WXAPP: Backend configured");
 
   // Load application configuration
   core::AppConfig& config = core::AppConfig::get();
   bool config_exists = config.configExists();
   
   if (config_exists) {
-    // Load config without decrypting passwords yet
     if (!config.load()) {
       config.resetToDefaults();
     }
   } else {
-    // First run - create default config
     config.resetToDefaults();
   }
 
@@ -91,27 +79,22 @@ bool ScratchbirdWxApp::OnInit() {
     wxString key = unlockDlg.ShowAndGetKey();
     
     if (!key.IsEmpty()) {
-      // User provided a key - try to decrypt
       if (!config.decryptPasswords(key.ToStdString())) {
-        // Decryption failed - wrong key
         wxMessageBox(wxT("The decryption key is incorrect. Passwords will not be available."),
                      wxT("Decryption Failed"), wxOK | wxICON_WARNING);
       }
     }
-    // User cancelled or skipped - continue without password decryption
     
     // Recreate splash screen for rest of initialization
     splash_ = new SplashScreen(nullptr);
     splash_->ShowSplash();
-    splash_->SetStepDecryptPasswords();  // Restore progress state
+    splash_->SetStepDecryptPasswords();
   }
 
   // Initialize UI
   splash_->SetStepInitUI();
-  wxLogMessage("WXAPP: Creating MainFrame...");
   
   frame_ = new MainFrame(session_client_.get());
-  wxLogMessage("WXAPP: MainFrame created");
   
   // Apply saved window position from config
   core::ScreenLayout* layout = config.getCurrentLayout();
@@ -119,7 +102,6 @@ bool ScratchbirdWxApp::OnInit() {
     auto main_win_opt = layout->findWindow("main");
     if (main_win_opt.has_value()) {
       const auto& main_win = main_win_opt.value();
-      // Apply position and size
       if (main_win.maximized) {
         frame_->Maximize(true);
       } else {
@@ -131,27 +113,22 @@ bool ScratchbirdWxApp::OnInit() {
 
   // Complete loading
   splash_->SetStepComplete();
-  wxLogMessage("WXAPP: Completing loading");
   splash_->CloseSplash();
   
   // Show main frame
-  wxLogMessage("WXAPP: Showing main frame");
   frame_->Show(true);
   frame_->Raise();
-  wxLogMessage("WXAPP: Main frame shown");
   
-  // Cleanup splash (may already be deleted if unlock dialog was shown)
+  // Cleanup splash
   if (splash_) {
     delete splash_;
     splash_ = nullptr;
   }
   
-  wxLogMessage("WXAPP: OnInit complete, returning true");
   return true;
 }
 
 int ScratchbirdWxApp::OnExit() {
-  // Save window position before exiting
   core::AppConfig& config = core::AppConfig::get();
   
   if (config.shouldAutoSavePositions() && frame_) {
@@ -168,7 +145,6 @@ int ScratchbirdWxApp::OnExit() {
         main_win.width = rect.width;
         main_win.height = rect.height;
         
-        // Determine which display this is on
         int display_count = wxDisplay::GetCount();
         for (int i = 0; i < display_count; ++i) {
           wxDisplay display(i);
@@ -184,7 +160,6 @@ int ScratchbirdWxApp::OnExit() {
     }
   }
   
-  // Save configuration
   config.save();
   
   return wxApp::OnExit();
