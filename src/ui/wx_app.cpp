@@ -15,12 +15,12 @@
 #include <wx/init.h>
 #include <wx/display.h>
 #include <wx/msgdlg.h>
+#include <wx/frame.h>
 
 #include "backend/scratchbird_runtime_config.h"
 #include "core/app_config.h"
-#include "ui/main_frame_new.h"
-#include "ui/splash_screen.h"
 #include "ui/unlock_dialog.h"
+#include "ui/main_frame_new.h"
 
 namespace scratchrobin::ui {
 
@@ -29,13 +29,7 @@ bool ScratchbirdWxApp::OnInit() {
     return false;
   }
 
-  // Show splash screen immediately
-  splash_ = new SplashScreen(nullptr);
-  splash_->ShowSplash();
-  splash_->BeginLoading();
-
   // Initialize backend
-  splash_->SetStepConfigLoad();
   registry_ = std::make_unique<backend::ParserPortRegistry>();
   compiler_ = std::make_unique<backend::NativeParserCompiler>();
   session_ = std::make_unique<backend::ServerSessionGateway>();
@@ -44,7 +38,6 @@ bool ScratchbirdWxApp::OnInit() {
 
   const auto register_status = registry_->Register(4044, "scratchbird-native");
   if (!register_status.ok) {
-    splash_->CloseSplash();
     return false;
   }
 
@@ -60,82 +53,35 @@ bool ScratchbirdWxApp::OnInit() {
   bool config_exists = config.configExists();
   
   if (config_exists) {
-    // Load config without decrypting passwords yet
     if (!config.load()) {
-      // Config file exists but failed to load - create default
       config.resetToDefaults();
     }
   } else {
-    // First run - create default config
     config.resetToDefaults();
   }
 
   // Check if we have encrypted passwords that need decryption
-  splash_->SetStepDecryptPasswords();
-  
   if (config.hasEncryptedPasswords() || config_exists) {
-    // Show unlock dialog - must destroy splash first to avoid stay-on-top issues
-    delete splash_;
-    splash_ = nullptr;
-    
     UnlockDialog unlockDlg(nullptr, config.hasEncryptedPasswords());
     wxString key = unlockDlg.ShowAndGetKey();
     
     if (!key.IsEmpty()) {
-      // User provided a key - try to decrypt
       if (!config.decryptPasswords(key.ToStdString())) {
-        // Decryption failed - wrong key
         wxMessageBox(wxT("The decryption key is incorrect. Passwords will not be available."),
                      wxT("Decryption Failed"), wxOK | wxICON_WARNING);
       }
     }
-    // User cancelled or skipped - continue without password decryption
-    
-    // Recreate splash screen for rest of initialization
-    splash_ = new SplashScreen(nullptr);
-    splash_->ShowSplash();
-    splash_->SetStepDecryptPasswords();  // Restore progress state
   }
 
-  // Initialize UI
-  splash_->SetStepInitUI();
-  
+  // Create main frame
   frame_ = new MainFrame(session_client_.get());
-  
-  // Apply saved window position from config
-  core::ScreenLayout* layout = config.getCurrentLayout();
-  if (layout) {
-    auto main_win = layout->findWindow("main");
-    if (main_win) {
-      // Apply position and size
-      if (main_win->maximized) {
-        frame_->Maximize(true);
-      } else {
-        frame_->SetSize(main_win->x, main_win->y, 
-                       main_win->width, main_win->height);
-      }
-    }
-  }
-
-  // Complete loading
-  splash_->SetStepComplete();
-  splash_->CloseSplash();
-  
-  // Show main frame
   frame_->Show(true);
   frame_->Raise();
-  
-  // Cleanup splash (may already be deleted if unlock dialog was shown)
-  if (splash_) {
-    delete splash_;
-    splash_ = nullptr;
-  }
   
   return true;
 }
 
 int ScratchbirdWxApp::OnExit() {
-  // Save window position before exiting
   core::AppConfig& config = core::AppConfig::get();
   
   if (config.shouldAutoSavePositions() && frame_) {
@@ -152,7 +98,6 @@ int ScratchbirdWxApp::OnExit() {
         main_win.width = rect.width;
         main_win.height = rect.height;
         
-        // Determine which display this is on
         int display_count = wxDisplay::GetCount();
         for (int i = 0; i < display_count; ++i) {
           wxDisplay display(i);
@@ -168,7 +113,6 @@ int ScratchbirdWxApp::OnExit() {
     }
   }
   
-  // Save configuration
   config.save();
   
   return wxApp::OnExit();

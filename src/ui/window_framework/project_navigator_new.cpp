@@ -45,8 +45,8 @@ wxBEGIN_EVENT_TABLE(ProjectNavigator, wxPanel)
   EVT_TREE_SEL_CHANGED(wxID_ANY, ProjectNavigator::OnSelectionChanged)
   EVT_TREE_ITEM_ACTIVATED(wxID_ANY, ProjectNavigator::OnItemActivated)
   EVT_TREE_ITEM_MENU(wxID_ANY, ProjectNavigator::OnContextMenu)
-  EVT_TEXT(wxID_ANY, ProjectNavigator::OnFilterTextChanged)
-  EVT_TIMER(wxID_ANY, ProjectNavigator::OnFilterTimer)
+  EVT_TEXT(10001, ProjectNavigator::OnFilterTextChanged)
+  EVT_TIMER(10002, ProjectNavigator::OnFilterTimer)
 
   // Context menu handlers
   EVT_MENU(ID_MENU_CONNECT, ProjectNavigator::OnConnect)
@@ -61,7 +61,7 @@ wxEND_EVENT_TABLE()
 
 ProjectNavigator::ProjectNavigator(wxWindow* parent, const std::string& instance_id)
     : DockableWindow(parent, "project_navigator", instance_id),
-      filter_timer_(this) {
+      filter_timer_(this, 10002) {
 }
 
 ProjectNavigator::~ProjectNavigator() {
@@ -80,8 +80,8 @@ wxSize ProjectNavigator::getDefaultSize() const {
 }
 
 void ProjectNavigator::CreateControls() {
-  // Filter control
-  filter_ctrl_ = new wxTextCtrl(this, wxID_ANY, wxEmptyString, 
+  // Filter control - use specific ID to avoid catching all text events
+  filter_ctrl_ = new wxTextCtrl(this, 10001, wxEmptyString, 
                                  wxDefaultPosition, wxDefaultSize,
                                  wxTE_PROCESS_ENTER);
   filter_ctrl_->SetHint(_("Filter objects..."));

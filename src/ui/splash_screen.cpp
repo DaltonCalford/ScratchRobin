@@ -22,7 +22,7 @@ END_EVENT_TABLE()
 
 SplashScreen::SplashScreen(wxWindow* parent)
     : wxDialog(parent, wxID_ANY, wxEmptyString, wxDefaultPosition,
-               wxSize(500, 320), wxBORDER_NONE | wxFRAME_NO_TASKBAR | wxSTAY_ON_TOP) {
+               wxSize(500, 320), wxBORDER_NONE | wxFRAME_NO_TASKBAR) {
     
     buildUI();
     CentreOnScreen();
@@ -74,8 +74,6 @@ void SplashScreen::buildUI() {
 void SplashScreen::ShowSplash() {
     Show();
     Raise();
-    Update();
-    // Don't call wxYield() here - it can cause re-entrancy issues during startup
 }
 
 void SplashScreen::SetProgress(int percentage) {
@@ -83,16 +81,12 @@ void SplashScreen::SetProgress(int percentage) {
     if (progress_bar_) {
         progress_bar_->SetValue(percentage);
     }
-    Update();
-    wxSafeYield(this);  // Use SafeYield instead of Yield to prevent re-entrancy
 }
 
 void SplashScreen::SetStatusMessage(const wxString& message) {
     if (status_text_) {
         status_text_->SetLabel(message);
     }
-    Update();
-    wxSafeYield(this);  // Use SafeYield instead of Yield to prevent re-entrancy
 }
 
 void SplashScreen::BeginLoading() {

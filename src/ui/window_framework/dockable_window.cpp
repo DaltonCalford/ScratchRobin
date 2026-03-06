@@ -155,7 +155,9 @@ bool DockableWindow::canClose() const {
 }
 
 WindowManager* DockableWindow::getWindowManager() {
-    return getWindowManager();  // Global accessor
+    // Call the global getWindowManager() function
+    // Use explicit namespace qualification to avoid calling this same method
+    return scratchrobin::ui::getWindowManager();
 }
 
 wxAuiPaneInfo* DockableWindow::getPaneInfo() {
