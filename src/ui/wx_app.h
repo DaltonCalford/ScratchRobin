@@ -17,6 +17,7 @@
 
 namespace scratchrobin::ui {
   class MainFrame;
+  class SplashScreen;
 }
 
 #include "backend/native_adapter_gateway.h"
@@ -41,6 +42,7 @@ class ScratchbirdWxApp final : public wxApp {
   std::unique_ptr<backend::NativeAdapterGateway> adapter_;
   std::unique_ptr<backend::SessionClient> session_client_;
   MainFrame* frame_{nullptr};
+  SplashScreen* splash_{nullptr};
 };
 
 }  // namespace scratchrobin::ui
