@@ -74,8 +74,9 @@ bool ScratchbirdWxApp::OnInit() {
   splash_->SetStepDecryptPasswords();
   
   if (config.hasEncryptedPasswords() || config_exists) {
-    // Show unlock dialog
-    splash_->Hide();  // Hide splash while unlock dialog is shown
+    // Show unlock dialog - must destroy splash first to avoid stay-on-top issues
+    delete splash_;
+    splash_ = nullptr;
     
     UnlockDialog unlockDlg(nullptr, config.hasEncryptedPasswords());
     wxString key = unlockDlg.ShowAndGetKey();
@@ -87,12 +88,13 @@ bool ScratchbirdWxApp::OnInit() {
         wxMessageBox(wxT("The decryption key is incorrect. Passwords will not be available."),
                      wxT("Decryption Failed"), wxOK | wxICON_WARNING);
       }
-    } else {
-      // User cancelled or skipped - no auto-connect
-      // Continue without password decryption
     }
+    // User cancelled or skipped - continue without password decryption
     
+    // Recreate splash screen for rest of initialization
+    splash_ = new SplashScreen(nullptr);
     splash_->ShowSplash();
+    splash_->SetStepDecryptPasswords();  // Restore progress state
   }
 
   // Initialize UI
@@ -123,9 +125,11 @@ bool ScratchbirdWxApp::OnInit() {
   frame_->Show(true);
   frame_->Raise();
   
-  // Cleanup splash
-  delete splash_;
-  splash_ = nullptr;
+  // Cleanup splash (may already be deleted if unlock dialog was shown)
+  if (splash_) {
+    delete splash_;
+    splash_ = nullptr;
+  }
   
   return true;
 }

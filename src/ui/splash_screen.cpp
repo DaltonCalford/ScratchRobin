@@ -37,7 +37,7 @@ void SplashScreen::buildUI() {
     // Title section
     wxBoxSizer* title_sizer = new wxBoxSizer(wxVERTICAL);
     
-    title_text_ = new wxStaticText(this, wxID_ANY, wxT("Robin Migrate"));
+    title_text_ = new wxStaticText(this, wxID_ANY, wxT("ScratchRobin"));
     wxFont title_font = title_text_->GetFont();
     title_font.SetPointSize(28);
     title_font.SetWeight(wxFONTWEIGHT_BOLD);
@@ -45,7 +45,7 @@ void SplashScreen::buildUI() {
     title_text_->SetForegroundColour(wxColour(255, 255, 255));
     title_sizer->Add(title_text_, 0, wxALIGN_CENTER | wxTOP, 40);
     
-    version_text_ = new wxStaticText(this, wxID_ANY, wxT("Version 1.0 - ScratchBird Client"));
+    version_text_ = new wxStaticText(this, wxID_ANY, wxT("Version 0.1.0 - ScratchBird Native Client"));
     wxFont version_font = version_text_->GetFont();
     version_font.SetPointSize(10);
     version_text_->SetFont(version_font);
@@ -75,7 +75,7 @@ void SplashScreen::ShowSplash() {
     Show();
     Raise();
     Update();
-    wxYield();
+    // Don't call wxYield() here - it can cause re-entrancy issues during startup
 }
 
 void SplashScreen::SetProgress(int percentage) {
@@ -84,7 +84,7 @@ void SplashScreen::SetProgress(int percentage) {
         progress_bar_->SetValue(percentage);
     }
     Update();
-    wxYield();
+    wxSafeYield(this);  // Use SafeYield instead of Yield to prevent re-entrancy
 }
 
 void SplashScreen::SetStatusMessage(const wxString& message) {
@@ -92,7 +92,7 @@ void SplashScreen::SetStatusMessage(const wxString& message) {
         status_text_->SetLabel(message);
     }
     Update();
-    wxYield();
+    wxSafeYield(this);  // Use SafeYield instead of Yield to prevent re-entrancy
 }
 
 void SplashScreen::BeginLoading() {
