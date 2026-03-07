@@ -367,4 +367,62 @@ QueryResponse QueryRouter::executeNative(const std::string& sql,
   return session_client_->ExecuteSql(4044, "", sql);
 }
 
+// =============================================================================
+// Parameter Support
+// =============================================================================
+
+QueryResponse QueryRouter::execute(const std::string& sql,
+                                   const std::vector<QueryParameter>& parameters,
+                                   const ExecutionPolicy& policy) {
+  if (parameters.empty()) {
+    return execute(sql, policy);
+  }
+  
+  // For direct SQL, substitute parameters
+  if (policy.allow_direct_sql && !policy.require_bytecode) {
+    std::string substituted = SubstituteParameters(sql, parameters);
+    return executeDirectSql(substituted);
+  }
+  
+  // For native path, create request with parameters
+  QueryRequest request;
+  request.sql = sql;
+  request.parameters = parameters;
+  request.port = 4044;
+  request.dialect = "";
+  request.flags = policy.prefer_native ? QueryFlags::kBytecode : QueryFlags::kNone;
+  request.timeout_ms = policy.timeout_ms;
+  
+  return executeNative(request);
+}
+
+QueryResponse QueryRouter::executeDirectSql(const std::string& sql,
+                                             const std::vector<QueryParameter>& parameters) {
+  std::string substituted = SubstituteParameters(sql, parameters);
+  return executeDirectSql(substituted);
+}
+
+QueryResponse QueryRouter::executeNative(const QueryRequest& request) {
+  ++stats_.native_queries;
+  notifyProgress("execute", "native_sblr_with_params");
+  
+  if (!session_client_) {
+    return QueryResponse{
+      core::Status::Error("No session client available for native execution"),
+      {},
+      "query_router::no_session_client"
+    };
+  }
+  
+  // For now, substitute parameters and execute as SQL
+  // Future: pass parameters to SBWP for prepared statement execution
+  std::string sql = request.sql;
+  if (!request.parameters.empty()) {
+    sql = SubstituteParameters(sql, request.parameters);
+  }
+  
+  return session_client_->ExecuteSql(request.port, request.dialect, sql);
+}
+
 }  // namespace scratchrobin::backend
+

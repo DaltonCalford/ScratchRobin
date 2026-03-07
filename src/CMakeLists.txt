@@ -48,6 +48,7 @@ set(SCRATCHROBIN_BACKEND_SOURCES
     backend/server_session_gateway.cpp
     backend/native_adapter_gateway.cpp
     backend/query_router.cpp
+    backend/query_request.cpp
     backend/preview_metadata_store.cpp
     backend/preview_object_metadata_store.cpp
     backend/scratchbird_catalog_preview.cpp

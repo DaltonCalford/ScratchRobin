@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "backend/query_request.h"
 #include "backend/query_response.h"
 #include "core/status.h"
 
@@ -96,13 +97,23 @@ class QueryRouter {
    */
   QueryResponse execute(const std::string& sql,
                         const ExecutionPolicy& policy = {});
+  
+  /**
+   * Execute with parameters
+   */
+  QueryResponse execute(const std::string& sql,
+                        const std::vector<QueryParameter>& parameters,
+                        const ExecutionPolicy& policy = {});
 
   /**
    * Execute with explicit routing (bypass auto-detection)
    */
   QueryResponse executeDirectSql(const std::string& sql);
+  QueryResponse executeDirectSql(const std::string& sql,
+                                  const std::vector<QueryParameter>& parameters);
   QueryResponse executeNative(const std::string& sql,
                               const ExecutionPolicy& policy = {});
+  QueryResponse executeNative(const QueryRequest& request);
 
   /**
    * Query classification (exposed for testing)

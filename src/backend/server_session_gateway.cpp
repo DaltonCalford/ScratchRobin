@@ -3,7 +3,7 @@
 namespace scratchrobin::backend {
 
 QueryResponse ServerSessionGateway::Execute(const QueryRequest& request) const {
-  if (!request.bytecode_flag) {
+  if (!request.bytecodeFlag()) {
     return {
         core::Status::Error("QUERY rejected: QueryFlags::BYTECODE is required"),
         {},

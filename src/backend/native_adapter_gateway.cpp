@@ -19,8 +19,8 @@ QueryResponse NativeAdapterGateway::SubmitSql(const std::uint16_t port,
 
   QueryRequest request;
   request.payload = compile_output.bytecode;
-  request.bytecode_flag = true;
-  request.server_port = port;
+  request.setBytecodeFlag(true);
+  request.port = port;
   request.dialect = dialect;
 
   return session_->Execute(request);
