@@ -11,6 +11,7 @@
 
 #include <QMessageBox>
 #include <QThread>
+#include <QEventLoop>
 
 namespace scratchrobin::ui {
 
@@ -64,7 +65,7 @@ bool QtApp::init() {
   splash_screen_->closeSplash();
   delete splash_screen_;
   splash_screen_ = nullptr;
-
+  
   return true;
 }
 
@@ -104,13 +105,22 @@ bool QtApp::createMainWindow() {
         main_window_->showMaximized();
       } else {
         main_window_->setGeometry(main_win.x, main_win.y, main_win.width, main_win.height);
+        main_window_->show();
       }
     } else {
       main_window_->show();
     }
   } else {
+    // No saved layout, show normally
     main_window_->show();
   }
+  
+  main_window_->raise();
+  main_window_->activateWindow();
+  
+  // Process events to ensure window is fully created and visible
+  QApplication::processEvents();
+  
   return true;
 }
 
