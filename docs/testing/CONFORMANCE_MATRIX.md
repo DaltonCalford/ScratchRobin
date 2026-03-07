@@ -116,7 +116,7 @@ Coverage status values:
 | SB-UI-010 | Auth/SSL settings dialog | security configuration | persisted profile -> runtime config | Planned | `docs/plans/WORK_BREAKDOWN.md` | Not yet implemented |
 | SB-REL-001 | CLI runtime smoke path | `robin-migrate` executable | CLI -> backend query path | Wired | `src/app/main.cpp` | Demonstrates live backend call path |
 | SB-REL-002 | GUI runtime shell build | `robin-migrate-gui` executable | wx app -> backend query path | Wired | `src/CMakeLists.txt` | Built when wxWidgets present |
-| SB-REL-003 | SBWP build guard | optional compile integration | CMake option + source detection | Wired | `src/CMakeLists.txt` | Defines `ROBIN_MIGRATE_WITH_SCRATCHBIRD_SBWP` |
+| SB-REL-003 | SBWP build guard | optional compile integration | CMake option + source detection | Wired | `src/CMakeLists.txt` | Defines `SCRATCHROBIN_WITH_SCRATCHBIRD_SBWP` |
 | SB-REL-004 | Cross-platform socket support | transport portability | POSIX + Windows socket abstraction | Planned | `docs/plans/WORK_BREAKDOWN.md` | Current transport is POSIX-oriented |
 | SB-REL-005 | End-to-end CI integration test | live listener harness | spawn listener + run query | Planned | `docs/testing/VALIDATION_STRATEGY.md` | Requires stable non-root runtime harness |
 | SB-REL-006 | Non-connected review mode | preview pipeline | SQL -> compile-to-SBLR -> local `ServerSessionGateway` simulation | Wired | `src/backend/native_adapter_gateway.cpp` | Default mode for UI/flow review without running listener |

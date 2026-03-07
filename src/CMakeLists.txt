@@ -47,6 +47,7 @@ set(SCRATCHROBIN_BACKEND_SOURCES
     backend/native_parser_compiler.cpp
     backend/server_session_gateway.cpp
     backend/native_adapter_gateway.cpp
+    backend/query_router.cpp
     backend/preview_metadata_store.cpp
     backend/preview_object_metadata_store.cpp
     backend/scratchbird_catalog_preview.cpp
@@ -60,6 +61,7 @@ set(SCRATCHROBIN_BACKEND_SOURCES
     core/scratchbird_auth.cpp
     core/window_state_manager.cpp
     core/performance_profiler.cpp
+    core/sql_utils.cpp
 )
 
 add_library(scratchrobin_backend STATIC ${SCRATCHROBIN_BACKEND_SOURCES})

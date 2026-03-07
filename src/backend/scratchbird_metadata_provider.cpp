@@ -1,6 +1,7 @@
 #include "backend/scratchbird_metadata_provider.h"
 #include "backend/session_client.h"
 #include "backend/query_response.h"
+#include "core/sql_utils.h"
 
 #include <QDebug>
 
@@ -93,13 +94,16 @@ TableMetadata ScratchBirdMetadataProvider::table(const QString& name, const QStr
     TableMetadata meta;
     if (!isConnected()) return meta;
     
-    QString sql = QString("SELECT * FROM information_schema.tables WHERE table_name = '%1'")
-                  .arg(name);
+    // SAFETY: Use parameterized-like escaping for identifiers and literals
+    std::string safe_table = core::escapeStringLiteral(name.toStdString());
+    std::string sql_str = "SELECT * FROM information_schema.tables WHERE table_name = " + safe_table;
+    
     if (!schema.isEmpty()) {
-        sql += QString(" AND table_schema = '%1'").arg(schema);
+        std::string safe_schema = core::escapeStringLiteral(schema.toStdString());
+        sql_str += " AND table_schema = " + safe_schema;
     }
     
-    auto response = client_->ExecuteSql(0, "scratchbird", sql.toStdString());
+    auto response = client_->ExecuteSql(0, "scratchbird", sql_str);
     if (response.status.ok && !response.result_set.rows.empty()) {
         const auto& row = response.result_set.rows[0];
         meta.name = name;
@@ -114,11 +118,12 @@ TableMetadata ScratchBirdMetadataProvider::table(const QString& name, const QStr
 QString ScratchBirdMetadataProvider::tableDdl(const QString& name, const QString& schema) const {
     if (!isConnected()) return QString();
     
-    QString showCmd = QString("SHOW CREATE TABLE %1%2")
-                      .arg(schema.isEmpty() ? "" : schema + ".")
-                      .arg(name);
+    // SAFETY: Use proper identifier escaping for schema and table names
+    std::string safe_qualified_name = core::qualifiedTableName(
+        schema.toStdString(), name.toStdString());
+    std::string showCmd = "SHOW CREATE TABLE " + safe_qualified_name;
     
-    auto response = client_->ExecuteSql(0, "scratchbird", showCmd.toStdString());
+    auto response = client_->ExecuteSql(0, "scratchbird", showCmd);
     if (response.status.ok && !response.result_set.rows.empty() && response.result_set.rows[0].size() > 1) {
         return QString::fromStdString(response.result_set.rows[0][1]);
     }
@@ -146,12 +151,15 @@ bool ScratchBirdMetadataProvider::alterTable(const QString& name, const QString&
                                               const QString& alterStatement) {
     if (!isConnected()) return false;
     
-    QString fullTable = schema.isEmpty() ? name : schema + "." + name;
-    QString ddl = QString("ALTER TABLE %1 %2").arg(fullTable).arg(alterStatement);
+    // SAFETY: Use proper identifier escaping for table name
+    // Note: alterStatement is passed through as-is (expected to be valid DDL)
+    std::string safe_qualified_name = core::qualifiedTableName(
+        schema.toStdString(), name.toStdString());
+    std::string ddl = "ALTER TABLE " + safe_qualified_name + " " + alterStatement.toStdString();
     
-    auto response = client_->ExecuteSql(0, "scratchbird", ddl.toStdString());
+    auto response = client_->ExecuteSql(0, "scratchbird", ddl);
     if (response.status.ok) {
-        emit queryExecuted(ddl, 0);
+        emit queryExecuted(QString::fromStdString(ddl), 0);
         return true;
     }
     emit errorOccurred(QString::fromStdString(response.status.message));
@@ -161,12 +169,14 @@ bool ScratchBirdMetadataProvider::alterTable(const QString& name, const QString&
 bool ScratchBirdMetadataProvider::dropTable(const QString& name, const QString& schema, bool cascade) {
     if (!isConnected()) return false;
     
-    QString fullTable = schema.isEmpty() ? name : schema + "." + name;
-    QString ddl = QString("DROP TABLE %1%2").arg(fullTable).arg(cascade ? " CASCADE" : "");
+    // SAFETY: Use proper identifier escaping
+    std::string safe_qualified_name = core::qualifiedTableName(
+        schema.toStdString(), name.toStdString());
+    std::string ddl = "DROP TABLE " + safe_qualified_name + (cascade ? " CASCADE" : "");
     
-    auto response = client_->ExecuteSql(0, "scratchbird", ddl.toStdString());
+    auto response = client_->ExecuteSql(0, "scratchbird", ddl);
     if (response.status.ok) {
-        emit queryExecuted(ddl, 0);
+        emit queryExecuted(QString::fromStdString(ddl), 0);
         return true;
     }
     emit errorOccurred(QString::fromStdString(response.status.message));
@@ -176,12 +186,14 @@ bool ScratchBirdMetadataProvider::dropTable(const QString& name, const QString& 
 bool ScratchBirdMetadataProvider::truncateTable(const QString& name, const QString& schema) {
     if (!isConnected()) return false;
     
-    QString fullTable = schema.isEmpty() ? name : schema + "." + name;
-    QString ddl = QString("TRUNCATE TABLE %1").arg(fullTable);
+    // SAFETY: Use proper identifier escaping
+    std::string safe_qualified_name = core::qualifiedTableName(
+        schema.toStdString(), name.toStdString());
+    std::string ddl = "TRUNCATE TABLE " + safe_qualified_name;
     
-    auto response = client_->ExecuteSql(0, "scratchbird", ddl.toStdString());
+    auto response = client_->ExecuteSql(0, "scratchbird", ddl);
     if (response.status.ok) {
-        emit queryExecuted(ddl, 0);
+        emit queryExecuted(QString::fromStdString(ddl), 0);
         return true;
     }
     emit errorOccurred(QString::fromStdString(response.status.message));

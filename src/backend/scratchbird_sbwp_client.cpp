@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-#if defined(ROBIN_MIGRATE_WITH_SCRATCHBIRD_SBWP)
+#if defined(SCRATCHROBIN_WITH_SCRATCHBIRD_SBWP)
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -33,7 +33,7 @@ namespace scratchrobin::backend {
 
 namespace {
 
-#if defined(ROBIN_MIGRATE_WITH_SCRATCHBIRD_SBWP)
+#if defined(SCRATCHROBIN_WITH_SCRATCHBIRD_SBWP)
 std::string BuildFailureMessage(const std::string& default_message,
                                const scratchbird::core::ErrorContext& context,
                                const std::string& fallback) {
@@ -357,28 +357,29 @@ scratchbird::client::ConnectionConfig BuildConnectionConfig(
   sb_config.write_timeout_ms = config.write_timeout_ms;
   sb_config.query_timeout_ms = config.read_timeout_ms;
 
-  sb_config.auto_start_timeout_ms = config.auto_start_timeout_ms;
-  sb_config.server_executable = config.server_executable;
-
   switch (config.mode) {
     case TransportMode::kManaged:
-      sb_config.auto_start_server = true;
-      sb_config.ipc_method = scratchbird::server::IPCMethod::AUTO;
+      // Driver API uses transport_mode = "managed" for auto-start
+      sb_config.transport_mode = "managed";
       break;
     case TransportMode::kListenerOnly:
-      sb_config.auto_start_server = false;
-      sb_config.ipc_method = scratchbird::server::IPCMethod::TCP_LOCALHOST;
+      sb_config.transport_mode = "inet_listener";
+      sb_config.host = config.host.empty() ? "127.0.0.1" : config.host;
       sb_config.tcp_port = config.port;
       break;
     case TransportMode::kIpcOnly:
-      sb_config.auto_start_server = false;
-      sb_config.ipc_method = scratchbird::server::stringToIPCMethod(config.ipc_method);
-      sb_config.socket_path = config.socket_path;
+      // Driver doesn't support IPC socket paths directly
+      // Fall back to localhost listener
+      sb_config.transport_mode = "inet_listener";
+      sb_config.host = "127.0.0.1";
+      sb_config.tcp_port = config.port;
       break;
     case TransportMode::kEmbedded:
-      sb_config.auto_start_server = false;
+      // Embedded mode not supported by driver, use managed
+      sb_config.transport_mode = "managed";
       break;
     default:
+      sb_config.transport_mode = "inet_listener";
       break;
   }
 
@@ -389,7 +390,7 @@ scratchbird::client::ConnectionConfig BuildConnectionConfig(
 }  // namespace
 
 struct ScratchbirdSbwpClient::Impl {
-#if defined(ROBIN_MIGRATE_WITH_SCRATCHBIRD_SBWP)
+#if defined(SCRATCHROBIN_WITH_SCRATCHBIRD_SBWP)
   std::unique_ptr<scratchbird::client::Connection> connection;
   std::unique_ptr<EmbeddedProtocolAdapter> embedded_adapter;
 #endif
@@ -431,7 +432,7 @@ const ScratchbirdRuntimeConfig& ScratchbirdSbwpClient::GetConfig() const {
 }
 
 bool ScratchbirdSbwpClient::IsConnected() const {
-#if defined(ROBIN_MIGRATE_WITH_SCRATCHBIRD_SBWP)
+#if defined(SCRATCHROBIN_WITH_SCRATCHBIRD_SBWP)
   if (!impl_) {
     return false;
   }
@@ -447,7 +448,7 @@ bool ScratchbirdSbwpClient::IsConnected() const {
 }
 
 void ScratchbirdSbwpClient::Disconnect() {
-#if defined(ROBIN_MIGRATE_WITH_SCRATCHBIRD_SBWP)
+#if defined(SCRATCHROBIN_WITH_SCRATCHBIRD_SBWP)
   if (impl_ && impl_->connection) {
     impl_->connection->disconnect();
   }
@@ -468,7 +469,7 @@ QueryResponse ScratchbirdSbwpClient::StatusError(const std::string& path,
 QueryResponse ScratchbirdSbwpClient::ConnectIfNeeded() {
   constexpr char kPath[] = "native_adapter::sbwp_connect";
 
-#if !defined(ROBIN_MIGRATE_WITH_SCRATCHBIRD_SBWP)
+#if !defined(SCRATCHROBIN_WITH_SCRATCHBIRD_SBWP)
   return StatusError(kPath, "ScratchBird SBWP integration disabled at build time");
 #else
   if (config_.mode == TransportMode::kEmbedded) {
@@ -518,7 +519,7 @@ QueryResponse ScratchbirdSbwpClient::ExecuteRemoteSql(const std::string& sql,
     return response;
   }
 
-#if !defined(ROBIN_MIGRATE_WITH_SCRATCHBIRD_SBWP)
+#if !defined(SCRATCHROBIN_WITH_SCRATCHBIRD_SBWP)
   return StatusError(path, "ScratchBird SBWP integration disabled at build time");
 #else
   if (config_.mode == TransportMode::kEmbedded) {
@@ -580,7 +581,7 @@ QueryResponse ScratchbirdSbwpClient::BeginTransaction() {
     return response;
   }
 
-#if !defined(ROBIN_MIGRATE_WITH_SCRATCHBIRD_SBWP)
+#if !defined(SCRATCHROBIN_WITH_SCRATCHBIRD_SBWP)
   return StatusError("native_adapter::sbwp_txn_begin",
                      "ScratchBird SBWP integration disabled at build time");
 #else
@@ -608,7 +609,7 @@ QueryResponse ScratchbirdSbwpClient::CommitTransaction() {
     return response;
   }
 
-#if !defined(ROBIN_MIGRATE_WITH_SCRATCHBIRD_SBWP)
+#if !defined(SCRATCHROBIN_WITH_SCRATCHBIRD_SBWP)
   return StatusError("native_adapter::sbwp_txn_commit",
                      "ScratchBird SBWP integration disabled at build time");
 #else
@@ -636,7 +637,7 @@ QueryResponse ScratchbirdSbwpClient::RollbackTransaction() {
     return response;
   }
 
-#if !defined(ROBIN_MIGRATE_WITH_SCRATCHBIRD_SBWP)
+#if !defined(SCRATCHROBIN_WITH_SCRATCHBIRD_SBWP)
   return StatusError("native_adapter::sbwp_txn_rollback",
                      "ScratchBird SBWP integration disabled at build time");
 #else
