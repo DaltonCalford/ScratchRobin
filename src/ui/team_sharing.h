@@ -161,6 +161,7 @@ private:
     SharedItem currentItem_;
     QString currentFilter_;
     QString currentCategory_;
+    QString currentTagFilter_;
     
     // UI
     QTabWidget* tabWidget_ = nullptr;
@@ -190,6 +191,42 @@ private:
     QPushButton* deleteBtn_ = nullptr;
     QPushButton* shareBtn_ = nullptr;
     QPushButton* insertBtn_ = nullptr;
+    
+    // Status
+    QLabel* itemsCountLabel_ = nullptr;
+};
+
+// ============================================================================
+// Edit Shared Item Dialog
+// ============================================================================
+class EditSharedItemDialog : public QDialog {
+    Q_OBJECT
+
+public:
+    explicit EditSharedItemDialog(const SharedItem& item, QWidget* parent = nullptr);
+    
+    SharedItem item() const { return item_; }
+
+public slots:
+    void onAddTag();
+    void onRemoveTag();
+    void onSave();
+    void onCancel();
+
+private:
+    void setupUi();
+    void loadTags();
+    
+    SharedItem item_;
+    
+    QLineEdit* nameEdit_ = nullptr;
+    QTextEdit* descriptionEdit_ = nullptr;
+    QComboBox* categoryCombo_ = nullptr;
+    QPlainTextEdit* contentEdit_ = nullptr;
+    QListWidget* tagsList_ = nullptr;
+    QLineEdit* newTagEdit_ = nullptr;
+    QCheckBox* publicCheck_ = nullptr;
+    QDialogButtonBox* buttonBox_ = nullptr;
 };
 
 // ============================================================================

@@ -31,14 +31,15 @@ namespace scratchrobin::ui {
 AlertNotificationSystemPanel::AlertNotificationSystemPanel(backend::SessionClient* client, QWidget* parent)
     : DockPanel("alert_system", parent)
     , client_(client) {
-    setupUi();
-    
+    // Create timer BEFORE setupUi() since it uses it
     checkTimer_ = new QTimer(this);
     connect(checkTimer_, &QTimer::timeout, this, &AlertNotificationSystemPanel::checkAlerts);
     
     // Create tray icon
     trayIcon_ = new QSystemTrayIcon(this);
     trayIcon_->setIcon(QIcon::fromTheme("dialog-warning"));
+    
+    setupUi();
     
     // Load sample rules
     loadAlertRules();

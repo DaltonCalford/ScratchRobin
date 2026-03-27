@@ -24,6 +24,9 @@
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QHeaderView>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 
 namespace scratchrobin::ui {
 
@@ -124,9 +127,98 @@ QString VisualQuery::toSql() const {
         }
         
         return sql;
+    } else if (queryType == "INSERT") {
+        QString sql = "INSERT INTO ";
+        
+        // Table
+        if (!tables.isEmpty()) {
+            sql += tables[0].name;
+        }
+        
+        // Columns
+        if (!columns.isEmpty()) {
+            sql += " (";
+            QStringList colList;
+            for (const auto& col : columns) {
+                colList.append(col.name);
+            }
+            sql += colList.join(", ");
+            sql += ")";
+        }
+        
+        // VALUES
+        sql += "\nVALUES (";
+        QStringList valueList;
+        for (const auto& col : columns) {
+            if (col.expression.isEmpty()) {
+                valueList.append("NULL");
+            } else {
+                valueList.append(col.expression);
+            }
+        }
+        sql += valueList.join(", ");
+        sql += ")";
+        
+        return sql;
+    } else if (queryType == "UPDATE") {
+        QString sql = "UPDATE ";
+        
+        // Table
+        if (!tables.isEmpty()) {
+            sql += tables[0].name;
+        }
+        
+        // SET
+        sql += "\nSET ";
+        QStringList setList;
+        for (const auto& col : columns) {
+            if (!col.expression.isEmpty()) {
+                setList.append(col.name + " = " + col.expression);
+            }
+        }
+        sql += setList.join(", ");
+        
+        // WHERE
+        if (!whereConditions.isEmpty()) {
+            sql += "\nWHERE ";
+            QStringList condList;
+            for (const auto& cond : whereConditions) {
+                QString condStr = cond.column + " " + cond.op + " " + cond.value;
+                if (!cond.logicOp.isEmpty() && condList.size() > 0) {
+                    condStr = cond.logicOp + " " + condStr;
+                }
+                condList.append(condStr);
+            }
+            sql += condList.join(" ");
+        }
+        
+        return sql;
+    } else if (queryType == "DELETE") {
+        QString sql = "DELETE FROM ";
+        
+        // Table
+        if (!tables.isEmpty()) {
+            sql += tables[0].name;
+        }
+        
+        // WHERE
+        if (!whereConditions.isEmpty()) {
+            sql += "\nWHERE ";
+            QStringList condList;
+            for (const auto& cond : whereConditions) {
+                QString condStr = cond.column + " " + cond.op + " " + cond.value;
+                if (!cond.logicOp.isEmpty() && condList.size() > 0) {
+                    condStr = cond.logicOp + " " + condStr;
+                }
+                condList.append(condStr);
+            }
+            sql += condList.join(" ");
+        }
+        
+        return sql;
     }
     
-    return "-- Query type not implemented: " + queryType;
+    return "-- Query type not supported: " + queryType;
 }
 
 void VisualQuery::clear() {
@@ -437,20 +529,209 @@ void QueryBuilderPanel::onSaveQuery() {
     QString fileName = QFileDialog::getSaveFileName(this,
         tr("Save Query"),
         QString(),
-        tr("Query Files (*.sql *.qb)"));
+        tr("JSON Files (*.json);;SQL Files (*.sql);;All Files (*)"));
     
-    if (!fileName.isEmpty()) {
+    if (fileName.isEmpty()) return;
+    
+    // Save as SQL if .sql extension
+    if (fileName.endsWith(".sql", Qt::CaseInsensitive)) {
         QFile file(fileName);
         if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
             file.write(currentQuery_.toSql().toUtf8());
             file.close();
         }
+        return;
+    }
+    
+    // Save as JSON (default)
+    QJsonObject obj;
+    obj["queryType"] = currentQuery_.queryType;
+    obj["isDistinct"] = currentQuery_.isDistinct;
+    obj["limit"] = currentQuery_.limit;
+    obj["offset"] = currentQuery_.offset;
+    
+    // Save tables
+    QJsonArray tables;
+    for (const auto& t : currentQuery_.tables) {
+        QJsonObject to;
+        to["id"] = t.id;
+        to["name"] = t.name;
+        to["alias"] = t.alias;
+        to["x"] = t.position.x();
+        to["y"] = t.position.y();
+        tables.append(to);
+    }
+    obj["tables"] = tables;
+    
+    // Save columns
+    QJsonArray columns;
+    for (const auto& c : currentQuery_.columns) {
+        QJsonObject co;
+        co["name"] = c.name;
+        co["tableAlias"] = c.tableAlias;
+        co["aggregate"] = c.aggregate;
+        co["alias"] = c.alias;
+        co["expression"] = c.expression;
+        co["isVisible"] = c.isVisible;
+        columns.append(co);
+    }
+    obj["columns"] = columns;
+    
+    // Save joins
+    QJsonArray joins;
+    for (const auto& j : currentQuery_.joins) {
+        QJsonObject jo;
+        jo["id"] = j.id;
+        jo["leftTable"] = j.leftTable;
+        jo["rightTable"] = j.rightTable;
+        jo["leftColumn"] = j.leftColumn;
+        jo["rightColumn"] = j.rightColumn;
+        jo["joinType"] = j.joinType;
+        joins.append(jo);
+    }
+    obj["joins"] = joins;
+    
+    // Save where conditions
+    QJsonArray conditions;
+    for (const auto& c : currentQuery_.whereConditions) {
+        QJsonObject co;
+        co["id"] = c.id;
+        co["column"] = c.column;
+        co["op"] = c.op;
+        co["value"] = c.value;
+        co["logicOp"] = c.logicOp;
+        conditions.append(co);
+    }
+    obj["whereConditions"] = conditions;
+    
+    QJsonDocument doc(obj);
+    
+    // Ensure .json extension
+    if (!fileName.endsWith(".json", Qt::CaseInsensitive)) {
+        fileName += ".json";
+    }
+    
+    QFile file(fileName);
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write(doc.toJson(QJsonDocument::Indented));
+        file.close();
     }
 }
 
 void QueryBuilderPanel::onLoadQuery() {
-    QMessageBox::information(this, tr("Load Query"),
-        tr("Load query from file - not yet implemented."));
+    QString fileName = QFileDialog::getOpenFileName(this,
+        tr("Load Query"),
+        QString(),
+        tr("JSON Files (*.json);;All Files (*)"));
+    
+    if (fileName.isEmpty()) return;
+    
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly)) {
+        QMessageBox::critical(this, tr("Error"),
+            tr("Cannot open file for reading."));
+        return;
+    }
+    
+    QByteArray data = file.readAll();
+    file.close();
+    
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (doc.isNull() || !doc.isObject()) {
+        QMessageBox::critical(this, tr("Error"),
+            tr("Invalid JSON format."));
+        return;
+    }
+    
+    QJsonObject obj = doc.object();
+    
+    // Clear current query
+    currentQuery_.clear();
+    columnsModel_->clear();
+    conditionsModel_->clear();
+    
+    // Load query type
+    currentQuery_.queryType = obj["queryType"].toString("SELECT");
+    queryTypeCombo_->setCurrentText(currentQuery_.queryType);
+    
+    // Load tables
+    QJsonArray tables = obj["tables"].toArray();
+    for (const auto& t : tables) {
+        QJsonObject to = t.toObject();
+        QueryTable table;
+        table.id = to["id"].toString();
+        table.name = to["name"].toString();
+        table.alias = to["alias"].toString();
+        table.position = QPointF(to["x"].toDouble(), to["y"].toDouble());
+        currentQuery_.tables.append(table);
+    }
+    
+    // Load columns
+    QJsonArray columns = obj["columns"].toArray();
+    for (const auto& c : columns) {
+        QJsonObject co = c.toObject();
+        QueryColumn col;
+        col.name = co["name"].toString();
+        col.tableAlias = co["tableAlias"].toString();
+        col.aggregate = co["aggregate"].toString();
+        col.alias = co["alias"].toString();
+        col.expression = co["expression"].toString();
+        col.isVisible = co["isVisible"].toBool(true);
+        currentQuery_.columns.append(col);
+        
+        QList<QStandardItem*> row;
+        row << new QStandardItem(col.name);
+        row << new QStandardItem(col.tableAlias);
+        row << new QStandardItem(col.alias);
+        row << new QStandardItem(col.aggregate);
+        columnsModel_->appendRow(row);
+    }
+    
+    // Load joins
+    QJsonArray joins = obj["joins"].toArray();
+    for (const auto& j : joins) {
+        QJsonObject jo = j.toObject();
+        QueryJoin join;
+        join.id = jo["id"].toString();
+        join.leftTable = jo["leftTable"].toString();
+        join.rightTable = jo["rightTable"].toString();
+        join.leftColumn = jo["leftColumn"].toString();
+        join.rightColumn = jo["rightColumn"].toString();
+        join.joinType = jo["joinType"].toString();
+        currentQuery_.joins.append(join);
+    }
+    
+    // Load where conditions
+    QJsonArray conditions = obj["whereConditions"].toArray();
+    for (const auto& c : conditions) {
+        QJsonObject co = c.toObject();
+        QueryCondition cond;
+        cond.id = co["id"].toString();
+        cond.column = co["column"].toString();
+        cond.op = co["op"].toString();
+        cond.value = co["value"].toString();
+        cond.logicOp = co["logicOp"].toString();
+        currentQuery_.whereConditions.append(cond);
+        
+        QList<QStandardItem*> row;
+        row << new QStandardItem(cond.logicOp);
+        row << new QStandardItem(cond.column);
+        row << new QStandardItem(cond.op);
+        row << new QStandardItem(cond.value);
+        conditionsModel_->appendRow(row);
+    }
+    
+    // Load options
+    currentQuery_.isDistinct = obj["isDistinct"].toBool();
+    distinctCheck_->setChecked(currentQuery_.isDistinct);
+    currentQuery_.limit = obj["limit"].toInt();
+    limitEdit_->setText(currentQuery_.limit > 0 ? QString::number(currentQuery_.limit) : "");
+    
+    refreshCanvas();
+    updateSqlPreview();
+    
+    QMessageBox::information(this, tr("Query Loaded"),
+        tr("Query loaded from:\n%1").arg(fileName));
 }
 
 void QueryBuilderPanel::onClearQuery() {

@@ -35,6 +35,15 @@ namespace scratchrobin::ui {
  */
 
 // ============================================================================
+// Savepoint Info
+// ============================================================================
+struct SavepointInfo {
+    QString name;
+    QDateTime createdAt;
+    int statementIndex = 0; // Which statement the savepoint was created after
+};
+
+// ============================================================================
 // Transaction State
 // ============================================================================
 struct TransactionState {
@@ -45,6 +54,7 @@ struct TransactionState {
     int statementCount = 0;
     int savepointCount = 0;
     QStringList executedStatements;
+    QList<SavepointInfo> savepoints;
     
     bool isActive() const { return inTransaction && !autoCommit; }
 };

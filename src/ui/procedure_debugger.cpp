@@ -18,6 +18,11 @@
 #include <QMessageBox>
 #include <QInputDialog>
 #include <QHeaderView>
+#include <QFileDialog>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QDateTime>
 #include <QTimer>
 
 namespace scratchrobin::ui {
@@ -427,13 +432,84 @@ void ProcedureDebuggerPanel::onTestWithValues() {
 }
 
 void ProcedureDebuggerPanel::onSaveTestCase() {
-    QMessageBox::information(this, tr("Save Test Case"),
-        tr("Save test case - not yet implemented."));
+    if (currentProcedure_.name.isEmpty()) {
+        QMessageBox::warning(this, tr("No Procedure"),
+            tr("Please select a procedure first."));
+        return;
+    }
+    
+    QString fileName = QFileDialog::getSaveFileName(this,
+        tr("Save Test Case"),
+        currentProcedure_.name + "_test.json",
+        tr("JSON Files (*.json);;All Files (*)"));
+    
+    if (fileName.isEmpty()) return;
+    
+    // Create test case
+    QJsonObject testCase;
+    testCase["procedure_name"] = currentProcedure_.name;
+    testCase["procedure_schema"] = currentProcedure_.schema;
+    testCase["created"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    
+    // Add parameters as test inputs
+    QJsonArray inputs;
+    for (const auto& param : currentProcedure_.parameters) {
+        QJsonObject input;
+        input["name"] = param;
+        input["type"] = "unknown";
+        input["mode"] = "IN";
+        input["test_value"] = "";  // User would fill this in
+        inputs.append(input);
+    }
+    testCase["inputs"] = inputs;
+    
+    QJsonObject expected;
+    expected["return_value"] = "";
+    expected["output_params"] = QJsonObject();
+    testCase["expected"] = expected;
+    
+    QJsonDocument doc(testCase);
+    
+    QFile file(fileName);
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write(doc.toJson(QJsonDocument::Indented));
+        file.close();
+        
+        QMessageBox::information(this, tr("Test Case Saved"),
+            tr("Test case saved to %1").arg(fileName));
+    }
 }
 
 void ProcedureDebuggerPanel::onLoadTestCase() {
-    QMessageBox::information(this, tr("Load Test Case"),
-        tr("Load test case - not yet implemented."));
+    QString fileName = QFileDialog::getOpenFileName(this,
+        tr("Load Test Case"),
+        QString(),
+        tr("JSON Files (*.json);;All Files (*)"));
+    
+    if (fileName.isEmpty()) return;
+    
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly)) {
+        QMessageBox::critical(this, tr("Error"),
+            tr("Cannot open file for reading."));
+        return;
+    }
+    
+    QByteArray data = file.readAll();
+    file.close();
+    
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (doc.isNull() || !doc.isObject()) {
+        QMessageBox::critical(this, tr("Error"),
+            tr("Invalid JSON format."));
+        return;
+    }
+    
+    QJsonObject testCase = doc.object();
+    QString procName = testCase["procedure_name"].toString();
+    
+    QMessageBox::information(this, tr("Test Case Loaded"),
+        tr("Test case for '%1' loaded.\nInputs can be populated from the test case.").arg(procName));
 }
 
 // ============================================================================

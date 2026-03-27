@@ -249,5 +249,8 @@ class AuthPluginManager {
   std::map<std::string, MethodInfo> methods_;
 };
 
+// Helper function for CIDR matching
+bool MatchCIDR(const std::string& ip_address, const std::string& cidr);
+
 }  // namespace core
 }  // namespace scratchrobin

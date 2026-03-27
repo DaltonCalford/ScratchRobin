@@ -33,7 +33,13 @@ bool BackupManager::Initialize(const std::string& storage_path) {
 }
 
 void BackupManager::Shutdown() {
-  // Stub implementation
+  // Cancel any running backups
+  for (auto& op : impl_->active_operations) {
+    op.second.is_cancelled = true;
+    op.second.status = OperationStatus::Cancelled;
+  }
+  impl_->active_operations.clear();
+  impl_->backups.clear();
 }
 
 BackupResult BackupManager::CreateBackup(const BackupConfig& config) {

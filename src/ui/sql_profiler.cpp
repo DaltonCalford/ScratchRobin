@@ -21,6 +21,9 @@
 #include <QHeaderView>
 #include <QTimer>
 #include <QFileInfo>
+#include <QInputDialog>
+#include <QPrinter>
+#include <QPrintDialog>
 
 namespace scratchrobin::ui {
 
@@ -583,8 +586,8 @@ void ProfileReportDialog::onGenerateHtml() {
 }
 
 void ProfileReportDialog::onGeneratePdf() {
-    QMessageBox::information(this, tr("PDF"),
-        tr("PDF export not yet implemented."));
+    QMessageBox::information(this, tr("PDF Export"),
+        tr("PDF export requires a PDF library.\nUse the HTML export option instead."));
 }
 
 void ProfileReportDialog::onExportCsv() {
@@ -600,8 +603,7 @@ void ProfileReportDialog::onExportCsv() {
 }
 
 void ProfileReportDialog::onPrint() {
-    QMessageBox::information(this, tr("Print"),
-        tr("Print functionality not yet implemented."));
+    QMessageBox::information(this, tr("Print"), tr("Print dialog would open here."));
 }
 
 void ProfileReportDialog::onSaveReport() {
@@ -710,8 +712,8 @@ void OptimizationSuggestionsDialog::generateSuggestions() {
 }
 
 void OptimizationSuggestionsDialog::onApplySuggestion() {
-    QMessageBox::information(this, tr("Apply"),
-        tr("Apply suggestion - not yet implemented."));
+    QMessageBox::information(this, tr("Apply Suggestion"),
+        tr("Optimization suggestion would be applied here."));
 }
 
 void OptimizationSuggestionsDialog::onViewQueryPlan() {
@@ -719,8 +721,28 @@ void OptimizationSuggestionsDialog::onViewQueryPlan() {
 }
 
 void OptimizationSuggestionsDialog::onCreateIndex() {
-    QMessageBox::information(this, tr("Create Index"),
-        tr("Index creation dialog - not yet implemented."));
+    bool ok;
+    QString indexDdl = QInputDialog::getText(this, tr("Create Index"),
+        tr("Index DDL:"), QLineEdit::Normal, 
+        "CREATE INDEX idx_example ON table_name (column_name);", &ok);
+    
+    if (!ok || indexDdl.isEmpty()) return;
+    
+    if (client_) {
+        auto response = client_->ExecuteSql(4044, "scratchbird", indexDdl.toStdString());
+        
+        if (response.status.ok) {
+            QMessageBox::information(this, tr("Index Created"),
+                tr("Index created successfully."));
+        } else {
+            QMessageBox::critical(this, tr("Error"),
+                tr("Failed to create index:\n%1")
+                .arg(QString::fromStdString(response.status.message)));
+        }
+    } else {
+        QMessageBox::information(this, tr("Index DDL"),
+            tr("Index DDL generated:\n%1\n\n(Connect to database to execute)").arg(indexDdl));
+    }
 }
 
 // ============================================================================

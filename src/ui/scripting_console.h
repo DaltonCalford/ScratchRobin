@@ -125,6 +125,8 @@ private:
     void executeCode(const QString& code);
     void executeJavaScript(const QString& code);
     void executeSQL(const QString& code);
+    void executePython(const QString& code);
+    void executeShell(const QString& code);
     void appendOutput(const QString& text, bool isError = false);
     
     backend::SessionClient* client_;

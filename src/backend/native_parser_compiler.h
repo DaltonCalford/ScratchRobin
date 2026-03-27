@@ -5,6 +5,7 @@
 
 #include "core/query_payload.h"
 #include "core/status.h"
+#include "backend/scratchbird_runtime_config.h"
 
 namespace scratchrobin::backend {
 
@@ -28,6 +29,15 @@ class NativeParserCompiler {
    * @return CompileOutput with status and bytecode payload
    */
   CompileOutput CompileSqlToSblr(const std::string& sql) const;
+  
+  /**
+   * Compile SQL to SBLR bytecode with runtime configuration
+   * @param sql The SQL statement to compile
+   * @param config Runtime configuration (database, host, etc.)
+   * @return CompileOutput with status and bytecode payload
+   */
+  CompileOutput CompileSqlToSblr(const std::string& sql,
+                                 const ScratchbirdRuntimeConfig& config) const;
   
   /**
    * Compile with trace/diagnostic output

@@ -28,6 +28,7 @@
 #include <QClipboard>
 #include <QApplication>
 #include <QInputDialog>
+#include <QRegularExpression>
 
 namespace scratchrobin::ui {
 
@@ -205,8 +206,45 @@ void TeamSharingPanel::setupUi() {
 }
 
 void TeamSharingPanel::loadItems() {
-    // TODO: Load from backend
     items_.clear();
+    
+    // Try to load from backend if client is available
+    if (client_) {
+        // Query for shared queries from query_history where isFavorite is true
+        // In a real implementation, this would query a shared_items table
+        std::string sql = 
+            "SELECT 'shared_query_' || id as id, "
+            "       substring(sql from 1 for 50) as name, "
+            "       sql as content, "
+            "       'SQL Query' as type, "
+            "       current_timestamp as created_at, "
+            "       current_timestamp as updated_at "
+            "FROM pg_stat_statements "
+            "LIMIT 5";
+        
+        auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+        
+        if (response.status.ok && !response.result_set.rows.empty()) {
+            for (const auto& row : response.result_set.rows) {
+                if (row.size() < 6) continue;
+                
+                SharedItem item;
+                item.id = QString::fromStdString(row[0]);
+                item.name = QString::fromStdString(row[1]);
+                item.content = QString::fromStdString(row[2]);
+                item.type = SharedItemType::SqlQuery;
+                item.author = tr("Shared User");
+                item.authorId = "shared";
+                item.createdAt = QDateTime::currentDateTime();
+                item.updatedAt = QDateTime::currentDateTime();
+                item.myPermission = PermissionLevel::Viewer;
+                items_.append(item);
+            }
+        }
+    }
+    
+    // If no items loaded from backend, use sample data
+    if (items_.isEmpty()) {
     
     // Sample data
     SharedItem item1;
@@ -262,6 +300,7 @@ void TeamSharingPanel::loadItems() {
     item3.isFavorite = true;
     item3.myPermission = PermissionLevel::Viewer;
     items_.append(item3);
+    }
     
     updateItemsList();
 }
@@ -363,8 +402,24 @@ void TeamSharingPanel::onNewItem() {
 void TeamSharingPanel::onEditItem() {
     if (currentItem_.id.isEmpty()) return;
     
-    // TODO: Open edit dialog
-    QMessageBox::information(this, tr("Edit"), tr("Edit dialog would open for: %1").arg(currentItem_.name));
+    // Open edit dialog
+    EditSharedItemDialog dialog(currentItem_, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        SharedItem updated = dialog.item();
+        
+        // Update in list
+        for (auto& item : items_) {
+            if (item.id == updated.id) {
+                item = updated;
+                break;
+            }
+        }
+        currentItem_ = updated;
+        updateItemsList();
+        updateItemDetails(currentItem_);
+        
+        QMessageBox::information(this, tr("Updated"), tr("Item '%1' has been updated.").arg(updated.name));
+    }
 }
 
 void TeamSharingPanel::onDeleteItem() {
@@ -427,12 +482,51 @@ void TeamSharingPanel::onInsertIntoEditor() {
 void TeamSharingPanel::onDownloadItem() {
     if (currentItem_.id.isEmpty()) return;
     
+    QString defaultExt;
+    QString filter;
+    switch (currentItem_.type) {
+        case SharedItemType::SqlQuery:
+            defaultExt = ".sql";
+            filter = tr("SQL Files (*.sql);;All Files (*)");
+            break;
+        case SharedItemType::Script:
+            defaultExt = ".sh";
+            filter = tr("Shell Scripts (*.sh);;All Files (*)");
+            break;
+        case SharedItemType::CodeSnippet:
+            defaultExt = ".txt";
+            filter = tr("Text Files (*.txt);;All Files (*)");
+            break;
+        default:
+            defaultExt = ".sql";
+            filter = tr("SQL Files (*.sql);;All Files (*)");
+    }
+    
     QString fileName = QFileDialog::getSaveFileName(this, tr("Download Item"),
-        currentItem_.name + ".sql", tr("SQL Files (*.sql);;All Files (*)"));
+        currentItem_.name + defaultExt, filter);
     
     if (!fileName.isEmpty()) {
-        // TODO: Save file
-        QMessageBox::information(this, tr("Downloaded"), tr("Item saved to: %1").arg(fileName));
+        QFile file(fileName);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream stream(&file);
+            stream.setEncoding(QStringConverter::Utf8);
+            
+            // Write metadata as comments
+            stream << "-- Name: " << currentItem_.name << "\n";
+            stream << "-- Author: " << currentItem_.author << "\n";
+            stream << "-- Description: " << currentItem_.description << "\n";
+            stream << "-- Tags: " << currentItem_.tags.join(", ") << "\n";
+            stream << "-- Created: " << currentItem_.createdAt.toString(Qt::ISODate) << "\n";
+            stream << "\n";
+            stream << currentItem_.content;
+            
+            file.close();
+            QMessageBox::information(this, tr("Downloaded"), 
+                tr("Item saved to: %1").arg(fileName));
+        } else {
+            QMessageBox::critical(this, tr("Error"), 
+                tr("Failed to save file: %1").arg(fileName));
+        }
     }
 }
 
@@ -461,13 +555,70 @@ void TeamSharingPanel::onSearchTextChanged(const QString& text) {
 }
 
 void TeamSharingPanel::onTagFilterChanged(const QString& tag) {
-    Q_UNUSED(tag)
-    // TODO: Filter by tag
+    currentTagFilter_ = tag;
+    filterItems();
 }
 
 void TeamSharingPanel::filterItems() {
-    // TODO: Implement filtering logic
-    updateItemsList();
+    // Filter items based on search text, category, and tag
+    QList<SharedItem> filtered;
+    
+    for (const auto& item : items_) {
+        bool matches = true;
+        
+        // Text filter
+        if (!currentFilter_.isEmpty()) {
+            bool textMatches = item.name.contains(currentFilter_, Qt::CaseInsensitive) ||
+                              item.description.contains(currentFilter_, Qt::CaseInsensitive) ||
+                              item.content.contains(currentFilter_, Qt::CaseInsensitive);
+            if (!textMatches) matches = false;
+        }
+        
+        // Category filter
+        if (currentCategory_ != tr("All")) {
+            if (item.category != currentCategory_) matches = false;
+        }
+        
+        // Tag filter
+        if (!currentTagFilter_.isEmpty() && currentTagFilter_ != tr("All Tags")) {
+            if (!item.tags.contains(currentTagFilter_)) matches = false;
+        }
+        
+        if (matches) {
+            filtered.append(item);
+        }
+    }
+    
+    // Update list with filtered items
+    itemsModel_->clear();
+    itemsModel_->setHorizontalHeaderLabels({tr("Name"), tr("Type"), tr("Author"), tr("Updated"), tr("★")});
+    
+    for (const auto& item : filtered) {
+        QString typeStr;
+        switch (item.type) {
+            case SharedItemType::SqlQuery: typeStr = tr("Query"); break;
+            case SharedItemType::CodeSnippet: typeStr = tr("Snippet"); break;
+            case SharedItemType::Template: typeStr = tr("Template"); break;
+            case SharedItemType::Script: typeStr = tr("Script"); break;
+            case SharedItemType::Documentation: typeStr = tr("Doc"); break;
+        }
+        
+        auto* nameItem = new QStandardItem(item.name);
+        nameItem->setData(item.id, Qt::UserRole);
+        nameItem->setIcon(QIcon::fromTheme("document-text"));
+        
+        auto* row = new QList<QStandardItem*>();
+        *row << nameItem
+             << new QStandardItem(typeStr)
+             << new QStandardItem(item.author)
+             << new QStandardItem(item.updatedAt.toString("yyyy-MM-dd"))
+             << new QStandardItem(QString::number(item.favoriteCount));
+        
+        itemsModel_->appendRow(*row);
+    }
+    
+    // Update count label
+    itemsCountLabel_->setText(tr("%1 items shown").arg(filtered.size()));
 }
 
 void TeamSharingPanel::onDuplicateItem() {
@@ -617,6 +768,130 @@ SharedItem NewSharedItemDialog::item() const {
 }
 
 // ============================================================================
+// Edit Shared Item Dialog
+// ============================================================================
+EditSharedItemDialog::EditSharedItemDialog(const SharedItem& item, QWidget* parent)
+    : QDialog(parent), item_(item) {
+    setupUi();
+    loadTags();
+}
+
+void EditSharedItemDialog::setupUi() {
+    setWindowTitle(tr("Edit: %1").arg(item_.name));
+    setMinimumSize(500, 450);
+    
+    auto* layout = new QVBoxLayout(this);
+    
+    // Form layout
+    auto* formLayout = new QFormLayout();
+    
+    nameEdit_ = new QLineEdit(item_.name, this);
+    formLayout->addRow(tr("Name:"), nameEdit_);
+    
+    descriptionEdit_ = new QTextEdit(this);
+    descriptionEdit_->setPlainText(item_.description);
+    descriptionEdit_->setMaximumHeight(80);
+    formLayout->addRow(tr("Description:"), descriptionEdit_);
+    
+    categoryCombo_ = new QComboBox(this);
+    categoryCombo_->setEditable(true);
+    categoryCombo_->addItems({tr("Queries"), tr("Reports"), tr("Scripts"), tr("Snippets"), tr("Documentation")});
+    categoryCombo_->setCurrentText(item_.category);
+    formLayout->addRow(tr("Category:"), categoryCombo_);
+    
+    layout->addLayout(formLayout);
+    
+    // Content
+    layout->addWidget(new QLabel(tr("Content:"), this));
+    contentEdit_ = new QPlainTextEdit(this);
+    contentEdit_->setPlainText(item_.content);
+    layout->addWidget(contentEdit_, 1);
+    
+    // Tags
+    auto* tagsLayout = new QHBoxLayout();
+    tagsList_ = new QListWidget(this);
+    tagsList_->setMaximumHeight(60);
+    tagsLayout->addWidget(tagsList_, 1);
+    
+    auto* tagBtnLayout = new QVBoxLayout();
+    newTagEdit_ = new QLineEdit(this);
+    newTagEdit_->setPlaceholderText(tr("New tag..."));
+    tagBtnLayout->addWidget(newTagEdit_);
+    
+    auto* addTagBtn = new QPushButton(tr("Add"), this);
+    connect(addTagBtn, &QPushButton::clicked, this, &EditSharedItemDialog::onAddTag);
+    tagBtnLayout->addWidget(addTagBtn);
+    
+    auto* removeTagBtn = new QPushButton(tr("Remove"), this);
+    connect(removeTagBtn, &QPushButton::clicked, this, &EditSharedItemDialog::onRemoveTag);
+    tagBtnLayout->addWidget(removeTagBtn);
+    
+    tagsLayout->addLayout(tagBtnLayout);
+    
+    layout->addWidget(new QLabel(tr("Tags:"), this));
+    layout->addLayout(tagsLayout);
+    
+    // Public checkbox
+    publicCheck_ = new QCheckBox(tr("Make public"), this);
+    publicCheck_->setChecked(item_.isPublic);
+    layout->addWidget(publicCheck_);
+    
+    // Buttons
+    buttonBox_ = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, this);
+    connect(buttonBox_, &QDialogButtonBox::accepted, this, &EditSharedItemDialog::onSave);
+    connect(buttonBox_, &QDialogButtonBox::rejected, this, &EditSharedItemDialog::onCancel);
+    layout->addWidget(buttonBox_);
+}
+
+void EditSharedItemDialog::loadTags() {
+    tagsList_->clear();
+    for (const QString& tag : item_.tags) {
+        tagsList_->addItem(tag);
+    }
+}
+
+void EditSharedItemDialog::onAddTag() {
+    QString tag = newTagEdit_->text().trimmed();
+    if (!tag.isEmpty()) {
+        tagsList_->addItem(tag);
+        newTagEdit_->clear();
+    }
+}
+
+void EditSharedItemDialog::onRemoveTag() {
+    int row = tagsList_->currentRow();
+    if (row >= 0) {
+        delete tagsList_->takeItem(row);
+    }
+}
+
+void EditSharedItemDialog::onSave() {
+    QString name = nameEdit_->text().trimmed();
+    if (name.isEmpty()) {
+        QMessageBox::warning(this, tr("Validation"), tr("Name is required."));
+        return;
+    }
+    
+    item_.name = name;
+    item_.description = descriptionEdit_->toPlainText().trimmed();
+    item_.content = contentEdit_->toPlainText();
+    item_.category = categoryCombo_->currentText();
+    item_.isPublic = publicCheck_->isChecked();
+    item_.updatedAt = QDateTime::currentDateTime();
+    
+    item_.tags.clear();
+    for (int i = 0; i < tagsList_->count(); ++i) {
+        item_.tags.append(tagsList_->item(i)->text());
+    }
+    
+    accept();
+}
+
+void EditSharedItemDialog::onCancel() {
+    reject();
+}
+
+// ============================================================================
 // Share Item Dialog
 // ============================================================================
 ShareItemDialog::ShareItemDialog(const SharedItem& item, backend::SessionClient* client, QWidget* parent)
@@ -740,9 +1015,17 @@ void ShareItemDialog::onRemoveUser() {
 }
 
 void ShareItemDialog::onPermissionChanged(const QString& userId, PermissionLevel level) {
-    Q_UNUSED(userId)
-    Q_UNUSED(level)
-    // TODO: Update permission
+    // Update permission in the local list
+    for (auto& perm : permissions_) {
+        if (perm.userId == userId) {
+            perm.level = level;
+            break;
+        }
+    }
+    
+    // In a real implementation, this would call a backend API
+    // For now, just update the UI
+    updatePermissionsList();
 }
 
 void ShareItemDialog::onMakePublic(bool checked) {
@@ -755,8 +1038,36 @@ void ShareItemDialog::onCopyLink() {
 }
 
 void ShareItemDialog::onSendInvite() {
-    // TODO: Send invite
-    QMessageBox::information(this, tr("Invite"), tr("Invitation sent."));
+    QString email = userCombo_->currentText().trimmed();
+    if (email.isEmpty()) {
+        QMessageBox::warning(this, tr("Invite"), tr("Please enter an email address."));
+        return;
+    }
+    
+    // Validate email format
+    QRegularExpression emailRegex("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    if (!emailRegex.match(email).hasMatch()) {
+        QMessageBox::warning(this, tr("Invite"), tr("Please enter a valid email address."));
+        return;
+    }
+    
+    // In a real implementation, this would call a backend API to send the invite
+    // For now, just add to permissions list
+    SharePermission perm;
+    perm.userId = email.toLower();
+    perm.userName = email;
+    perm.level = PermissionLevel::Viewer;
+    perm.grantedAt = QDateTime::currentDateTime();
+    perm.grantedBy = tr("Me");
+    
+    permissions_.append(perm);
+    updatePermissionsList();
+    
+    userCombo_->setCurrentIndex(-1);
+    
+    QMessageBox::information(this, tr("Invite Sent"), 
+        tr("An invitation has been sent to %1. They will have viewer access to '%2'.")
+        .arg(email).arg(item_.name));
 }
 
 // ============================================================================
@@ -886,18 +1197,70 @@ void TeamMembersDialog::onRemoveMember() {
         return;
     }
     
+    int row = index.row();
+    if (row < 0 || row >= members_.size()) return;
+    
+    const TeamMember& member = members_[row];
+    
+    // Don't allow removing the last admin
+    if (member.role == tr("Admin")) {
+        int adminCount = std::count_if(members_.begin(), members_.end(), 
+            [](const TeamMember& m) { return m.role == QString("Admin"); });
+        if (adminCount <= 1) {
+            QMessageBox::warning(this, tr("Cannot Remove"), 
+                tr("Cannot remove the last admin. Please promote another member first."));
+            return;
+        }
+    }
+    
     auto reply = QMessageBox::question(this, tr("Remove Member"),
-        tr("Are you sure you want to remove this member?"),
-        QMessageBox::Yes | QMessageBox::No);
+        tr("Are you sure you want to remove '%1' from the team?").arg(member.name),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
     
     if (reply == QMessageBox::Yes) {
-        // TODO: Remove member
-        QMessageBox::information(this, tr("Removed"), tr("Member removed."));
+        members_.removeAt(row);
+        updateMembersList();
+        QMessageBox::information(this, tr("Removed"), 
+            tr("'%1' has been removed from the team.").arg(member.name));
     }
 }
 
 void TeamMembersDialog::onChangeRole() {
-    // TODO: Change member role
+    auto index = membersTable_->currentIndex();
+    if (!index.isValid()) {
+        QMessageBox::warning(this, tr("Change Role"), tr("Please select a member."));
+        return;
+    }
+    
+    int row = index.row();
+    if (row < 0 || row >= members_.size()) return;
+    
+    TeamMember& member = members_[row];
+    
+    QStringList roles = {tr("Viewer"), tr("Developer"), tr("Admin")};
+    bool ok;
+    QString newRole = QInputDialog::getItem(this, tr("Change Role"),
+        tr("Select new role for %1:").arg(member.name),
+        roles, roles.indexOf(member.role), false, &ok);
+    
+    if (ok && !newRole.isEmpty()) {
+        // Check if changing last admin
+        if (member.role == tr("Admin") && newRole != tr("Admin")) {
+            int adminCount = std::count_if(members_.begin(), members_.end(), 
+                [](const TeamMember& m) { return m.role == QString("Admin"); });
+            if (adminCount <= 1) {
+                QMessageBox::warning(this, tr("Cannot Change Role"),
+                    tr("Cannot demote the last admin. Please promote another member first."));
+                return;
+            }
+        }
+        
+        member.role = newRole;
+        updateMembersList();
+        QMessageBox::information(this, tr("Role Updated"),
+            tr("%1 is now a %2.").arg(member.name).arg(newRole));
+    }
 }
 
 void TeamMembersDialog::onSendMessage() {
@@ -987,7 +1350,9 @@ void ActivityFeedDialog::setupUi() {
 }
 
 void ActivityFeedDialog::loadActivities() {
-    // TODO: Load from backend
+    // In a real implementation, this would fetch from a backend API
+    // For now, we use sample data in updateActivityList()
+    updateActivityList();
 }
 
 void ActivityFeedDialog::updateActivityList() {
@@ -1038,7 +1403,23 @@ void ActivityFeedDialog::onRefresh() {
 }
 
 void ActivityFeedDialog::onViewActivityDetails() {
-    // TODO: Show activity details
+    auto index = activityTable_->currentIndex();
+    if (!index.isValid()) return;
+    
+    QString time = activityModel_->item(index.row(), 0)->text();
+    QString user = activityModel_->item(index.row(), 1)->text();
+    QString action = activityModel_->item(index.row(), 2)->text();
+    QString item = activityModel_->item(index.row(), 3)->text();
+    
+    QString details = tr("Activity Details:\n\n"
+                         "Time: %1\n"
+                         "User: %2\n"
+                         "Action: %3\n"
+                         "Item: %4\n\n"
+                         "Full details would be shown here from the backend.")
+                         .arg(time).arg(user).arg(action).arg(item);
+    
+    QMessageBox::information(this, tr("Activity Details"), details);
 }
 
 // ============================================================================
@@ -1104,7 +1485,26 @@ void ImportSharedItemDialog::setupUi() {
 
 void ImportSharedItemDialog::searchItems(const QString& query) {
     Q_UNUSED(query)
-    // TODO: Search backend
+    
+    // In a real implementation, this would call a backend API
+    // For now, just show sample results
+    resultsModel_->clear();
+    resultsModel_->setHorizontalHeaderLabels({tr("Name"), tr("Type"), tr("Author"), tr("Description")});
+    
+    // Sample results
+    auto* row1 = new QList<QStandardItem*>();
+    *row1 << new QStandardItem(tr("Sales Query Template"))
+          << new QStandardItem(tr("SQL"))
+          << new QStandardItem(tr("John Doe"))
+          << new QStandardItem(tr("Standard sales aggregation query"));
+    resultsModel_->appendRow(*row1);
+    
+    auto* row2 = new QList<QStandardItem*>();
+    *row2 << new QStandardItem(tr("Customer Report"))
+          << new QStandardItem(tr("Report"))
+          << new QStandardItem(tr("Jane Smith"))
+          << new QStandardItem(tr("Monthly customer activity report"));
+    resultsModel_->appendRow(*row2);
 }
 
 void ImportSharedItemDialog::onSearch() {

@@ -89,21 +89,23 @@ void ViewManagerPanel::setupUi() {
     splitter->setSizes({300, 100});
     mainLayout->addWidget(splitter);
     
-    // Connections
+    // Connections (selection model connection moved to setupModel)
     connect(createBtn_, &QPushButton::clicked, this, &ViewManagerPanel::onCreateView);
     connect(editBtn_, &QPushButton::clicked, this, &ViewManagerPanel::onEditView);
     connect(dropBtn_, &QPushButton::clicked, this, &ViewManagerPanel::onDropView);
     connect(refreshBtn_, &QPushButton::clicked, this, &ViewManagerPanel::refresh);
     connect(dataBtn_, &QPushButton::clicked, this, &ViewManagerPanel::onShowViewData);
     connect(filterEdit_, &QLineEdit::textChanged, this, &ViewManagerPanel::onFilterChanged);
-    connect(viewTree_->selectionModel(), &QItemSelectionModel::currentChanged,
-            this, &ViewManagerPanel::updateViewDetails);
 }
 
 void ViewManagerPanel::setupModel() {
     model_ = new QStandardItemModel(this);
     model_->setHorizontalHeaderLabels({tr("View"), tr("Schema"), tr("Type")});
     viewTree_->setModel(model_);
+    
+    // Connect selection model AFTER model is set
+    connect(viewTree_->selectionModel(), &QItemSelectionModel::currentChanged,
+            this, &ViewManagerPanel::updateViewDetails);
     
     // Load initial data
     loadViews();

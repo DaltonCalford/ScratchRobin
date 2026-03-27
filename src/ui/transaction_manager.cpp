@@ -121,6 +121,7 @@ bool TransactionManager::commit() {
     
     state_.inTransaction = false;
     state_.savepointCount = 0;
+    state_.savepoints.clear();
     state_.executedStatements.clear();
     
     emit transactionCommitted();
@@ -146,6 +147,7 @@ bool TransactionManager::rollback() {
     
     state_.inTransaction = false;
     state_.savepointCount = 0;
+    state_.savepoints.clear();
     state_.executedStatements.clear();
     
     emit transactionRolledBack();
@@ -170,6 +172,11 @@ bool TransactionManager::createSavepoint(const QString& name) {
         return false;
     }
     
+    SavepointInfo sp;
+    sp.name = name;
+    sp.createdAt = QDateTime::currentDateTime();
+    sp.statementIndex = state_.statementCount;
+    state_.savepoints.append(sp);
     state_.savepointCount++;
     emit savepointCreated(name);
     emit stateChanged(state_);
@@ -186,6 +193,22 @@ bool TransactionManager::rollbackToSavepoint(const QString& name) {
     QString sql = QString("ROLLBACK TO SAVEPOINT %1").arg(name);
     if (!executeSql(sql)) {
         return false;
+    }
+    
+    // Remove all savepoints created after this one
+    int targetIndex = -1;
+    for (int i = 0; i < state_.savepoints.size(); ++i) {
+        if (state_.savepoints[i].name == name) {
+            targetIndex = i;
+            break;
+        }
+    }
+    if (targetIndex >= 0) {
+        int removedCount = state_.savepoints.size() - targetIndex - 1;
+        while (state_.savepoints.size() > targetIndex + 1) {
+            state_.savepoints.removeLast();
+        }
+        state_.savepointCount -= removedCount;
     }
     
     emit savepointRolledBack(name);
@@ -205,6 +228,13 @@ bool TransactionManager::releaseSavepoint(const QString& name) {
         return false;
     }
     
+    // Remove savepoint from list
+    for (int i = 0; i < state_.savepoints.size(); ++i) {
+        if (state_.savepoints[i].name == name) {
+            state_.savepoints.removeAt(i);
+            break;
+        }
+    }
     state_.savepointCount--;
     emit savepointReleased(name);
     emit stateChanged(state_);
@@ -589,11 +619,21 @@ void TransactionDialog::onCreateSavepoint() {
 }
 
 void TransactionDialog::onRollbackToSavepoint() {
-    // TODO: Implement
+    if (!manager_) return;
+    
+    // Show dialog to select savepoint
+    SavepointManagerDialog dialog(manager_, this);
+    dialog.exec();
+    refresh();
 }
 
 void TransactionDialog::onReleaseSavepoint() {
-    // TODO: Implement
+    if (!manager_) return;
+    
+    // Show dialog to select and release savepoint
+    SavepointManagerDialog dialog(manager_, this);
+    dialog.exec();
+    refresh();
 }
 
 // ============================================================================
@@ -651,7 +691,57 @@ void SavepointManagerDialog::setupUi() {
 }
 
 void SavepointManagerDialog::refresh() {
-    // TODO: Load savepoints from manager
+    if (!manager_) return;
+    
+    savepointTable_->setRowCount(0);
+    
+    const auto& state = manager_->state();
+    int row = 0;
+    
+    for (const auto& sp : state.savepoints) {
+        savepointTable_->insertRow(row);
+        
+        // Name
+        savepointTable_->setItem(row, 0, new QTableWidgetItem(sp.name));
+        
+        // Created time
+        savepointTable_->setItem(row, 1, new QTableWidgetItem(
+            sp.createdAt.toString("yyyy-MM-dd hh:mm:ss")));
+        
+        // Actions
+        auto* actionsWidget = new QWidget(this);
+        auto* actionsLayout = new QHBoxLayout(actionsWidget);
+        actionsLayout->setContentsMargins(4, 2, 4, 2);
+        actionsLayout->setSpacing(4);
+        
+        auto* rollbackBtn = new QPushButton(tr("Rollback"), actionsWidget);
+        QString savepointName = sp.name; // Copy for lambda
+        connect(rollbackBtn, &QPushButton::clicked, this, [this, savepointName]() {
+            if (QMessageBox::question(this, tr("Confirm Rollback"),
+                tr("Rollback to savepoint '%1'?").arg(savepointName)) == QMessageBox::Yes) {
+                manager_->rollbackToSavepoint(savepointName);
+                refresh();
+            }
+        });
+        actionsLayout->addWidget(rollbackBtn);
+        
+        auto* releaseBtn = new QPushButton(tr("Release"), actionsWidget);
+        connect(releaseBtn, &QPushButton::clicked, this, [this, savepointName]() {
+            if (QMessageBox::question(this, tr("Confirm Release"),
+                tr("Release savepoint '%1'?").arg(savepointName)) == QMessageBox::Yes) {
+                manager_->releaseSavepoint(savepointName);
+                refresh();
+            }
+        });
+        actionsLayout->addWidget(releaseBtn);
+        
+        actionsLayout->addStretch();
+        savepointTable_->setCellWidget(row, 2, actionsWidget);
+        
+        row++;
+    }
+    
+    savepointTable_->resizeColumnsToContents();
 }
 
 void SavepointManagerDialog::onCreateSavepoint() {
@@ -663,15 +753,25 @@ void SavepointManagerDialog::onCreateSavepoint() {
 }
 
 void SavepointManagerDialog::onRollbackToSavepoint() {
-    // TODO: Implement
+    // Handled by button click in refresh()
 }
 
 void SavepointManagerDialog::onReleaseSavepoint() {
-    // TODO: Implement
+    // Handled by button click in refresh()
 }
 
 void SavepointManagerDialog::onReleaseAll() {
-    // TODO: Implement
+    if (!manager_) return;
+    
+    if (QMessageBox::question(this, tr("Confirm Release All"),
+        tr("Release all savepoints? This cannot be undone.")) == QMessageBox::Yes) {
+        // Release each savepoint
+        const auto& savepoints = manager_->state().savepoints;
+        for (const auto& sp : savepoints) {
+            manager_->releaseSavepoint(sp.name);
+        }
+        refresh();
+    }
 }
 
 } // namespace scratchrobin::ui

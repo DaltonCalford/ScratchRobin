@@ -191,10 +191,10 @@ void ScriptingConsolePanel::executeCode(const QString& code) {
             executeSQL(code);
             break;
         case ScriptLanguage::Python:
-            appendOutput(tr("Python support not yet implemented."), true);
+            executePython(code);
             break;
         case ScriptLanguage::Shell:
-            appendOutput(tr("Shell support not yet implemented."), true);
+            executeShell(code);
             break;
     }
 }
@@ -208,9 +208,110 @@ void ScriptingConsolePanel::executeJavaScript(const QString& code) {
 }
 
 void ScriptingConsolePanel::executeSQL(const QString& code) {
-    Q_UNUSED(code)
-    appendOutput(tr("SQL execution would run: %1").arg(code));
-    // TODO: Execute SQL through backend
+    if (!client_) {
+        appendOutput(tr("SQL execution (offline mode): %1").arg(code));
+        return;
+    }
+    
+    appendOutput(tr("Executing SQL..."));
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", code.toStdString());
+    
+    if (response.status.ok) {
+        // Display results
+        if (!response.result_set.rows.empty()) {
+            // Display column headers
+            QStringList headers;
+            for (const auto& col : response.result_set.columns) {
+                headers << QString::fromStdString(col);
+            }
+            appendOutput(headers.join(" | "));
+            appendOutput(QString("-").repeated(50));
+            
+            // Display rows (limit to first 20)
+            int rowCount = 0;
+            for (const auto& row : response.result_set.rows) {
+                if (rowCount >= 20) {
+                    appendOutput(tr("... (%1 more rows)").arg(response.result_set.rows.size() - 20));
+                    break;
+                }
+                
+                QStringList values;
+                for (const auto& val : row) {
+                    values << QString::fromStdString(val);
+                }
+                appendOutput(values.join(" | "));
+                rowCount++;
+            }
+            
+            appendOutput(tr("\n%1 row(s) returned").arg(response.result_set.rows.size()));
+        } else {
+            appendOutput(tr("Query executed successfully."));
+        }
+    } else {
+        appendOutput(tr("Error: %1").arg(QString::fromStdString(response.status.message)), true);
+    }
+}
+
+void ScriptingConsolePanel::executePython(const QString& code) {
+    appendOutput(tr("[Python execution]"));
+    
+    // Python would require embedding Python interpreter
+    // For now, provide a helpful message with the code analysis
+    appendOutput(tr("Python code analysis:"));
+    
+    int lineCount = code.count('\n') + 1;
+    appendOutput(tr("Lines: %1").arg(lineCount));
+    
+    // Simple syntax check
+    int openParens = code.count('(') - code.count(')');
+    int openBrackets = code.count('[') - code.count(']');
+    int openBraces = code.count('{') - code.count('}');
+    
+    if (openParens != 0) {
+        appendOutput(tr("Warning: Unbalanced parentheses (%1)").arg(openParens), true);
+    }
+    if (openBrackets != 0) {
+        appendOutput(tr("Warning: Unbalanced brackets (%1)").arg(openBrackets), true);
+    }
+    if (openBraces != 0) {
+        appendOutput(tr("Warning: Unbalanced braces (%1)").arg(openBraces), true);
+    }
+    
+    if (openParens == 0 && openBrackets == 0 && openBraces == 0) {
+        appendOutput(tr("✓ Basic syntax check passed"));
+    }
+    
+    appendOutput(tr("\nNote: Full Python execution requires Python interpreter integration."));
+    appendOutput(tr("To execute Python scripts, save and run with: python script.py"));
+}
+
+void ScriptingConsolePanel::executeShell(const QString& code) {
+    appendOutput(tr("[Shell execution]"));
+    
+    // Shell execution would use QProcess
+    // For security, we only show what would be executed
+    QString trimmed = code.trimmed();
+    if (trimmed.isEmpty()) {
+        appendOutput(tr("No command to execute."));
+        return;
+    }
+    
+    // Show the command
+    appendOutput(tr("$ %1").arg(trimmed));
+    
+    // For safety, only allow certain safe commands
+    QStringList safeCommands = {"echo", "ls", "pwd", "cat", "grep", "head", "tail", "wc"};
+    QString command = trimmed.split(QRegularExpression("\\s+"))[0];
+    
+    if (safeCommands.contains(command)) {
+        appendOutput(tr("(Would execute: %1)").arg(trimmed));
+        appendOutput(tr("\nNote: Shell execution is disabled for security."));
+        appendOutput(tr("To run shell commands, use: bash -c \"%1\"").arg(trimmed));
+    } else {
+        appendOutput(tr("Command '%1' is not in the safe commands list.").arg(command), true);
+        appendOutput(tr("Safe commands: %1").arg(safeCommands.join(", ")));
+    }
 }
 
 void ScriptingConsolePanel::appendOutput(const QString& text, bool isError) {

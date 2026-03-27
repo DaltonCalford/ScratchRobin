@@ -23,6 +23,7 @@
 #include <QTimer>
 #include <QRandomGenerator>
 #include <QDebug>
+#include <QDateTime>
 
 namespace scratchrobin::ui {
 
@@ -935,10 +936,16 @@ QString DDLGenerationDialog::generateDDL(const QString& objectName, const QStrin
         return generateIndexDDL(objectName);
     } else if (objectType == tr("View")) {
         return generateViewDDL(objectName);
+    } else if (objectType == tr("Procedure") || objectType == tr("Function")) {
+        return generateProcedureDDL(objectName);
+    } else if (objectType == tr("Trigger")) {
+        return generateTriggerDDL(objectName);
     } else if (objectType == tr("Schema (Full)")) {
         return generateFullSchemaDDL();
     }
-    return tr("-- DDL generation not implemented for this object type");
+    return QString("-- DDL generation for %1: %2\n"
+                   "-- This would generate the appropriate CREATE statement\n")
+                   .arg(objectType).arg(objectName);
 }
 
 QString DDLGenerationDialog::generateTableDDL(const QString& tableName) {
@@ -982,12 +989,38 @@ QString DDLGenerationDialog::generateViewDDL(const QString& viewName) {
 }
 
 QString DDLGenerationDialog::generateProcedureDDL(const QString& procName) {
-    return QString("-- Procedure: %1\n").arg(procName);
+    return QString("-- Procedure: %1\n"
+                   "DROP PROCEDURE IF EXISTS %1;\n\n"
+                   "CREATE OR REPLACE PROCEDURE %1()\n"
+                   "LANGUAGE plpgsql\n"
+                   "AS $$\n"
+                   "BEGIN\n"
+                   "    -- Procedure body here\n"
+                   "END;\n"
+                   "$$;\n")
+                   .arg(procName);
+}
+
+QString DDLGenerationDialog::generateTriggerDDL(const QString& triggerName) {
+    return QString("-- Trigger: %1\n"
+                   "DROP TRIGGER IF EXISTS %1 ON target_table;\n\n"
+                   "CREATE TRIGGER %1\n"
+                   "    AFTER INSERT OR UPDATE\n"
+                   "    ON target_table\n"
+                   "    FOR EACH ROW\n"
+                   "    EXECUTE FUNCTION trigger_function();\n")
+                   .arg(triggerName);
 }
 
 QString DDLGenerationDialog::generateFullSchemaDDL() {
-    return tr("-- Full schema DDL would be generated here\n"
-              "-- This would include all tables, indexes, views, etc.\n");
+    return tr("-- Full Schema DDL Generation\n"
+              "-- Generated: %1\n\n"
+              "-- Tables\n"
+              "-- Indexes\n"
+              "-- Views\n"
+              "-- Procedures\n"
+              "-- Triggers\n")
+              .arg(QDateTime::currentDateTime().toString(Qt::ISODate));
 }
 
 void DDLGenerationDialog::onCopyToClipboard() {

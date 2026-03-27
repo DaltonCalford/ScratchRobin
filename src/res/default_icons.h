@@ -91,6 +91,15 @@ inline constexpr const char COLLATION_SVG[] = R"svg(<svg xmlns="http://www.w3.or
 // UDF icon (puzzle piece)
 inline constexpr const char UDF_SVG[] = R"svg(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M4 1h3v2.5a1.5 1.5 0 013 0V1h3v3a1 1 0 01-1 1h-.5a.5.5 0 000 1H12a1 1 0 011 1v3h-2.5a1.5 1.5 0 010-3H14V1h-3v2.5a1.5 1.5 0 01-3 0V1H5v3a1 1 0 001 1h.5a.5.5 0 000 1H6a1 1 0 00-1 1v3h2.5a1.5 1.5 0 010 3H4v3h3v-2.5a1.5 1.5 0 013 0V15h3" fill="#6c757d" stroke="#495057" stroke-width="1" stroke-linejoin="round"/></svg>)svg";
 
+// Computed column icon (column with gear)
+inline constexpr const char COMPUTED_COLUMN_SVG[] = R"svg(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><rect x="5" y="1" width="6" height="14" rx="1" fill="#adb5bd" stroke="#6c757d" stroke-width="1"/><line x1="8" y1="4" x2="8" y2="12" stroke="#495057" stroke-width="1.5"/><circle cx="12" cy="12" r="2.5" fill="#6c757d" stroke="#495057" stroke-width="0.5"/><path d="M12 9.5v1M12 13.5v1M9.5 12h1M13.5 12h1M10.3 10.3l.7.7M12.7 12.7l.7.7M10.3 13.7l.7-.7M12.7 11.3l.7-.7" stroke="#495057" stroke-width="0.5" stroke-linecap="round"/></svg>)svg";
+
+// Disconnected database icon (grayed out)
+inline constexpr const char DATABASE_DISCONNECTED_SVG[] = R"svg(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><ellipse cx="8" cy="3.5" rx="6" ry="2" fill="#adb5bd" stroke="#6c757d" stroke-width="1"/><path d="M2 3.5v9c0 1.1 2.7 2 6 2s6-.9 6-2v-9" fill="#adb5bd" stroke="#6c757d" stroke-width="1" opacity="0.8"/><line x1="2" y1="8" x2="14" y2="8" stroke="#6c757d" stroke-width="0.5"/></svg>)svg";
+
+// Combined Primary Key + Foreign Key column icon
+inline constexpr const char COLUMN_PK_FK_SVG[] = R"svg(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><rect x="5" y="1" width="6" height="14" rx="1" fill="#adb5bd" stroke="#6c757d" stroke-width="1"/><circle cx="8" cy="4" r="2" fill="#ffc107" stroke="#d39e00" stroke-width="0.8"/><path d="M8 6v3" stroke="#495057" stroke-width="1.5" stroke-linecap="round"/><path d="M3 10h3v-1.5l2.5 2.5-2.5 2.5V11.5H3" fill="none" stroke="#17a2b8" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>)svg";
+
 // System object variants (grayed out versions)
 inline constexpr const char SYSTEM_TABLE_SVG[] = R"svg(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><rect x="1" y="2" width="14" height="12" rx="1" fill="#adb5bd" stroke="#6c757d" stroke-width="1"/><line x1="1" y1="6" x2="15" y2="6" stroke="#6c757d" stroke-width="1"/><line x1="6" y1="2" x2="6" y2="14" stroke="#6c757d" stroke-width="1"/><line x1="11" y1="2" x2="11" y2="14" stroke="#6c757d" stroke-width="1"/></svg>)svg";
 
@@ -107,5 +116,14 @@ inline constexpr const char DB_TRIGGER_SVG[] = R"svg(<svg xmlns="http://www.w3.o
 
 // DDL Trigger icon (schema/wrench with lightning)
 inline constexpr const char DDL_TRIGGER_SVG[] = R"svg(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><rect x="2" y="2" width="8" height="8" rx="1" fill="#6c757d" stroke="#495057" stroke-width="1"/><path d="M4 6h4M6 4v4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><polygon points="13,6 10,10 12,10 11,14 15,10 13,10" fill="#ffc107" stroke="#d39e00" stroke-width="1" stroke-linejoin="round"/></svg>)svg";
+
+// System Index icon (grayed index)
+inline constexpr const char SYSTEM_INDEX_SVG[] = R"svg(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><rect x="2" y="2" width="8" height="2" fill="#adb5bd"/><rect x="2" y="6" width="6" height="2" fill="#adb5bd"/><rect x="2" y="10" width="10" height="2" fill="#adb5bd"/><path d="M12 3v8M12 3l-2 2M12 3l2 2" stroke="#6c757d" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>)svg";
+
+// System Package icon (grayed package)
+inline constexpr const char SYSTEM_PACKAGE_SVG[] = R"svg(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><rect x="2" y="3" width="12" height="10" rx="1" fill="#adb5bd" stroke="#6c757d" stroke-width="1"/><rect x="4" y="5" width="3" height="2.5" fill="#dee2e6"/><rect x="9" y="5" width="3" height="2.5" fill="#dee2e6"/><rect x="4" y="8.5" width="3" height="2.5" fill="#dee2e6"/><rect x="9" y="8.5" width="3" height="2.5" fill="#dee2e6"/></svg>)svg";
+
+// System Role icon (grayed shield)
+inline constexpr const char SYSTEM_ROLE_SVG[] = R"svg(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M8 1L2 4v4c0 4 2.5 6.5 6 7 3.5-.5 6-3 6-7V4L8 1z" fill="#adb5bd" stroke="#6c757d" stroke-width="1"/><circle cx="8" cy="7" r="1.5" fill="#dee2e6"/><path d="M8 8.5v3" stroke="#dee2e6" stroke-width="1.5" stroke-linecap="round"/></svg>)svg";
 
 }  // namespace scratchrobin::res

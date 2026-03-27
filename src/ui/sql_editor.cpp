@@ -101,8 +101,46 @@ void SqlSyntaxHighlighter::setupRules() {
 }
 
 void SqlSyntaxHighlighter::setColorScheme(const QString& scheme) {
-  Q_UNUSED(scheme)
-  // TODO: Implement different color schemes (light, dark)
+  // Clear existing rules
+  rules_.clear();
+  
+  if (scheme == "dark") {
+    // Dark theme colors
+    keywordFormat_.setForeground(QColor(255, 121, 198));    // Pink
+    keywordFormat_.setFontWeight(QFont::Bold);
+    
+    stringFormat_.setForeground(QColor(241, 250, 140));     // Yellow
+    
+    commentFormat_.setForeground(QColor(98, 114, 164));     // Gray
+    commentFormat_.setFontItalic(true);
+    
+    numberFormat_.setForeground(QColor(189, 147, 249));     // Purple
+    
+    functionFormat_.setForeground(QColor(80, 250, 123));    // Green
+    
+    operatorFormat_.setForeground(QColor(139, 233, 253));   // Cyan
+  } else {
+    // Light theme colors (default)
+    keywordFormat_.setForeground(QColor(0, 0, 255));        // Blue
+    keywordFormat_.setFontWeight(QFont::Bold);
+    
+    stringFormat_.setForeground(QColor(0, 128, 0));         // Green
+    
+    commentFormat_.setForeground(QColor(128, 128, 128));    // Gray
+    commentFormat_.setFontItalic(true);
+    
+    numberFormat_.setForeground(QColor(255, 0, 0));         // Red
+    
+    functionFormat_.setForeground(QColor(0, 128, 128));     // Teal
+    
+    operatorFormat_.setForeground(QColor(0, 0, 128));       // Navy
+  }
+  
+  // Rebuild rules with new colors
+  setupRules();
+  
+  // Re-highlight the entire document
+  rehighlight();
 }
 
 void SqlSyntaxHighlighter::highlightBlock(const QString& text) {

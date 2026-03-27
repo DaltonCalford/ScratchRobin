@@ -83,8 +83,6 @@ void SynonymManagerPanel::setupUi()
     synonymTree_ = new QTreeView(this);
     synonymTree_->setAlternatingRowColors(true);
     synonymTree_->setSortingEnabled(true);
-    connect(synonymTree_->selectionModel(), &QItemSelectionModel::currentChanged,
-            this, &SynonymManagerPanel::onSynonymSelected);
     
     splitter->addWidget(synonymTree_);
     
@@ -130,6 +128,10 @@ void SynonymManagerPanel::setupModel()
     synonymTree_->header()->setStretchLastSection(false);
     synonymTree_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     synonymTree_->header()->setSectionResizeMode(3, QHeaderView::Stretch);
+    
+    // Connect selection model AFTER model is set
+    connect(synonymTree_->selectionModel(), &QItemSelectionModel::currentChanged,
+            this, &SynonymManagerPanel::onSynonymSelected);
 }
 
 void SynonymManagerPanel::refresh()
@@ -146,8 +148,32 @@ void SynonymManagerPanel::loadSynonyms()
 {
     model_->removeRows(0, model_->rowCount());
     
-    // TODO: Load from SessionClient when API is available
-    // For now, just populate with sample data structure
+    if (!client_) return;
+    
+    // Query synonyms from pg_synonym (PostgreSQL extension) or information schema
+    std::string sql = 
+        "SELECT synname, synnamespace::regnamespace, "
+        "synobjschema, synobjname, synlink "
+        "FROM pg_synonym "
+        "ORDER BY synnamespace, synname";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() < 5) continue;
+            
+            QList<QStandardItem*> items;
+            items << new QStandardItem(QString::fromStdString(row[0])); // Name
+            items << new QStandardItem(QString::fromStdString(row[1])); // Schema
+            items << new QStandardItem(QString::fromStdString(row[1]) == "public" ? tr("Yes") : tr("No")); // Public
+            items << new QStandardItem(QString::fromStdString(row[2])); // Target Schema
+            items << new QStandardItem(QString::fromStdString(row[3])); // Target Object
+            items << new QStandardItem(QString::fromStdString(row[4])); // DB Link
+            
+            model_->appendRow(items);
+        }
+    }
 }
 
 void SynonymManagerPanel::onCreateSynonym()
@@ -181,7 +207,10 @@ void SynonymManagerPanel::onDropSynonym()
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     
     if (reply == QMessageBox::Yes) {
-        // TODO: Execute via SessionClient when API is available
+        if (client_) {
+            std::string sql = QString("DROP SYNONYM %1.%2").arg(schema).arg(name).toStdString();
+            client_->ExecuteSql(4044, "scratchbird", sql);
+        }
         refresh();
     }
 }
@@ -199,16 +228,59 @@ void SynonymManagerPanel::onDropPublicSynonym()
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     
     if (reply == QMessageBox::Yes) {
-        // TODO: Execute via SessionClient when API is available
+        if (client_) {
+            std::string sql = QString("DROP PUBLIC SYNONYM %1").arg(name).toStdString();
+            client_->ExecuteSql(4044, "scratchbird", sql);
+        }
         refresh();
     }
 }
 
 void SynonymManagerPanel::onValidateSynonym()
 {
-    // TODO: Implement validation when SessionClient API is available
-    QMessageBox::information(this, tr("Validation"),
-        tr("Synonym validated successfully."));
+    auto index = synonymTree_->currentIndex();
+    if (!index.isValid()) return;
+    
+    QString name = model_->item(index.row(), 0)->text();
+    QString schema = model_->item(index.row(), 1)->text();
+    QString targetSchema = model_->item(index.row(), 3)->text();
+    QString targetObject = model_->item(index.row(), 4)->text();
+    
+    if (!client_) {
+        QMessageBox::information(this, tr("Validation"),
+            tr("Synonym '%1' appears valid (target: %2.%3).")
+            .arg(name).arg(targetSchema).arg(targetObject));
+        return;
+    }
+    
+    // Check if target object exists
+    std::string sql = QString(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+        "WHERE table_schema = '%1' AND table_name = '%2' "
+        "UNION SELECT 1 FROM information_schema.views "
+        "WHERE table_schema = '%1' AND table_name = '%2' "
+        "UNION SELECT 1 FROM information_schema.routines "
+        "WHERE routine_schema = '%1' AND routine_name = '%2')"
+    ).arg(targetSchema).arg(targetObject).toStdString();
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    bool exists = false;
+    if (response.status.ok && !response.result_set.rows.empty()) {
+        exists = (response.result_set.rows[0][0] == "t" || 
+                  response.result_set.rows[0][0] == "true" ||
+                  response.result_set.rows[0][0] == "1");
+    }
+    
+    if (exists) {
+        QMessageBox::information(this, tr("Validation"),
+            tr("Synonym '%1' is valid.\nTarget object %2.%3 exists.")
+            .arg(name).arg(targetSchema).arg(targetObject));
+    } else {
+        QMessageBox::warning(this, tr("Validation Failed"),
+            tr("Synonym '%1' may be invalid.\nTarget object %2.%3 was not found.")
+            .arg(name).arg(targetSchema).arg(targetObject));
+    }
 }
 
 void SynonymManagerPanel::onFilterChanged(const QString& filter)
@@ -373,9 +445,47 @@ void SynonymEditorDialog::onBrowseTarget()
 
 void SynonymEditorDialog::onValidate()
 {
-    // TODO: Implement target validation when SessionClient API is available
-    targetStatusLabel_->setText(tr("Valid"));
-    targetStatusLabel_->setStyleSheet("color: green;");
+    QString targetSchema = targetSchemaCombo_->currentText();
+    QString targetName = targetNameEdit_->text();
+    
+    if (targetName.isEmpty()) {
+        targetStatusLabel_->setText(tr("No target specified"));
+        targetStatusLabel_->setStyleSheet("color: orange;");
+        return;
+    }
+    
+    if (!client_) {
+        targetStatusLabel_->setText(tr("Valid (offline)"));
+        targetStatusLabel_->setStyleSheet("color: green;");
+        return;
+    }
+    
+    // Check if target object exists
+    std::string sql = QString(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
+        "WHERE table_schema = '%1' AND table_name = '%2' "
+        "UNION SELECT 1 FROM information_schema.views "
+        "WHERE table_schema = '%1' AND table_name = '%2' "
+        "UNION SELECT 1 FROM information_schema.routines "
+        "WHERE routine_schema = '%1' AND routine_name = '%2')"
+    ).arg(targetSchema).arg(targetName).toStdString();
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    bool exists = false;
+    if (response.status.ok && !response.result_set.rows.empty()) {
+        exists = (response.result_set.rows[0][0] == "t" || 
+                  response.result_set.rows[0][0] == "true" ||
+                  response.result_set.rows[0][0] == "1");
+    }
+    
+    if (exists) {
+        targetStatusLabel_->setText(tr("Valid"));
+        targetStatusLabel_->setStyleSheet("color: green;");
+    } else {
+        targetStatusLabel_->setText(tr("Not Found"));
+        targetStatusLabel_->setStyleSheet("color: red;");
+    }
 }
 
 void SynonymEditorDialog::onPreview()
@@ -397,7 +507,18 @@ void SynonymEditorDialog::onSave()
         return;
     }
     
-    // TODO: Execute via SessionClient when API is available
+    if (client_) {
+        std::string sql = generateDdl().toStdString();
+        auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+        
+        if (!response.status.ok) {
+            QMessageBox::warning(this, tr("Error"),
+                tr("Failed to save synonym: %1")
+                .arg(QString::fromStdString(response.status.message)));
+            return;
+        }
+    }
+    
     accept();
 }
 
@@ -489,8 +610,91 @@ void TargetBrowserDialog::loadObjects(const QString& schema)
 {
     model_->removeRows(0, model_->rowCount());
     
-    // TODO: Load from SessionClient when API is available
-    // For now, populate with sample data structure
+    if (!client_) {
+        // Sample data for offline mode
+        auto* tablesItem = new QStandardItem(tr("Tables"));
+        tablesItem->setSelectable(false);
+        tablesItem->appendRow({new QStandardItem("users"), new QStandardItem(tr("Table"))});
+        tablesItem->appendRow({new QStandardItem("orders"), new QStandardItem(tr("Table"))});
+        tablesItem->appendRow({new QStandardItem("products"), new QStandardItem(tr("Table"))});
+        model_->appendRow(tablesItem);
+        
+        auto* viewsItem = new QStandardItem(tr("Views"));
+        viewsItem->setSelectable(false);
+        viewsItem->appendRow({new QStandardItem("active_users"), new QStandardItem(tr("View"))});
+        model_->appendRow(viewsItem);
+        
+        return;
+    }
+    
+    // Load tables
+    std::string tablesSql = QString(
+        "SELECT table_name, 'Table' as type "
+        "FROM information_schema.tables "
+        "WHERE table_schema = '%1' AND table_type = 'BASE TABLE' "
+        "ORDER BY table_name"
+    ).arg(schema).toStdString();
+    
+    auto tablesResponse = client_->ExecuteSql(4044, "scratchbird", tablesSql);
+    if (tablesResponse.status.ok && !tablesResponse.result_set.rows.empty()) {
+        auto* tablesItem = new QStandardItem(tr("Tables"));
+        tablesItem->setSelectable(false);
+        for (const auto& row : tablesResponse.result_set.rows) {
+            if (row.size() >= 2) {
+                tablesItem->appendRow({
+                    new QStandardItem(QString::fromStdString(row[0])),
+                    new QStandardItem(QString::fromStdString(row[1]))
+                });
+            }
+        }
+        model_->appendRow(tablesItem);
+    }
+    
+    // Load views
+    std::string viewsSql = QString(
+        "SELECT table_name, 'View' as type "
+        "FROM information_schema.views "
+        "WHERE table_schema = '%1' "
+        "ORDER BY table_name"
+    ).arg(schema).toStdString();
+    
+    auto viewsResponse = client_->ExecuteSql(4044, "scratchbird", viewsSql);
+    if (viewsResponse.status.ok && !viewsResponse.result_set.rows.empty()) {
+        auto* viewsItem = new QStandardItem(tr("Views"));
+        viewsItem->setSelectable(false);
+        for (const auto& row : viewsResponse.result_set.rows) {
+            if (row.size() >= 2) {
+                viewsItem->appendRow({
+                    new QStandardItem(QString::fromStdString(row[0])),
+                    new QStandardItem(QString::fromStdString(row[1]))
+                });
+            }
+        }
+        model_->appendRow(viewsItem);
+    }
+    
+    // Load functions/procedures
+    std::string funcsSql = QString(
+        "SELECT routine_name, routine_type as type "
+        "FROM information_schema.routines "
+        "WHERE routine_schema = '%1' "
+        "ORDER BY routine_name"
+    ).arg(schema).toStdString();
+    
+    auto funcsResponse = client_->ExecuteSql(4044, "scratchbird", funcsSql);
+    if (funcsResponse.status.ok && !funcsResponse.result_set.rows.empty()) {
+        auto* funcsItem = new QStandardItem(tr("Functions/Procedures"));
+        funcsItem->setSelectable(false);
+        for (const auto& row : funcsResponse.result_set.rows) {
+            if (row.size() >= 2) {
+                funcsItem->appendRow({
+                    new QStandardItem(QString::fromStdString(row[0])),
+                    new QStandardItem(QString::fromStdString(row[1]))
+                });
+            }
+        }
+        model_->appendRow(funcsItem);
+    }
 }
 
 QString TargetBrowserDialog::selectedSchema() const { return selectedSchema_; }

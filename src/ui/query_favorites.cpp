@@ -900,17 +900,52 @@ void QuickFavoritesWidget::loadFavorites() {
     favoritesCombo_->clear();
     favoritesCombo_->addItem(tr("Favorites..."));
     
-    // TODO: Load from storage
-    favoritesCombo_->addItem(tr("Daily Sales"), "fav1");
-    favoritesCombo_->addItem(tr("Active Users"), "fav2");
+    // Load from storage
+    if (storage_) {
+        auto favorites = storage_->search(QString(), QDateTime(), QDateTime(), true);
+        for (const auto& entry : favorites) {
+            // Truncate SQL for display if too long
+            QString displayName = entry.sql;
+            if (displayName.length() > 50) {
+                displayName = displayName.left(50) + "...";
+            }
+            favoritesCombo_->addItem(displayName, entry.id);
+        }
+    }
+    
+    // Add defaults if no favorites found
+    if (favoritesCombo_->count() == 1) {
+        favoritesCombo_->addItem(tr("Daily Sales"), "fav1");
+        favoritesCombo_->addItem(tr("Active Users"), "fav2");
+    }
 }
 
 void QuickFavoritesWidget::onFavoriteSelected(int index) {
     if (index <= 0) return;
     
-    QString queryId = favoritesCombo_->itemData(index).toString();
-    // TODO: Get SQL from storage and emit
-    emit favoriteExecuteRequested("SELECT * FROM...");
+    QVariant queryIdVar = favoritesCombo_->itemData(index);
+    
+    // Check if it's a stored ID (qint64) or a string placeholder
+    if (queryIdVar.typeId() == QMetaType::LongLong) {
+        qint64 queryId = queryIdVar.toLongLong();
+        if (storage_) {
+            auto entry = storage_->getEntry(queryId);
+            if (!entry.sql.isEmpty()) {
+                emit favoriteExecuteRequested(entry.sql);
+                return;
+            }
+        }
+    }
+    
+    // Fallback for demo items
+    QString queryId = queryIdVar.toString();
+    if (queryId == "fav1") {
+        emit favoriteExecuteRequested("SELECT * FROM sales WHERE date = CURRENT_DATE");
+    } else if (queryId == "fav2") {
+        emit favoriteExecuteRequested("SELECT * FROM users WHERE active = 1");
+    } else {
+        emit favoriteExecuteRequested("SELECT * FROM...");
+    }
 }
 
 void QuickFavoritesWidget::onAddCurrentQuery() {
@@ -1108,8 +1143,32 @@ void FavoritesImportExportDialog::importFromFile(const QString& fileName) {
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
     QJsonObject root = doc.object();
     
-    // TODO: Parse and add to favorites
-    Q_UNUSED(root)
+    // Parse and add to favorites
+    QJsonArray queriesArray = root["queries"].toArray();
+    
+    int importCount = 0;
+    for (const auto& queryVal : queriesArray) {
+        QJsonObject queryObj = queryVal.toObject();
+        
+        FavoriteQuery query;
+        query.id = "fav_imported_" + QString::number(importCount + 1);
+        query.name = queryObj["name"].toString();
+        query.sql = queryObj["sql"].toString();
+        query.description = queryObj["description"].toString();
+        query.folderId = queryObj["folderId"].toString();
+        
+        QJsonArray tagsArray = queryObj["tags"].toArray();
+        for (const auto& tagVal : tagsArray) {
+            query.tags.append(tagVal.toString());
+        }
+        
+        query.createdAt = QDateTime::currentDateTime();
+        query.modifiedAt = QDateTime::currentDateTime();
+        query.executionCount = 0;
+        
+        queries_.append(query);
+        importCount++;
+    }
 }
 
 } // namespace scratchrobin::ui

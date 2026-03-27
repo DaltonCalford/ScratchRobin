@@ -18,6 +18,8 @@
 #include <QTabWidget>
 #include <QMessageBox>
 #include <QFileDialog>
+#include <QFile>
+#include <QTextStream>
 #include <QHeaderView>
 #include <QSpinBox>
 #include <QListWidget>
@@ -168,39 +170,100 @@ void DataGeneratorPanel::loadTables() {
     tableModel_->appendRow(root);
     
     auto* tables = new QStandardItem("Tables");
-    tables->appendRow(new QStandardItem("customers"));
-    tables->appendRow(new QStandardItem("orders"));
-    tables->appendRow(new QStandardItem("products"));
-    tables->appendRow(new QStandardItem("users"));
-    root->appendRow(tables);
     
+    if (client_) {
+        // Load actual tables from database
+        std::string sql = 
+            "SELECT n.nspname || '.' || c.relname as full_name "
+            "FROM pg_class c "
+            "JOIN pg_namespace n ON c.relnamespace = n.oid "
+            "WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog', 'information_schema') "
+            "ORDER BY n.nspname, c.relname";
+        
+        auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+        
+        if (response.status.ok) {
+            for (const auto& row : response.result_set.rows) {
+                if (!row.empty()) {
+                    tables->appendRow(new QStandardItem(QString::fromStdString(row[0])));
+                }
+            }
+        }
+    }
+    
+    // Add sample tables if none loaded
+    if (tables->rowCount() == 0) {
+        tables->appendRow(new QStandardItem("customers"));
+        tables->appendRow(new QStandardItem("orders"));
+        tables->appendRow(new QStandardItem("products"));
+        tables->appendRow(new QStandardItem("users"));
+    }
+    
+    root->appendRow(tables);
     tableTree_->expandAll();
 }
 
 void DataGeneratorPanel::loadColumns(const QString& tableName) {
-    Q_UNUSED(tableName)
-    
     columnTable_->setRowCount(0);
     
-    QStringList columns = {"id", "name", "email", "phone", "created_at", "status"};
-    QStringList types = {"serial", "varchar", "varchar", "varchar", "timestamp", "varchar"};
+    if (!client_ || tableName.isEmpty()) {
+        // Use sample columns
+        QStringList columns = {"id", "name", "email", "phone", "created_at", "status"};
+        QStringList types = {"serial", "varchar", "varchar", "varchar", "timestamp", "varchar"};
+        
+        for (int i = 0; i < columns.size(); ++i) {
+            int row = columnTable_->rowCount();
+            columnTable_->insertRow(row);
+            
+            columnTable_->setItem(row, 0, new QTableWidgetItem(columns[i]));
+            columnTable_->setItem(row, 1, new QTableWidgetItem(types[i]));
+            
+            auto* genCombo = new QComboBox(this);
+            genCombo->addItems({"Auto", "First Name", "Last Name", "Email", "Phone", "Date", "Random Int", "Sequence"});
+            columnTable_->setCellWidget(row, 2, genCombo);
+            
+            auto* nullSpin = new QSpinBox(this);
+            nullSpin->setRange(0, 100);
+            nullSpin->setValue(0);
+            nullSpin->setSuffix("%");
+            columnTable_->setCellWidget(row, 3, nullSpin);
+        }
+        return;
+    }
     
-    for (int i = 0; i < columns.size(); ++i) {
-        int row = columnTable_->rowCount();
-        columnTable_->insertRow(row);
-        
-        columnTable_->setItem(row, 0, new QTableWidgetItem(columns[i]));
-        columnTable_->setItem(row, 1, new QTableWidgetItem(types[i]));
-        
-        auto* genCombo = new QComboBox(this);
-        genCombo->addItems({"Auto", "First Name", "Last Name", "Email", "Phone", "Date", "Random Int", "Sequence"});
-        columnTable_->setCellWidget(row, 2, genCombo);
-        
-        auto* nullSpin = new QSpinBox(this);
-        nullSpin->setRange(0, 100);
-        nullSpin->setValue(0);
-        nullSpin->setSuffix("%");
-        columnTable_->setCellWidget(row, 3, nullSpin);
+    // Load actual columns from database
+    std::string sql = QString(
+        "SELECT a.attname, pg_catalog.format_type(a.atttypid, a.atttypmod) "
+        "FROM pg_attribute a "
+        "JOIN pg_class c ON a.attrelid = c.oid "
+        "JOIN pg_namespace n ON c.relnamespace = n.oid "
+        "WHERE n.nspname || '.' || c.relname = '%1' "
+        "AND a.attnum > 0 AND NOT a.attisdropped "
+        "ORDER BY a.attnum"
+    ).arg(tableName).toStdString();
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() < 2) continue;
+            
+            int r = columnTable_->rowCount();
+            columnTable_->insertRow(r);
+            
+            columnTable_->setItem(r, 0, new QTableWidgetItem(QString::fromStdString(row[0])));
+            columnTable_->setItem(r, 1, new QTableWidgetItem(QString::fromStdString(row[1])));
+            
+            auto* genCombo = new QComboBox(this);
+            genCombo->addItems({"Auto", "First Name", "Last Name", "Email", "Phone", "Date", "Random Int", "Sequence", "UUID"});
+            columnTable_->setCellWidget(r, 2, genCombo);
+            
+            auto* nullSpin = new QSpinBox(this);
+            nullSpin->setRange(0, 100);
+            nullSpin->setValue(0);
+            nullSpin->setSuffix("%");
+            columnTable_->setCellWidget(r, 3, nullSpin);
+        }
     }
 }
 
@@ -246,6 +309,7 @@ void DataGeneratorPanel::onTableSelected(const QModelIndex& index) {
 
 void DataGeneratorPanel::onRefreshTables() {
     loadTables();
+    statusLabel_->setText(tr("Table list refreshed"));
 }
 
 void DataGeneratorPanel::onConfigureGenerators() {
@@ -764,17 +828,43 @@ void PreviewDataDialog::generatePreview() {
 }
 
 void PreviewDataDialog::onRefresh() {
-    // TODO: Implement refresh
     generatePreview();
 }
 
 void PreviewDataDialog::onExport() {
-    // TODO: Implement export
     QString fileName = QFileDialog::getSaveFileName(this, tr("Export Preview"),
         QString(), tr("CSV Files (*.csv);;All Files (*)"));
-    if (!fileName.isEmpty()) {
-        QMessageBox::information(this, tr("Export"), tr("Data exported to %1").arg(fileName));
+    
+    if (fileName.isEmpty()) return;
+    
+    QFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, tr("Export Error"),
+            tr("Could not open file for writing: %1").arg(fileName));
+        return;
     }
+    
+    QTextStream stream(&file);
+    
+    // Write headers
+    QStringList headers;
+    for (int col = 0; col < previewModel_->columnCount(); ++col) {
+        headers << previewModel_->headerData(col, Qt::Horizontal).toString();
+    }
+    stream << headers.join(",") << "\n";
+    
+    // Write data
+    for (int row = 0; row < previewModel_->rowCount(); ++row) {
+        QStringList values;
+        for (int col = 0; col < previewModel_->columnCount(); ++col) {
+            auto* item = previewModel_->item(row, col);
+            values << (item ? item->text() : "");
+        }
+        stream << values.join(",") << "\n";
+    }
+    
+    file.close();
+    QMessageBox::information(this, tr("Export"), tr("Data exported to %1").arg(fileName));
 }
 
 } // namespace scratchrobin::ui

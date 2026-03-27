@@ -25,12 +25,48 @@ find_library(SCRATCHBIRD_CLIENT_LIB
     NO_DEFAULT_PATH
 )
 
+# Find ScratchBird SBLR compiler libraries
+find_library(SCRATCHBIRD_SBLR_LIB 
+    NAMES scratchbird_sblr 
+    PATHS "${SCRATCHBIRD_SOURCE_DIR}/build/src"
+    NO_DEFAULT_PATH
+)
+
+find_library(SCRATCHBIRD_COMPILER_LIB 
+    NAMES scratchbird_compiler 
+    PATHS "${SCRATCHBIRD_SOURCE_DIR}/build/src"
+    NO_DEFAULT_PATH
+)
+
+find_library(SCRATCHBIRD_CORE_LIB 
+    NAMES scratchbird_core 
+    PATHS "${SCRATCHBIRD_SOURCE_DIR}/build/src"
+    NO_DEFAULT_PATH
+)
+
+find_library(SCRATCHBIRD_PARSER_LIB 
+    NAMES scratchbird_parser 
+    PATHS "${SCRATCHBIRD_SOURCE_DIR}/build/src"
+    NO_DEFAULT_PATH
+)
+
 if(SCRATCHBIRD_CLIENT_LIB)
     message(STATUS "ScratchBird client library found: ${SCRATCHBIRD_CLIENT_LIB}")
     set(SCRATCHBIRD_FOUND TRUE)
 else()
     message(WARNING "ScratchBird client library not found - building with mock implementation")
     set(SCRATCHBIRD_FOUND FALSE)
+endif()
+
+# Check for SBLR compiler libraries
+if(SCRATCHBIRD_SBLR_LIB AND SCRATCHBIRD_COMPILER_LIB)
+    message(STATUS "ScratchBird SBLR compiler found:")
+    message(STATUS "  - ${SCRATCHBIRD_SBLR_LIB}")
+    message(STATUS "  - ${SCRATCHBIRD_COMPILER_LIB}")
+    set(SCRATCHBIRD_SBLR_COMPILER_FOUND TRUE)
+else()
+    message(STATUS "ScratchBird SBLR compiler not found - using placeholder compilation")
+    set(SCRATCHBIRD_SBLR_COMPILER_FOUND FALSE)
 endif()
 
 # ScratchBird include directories
@@ -63,6 +99,7 @@ set(SCRATCHROBIN_BACKEND_SOURCES
     core/window_state_manager.cpp
     core/performance_profiler.cpp
     core/sql_utils.cpp
+    core/async_query_executor.cpp
 )
 
 add_library(scratchrobin_backend STATIC ${SCRATCHROBIN_BACKEND_SOURCES})
@@ -78,6 +115,7 @@ target_link_libraries(scratchrobin_backend PUBLIC
     Qt6::Gui
     Qt6::Widgets
     Threads::Threads
+    uuid
 )
 
 # Link ScratchBird client if found
@@ -91,6 +129,23 @@ if(SCRATCHBIRD_FOUND)
     message(STATUS "ScratchBird integration enabled")
 else()
     target_compile_definitions(scratchrobin_backend PUBLIC SCRATCHBIRD_CLIENT_AVAILABLE=0)
+endif()
+
+# Link ScratchBird SBLR compiler if found
+if(SCRATCHBIRD_SBLR_COMPILER_FOUND)
+    # Use linker group to handle circular dependencies between parser and sblr
+    target_link_libraries(scratchrobin_backend PUBLIC 
+        -Wl,--start-group
+        ${SCRATCHBIRD_SBLR_LIB}
+        ${SCRATCHBIRD_COMPILER_LIB}
+        ${SCRATCHBIRD_CORE_LIB}
+        ${SCRATCHBIRD_PARSER_LIB}
+        -Wl,--end-group
+    )
+    target_compile_definitions(scratchrobin_backend PUBLIC SCRATCHROBIN_WITH_SBLR_COMPILER=1)
+    message(STATUS "ScratchBird SBLR compiler integration enabled")
+else()
+    target_compile_definitions(scratchrobin_backend PUBLIC SCRATCHROBIN_WITH_SBLR_COMPILER=0)
 endif()
 
 target_compile_definitions(scratchrobin_backend PUBLIC
@@ -120,6 +175,7 @@ set(SCRATCHROBIN_UI_SOURCES
     ui/sql_editor.cpp
     ui/connection_dialog.cpp
     ui/data_grid.cpp
+    ui/csv_import_dialog.cpp
     ui/preferences_dialog.cpp
     ui/preferences_dialog_tabs.cpp
     ui/er_diagram_widget.cpp
@@ -209,6 +265,12 @@ add_library(scratchrobin_ui STATIC ${SCRATCHROBIN_UI_SOURCES})
 target_include_directories(scratchrobin_ui PUBLIC ${PROJECT_SOURCE_DIR}/src)
 
 target_link_libraries(scratchrobin_ui PUBLIC scratchrobin_backend Qt6::Core Qt6::Gui Qt6::Widgets Qt6::PrintSupport)
+
+# Link QXlsx if enabled
+if(SCRATCHROBIN_ENABLE_EXCEL)
+    target_link_libraries(scratchrobin_ui PUBLIC QXlsx::QXlsx)
+    target_compile_definitions(scratchrobin_ui PUBLIC SCRATCHROBIN_WITH_QXLSX=1)
+endif()
 
 set_target_properties(scratchrobin_ui PROPERTIES
     CXX_STANDARD 20

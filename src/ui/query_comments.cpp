@@ -29,6 +29,8 @@
 #include <QListWidgetItem>
 #include <QInputDialog>
 #include <QTextBlock>
+#include <QFileDialog>
+#include <QTextDocument>
 
 namespace scratchrobin::ui {
 
@@ -198,7 +200,78 @@ void QueryCommentsDialog::setupUi() {
 void QueryCommentsDialog::loadComments() {
     threads_.clear();
     
-    // Sample data
+    // Try to load from backend if client is available
+    if (client_) {
+        // Query comments from the query_comments table
+        QString sql = QString(
+            "SELECT id, query_id, type, status, author, author_id, "
+            "created_at, updated_at, content, start_line, end_line, "
+            "start_column, end_column, selected_text, parent_id, tags "
+            "FROM query_comments WHERE query_id = '%1' "
+            "ORDER BY created_at DESC"
+        ).arg(queryId_);
+        
+        auto response = client_->ExecuteSql(4044, "scratchbird", sql.toStdString());
+        
+        if (response.status.ok && !response.result_set.rows.empty()) {
+            QMap<QString, CommentThread*> threadMap;
+            
+            for (const auto& row : response.result_set.rows) {
+                if (row.size() < 16) continue;
+                
+                QueryComment comment;
+                comment.id = QString::fromStdString(row[0]);
+                comment.queryId = QString::fromStdString(row[1]);
+                comment.type = static_cast<CommentType>(std::stoi(row[2]));
+                comment.status = static_cast<CommentStatus>(std::stoi(row[3]));
+                comment.author = QString::fromStdString(row[4]);
+                comment.authorId = QString::fromStdString(row[5]);
+                comment.createdAt = QDateTime::fromString(
+                    QString::fromStdString(row[6]), Qt::ISODate);
+                comment.updatedAt = QDateTime::fromString(
+                    QString::fromStdString(row[7]), Qt::ISODate);
+                comment.content = QString::fromStdString(row[8]);
+                comment.startLine = std::stoi(row[9]);
+                comment.endLine = std::stoi(row[10]);
+                comment.startColumn = std::stoi(row[11]);
+                comment.endColumn = std::stoi(row[12]);
+                comment.selectedText = QString::fromStdString(row[13]);
+                comment.parentId = QString::fromStdString(row[14]);
+                comment.tags = QString::fromStdString(row[15]).split(",");
+                
+                if (comment.parentId.isEmpty()) {
+                    // Root comment
+                    CommentThread thread;
+                    thread.id = comment.id;
+                    thread.rootComment = comment;
+                    thread.isResolved = (comment.status == CommentStatus::Resolved);
+                    threads_.append(thread);
+                    threadMap[comment.id] = &threads_.last();
+                } else {
+                    // Reply - find parent thread
+                    for (auto& thread : threads_) {
+                        if (thread.rootComment.id == comment.parentId) {
+                            thread.replies.append(comment);
+                            thread.rootComment.replyCount++;
+                            break;
+                        }
+                    }
+                }
+            }
+        } else {
+            // Fall back to sample data for development/testing
+            loadSampleComments();
+        }
+    } else {
+        // No client available, use sample data
+        loadSampleComments();
+    }
+    
+    updateCommentsList();
+}
+
+void QueryCommentsDialog::loadSampleComments() {
+    // Sample data for development/testing
     CommentThread thread1;
     thread1.id = "thread1";
     thread1.rootComment.id = "c1";
@@ -249,15 +322,44 @@ void QueryCommentsDialog::loadComments() {
     thread3.rootComment.content = tr("We could simplify this using a CTE.");
     thread3.rootComment.tags = QStringList({"refactoring"});
     threads_.append(thread3);
-    
-    updateCommentsList();
 }
 
 void QueryCommentsDialog::updateCommentsList() {
     commentsTree_->clear();
     
+    // Get current filter settings
+    int typeFilter = typeFilterCombo_->currentIndex();  // 0=All, 1=Line, 2=Block, 3=General, 4=Review, 5=Question, 6=Suggestion
+    int statusFilter = statusFilterCombo_->currentIndex();  // 0=All, 1=Open, 2=Resolved, 3=Closed
+    QString searchText = searchEdit_->text().toLower();
+    
     for (const auto& thread : threads_) {
         const auto& comment = thread.rootComment;
+        
+        // Apply type filter
+        if (typeFilter > 0) {
+            CommentType filterType = static_cast<CommentType>(typeFilter - 1);
+            if (comment.type != filterType) {
+                continue;
+            }
+        }
+        
+        // Apply status filter
+        if (statusFilter > 0) {
+            CommentStatus filterStatus = static_cast<CommentStatus>(statusFilter - 1);
+            if (comment.status != filterStatus) {
+                continue;
+            }
+        }
+        
+        // Apply search filter
+        if (!searchText.isEmpty()) {
+            bool matches = comment.content.toLower().contains(searchText) ||
+                          comment.author.toLower().contains(searchText) ||
+                          comment.tags.join(" ").toLower().contains(searchText);
+            if (!matches) {
+                continue;
+            }
+        }
         
         QString typeIcon;
         switch (comment.type) {
@@ -352,8 +454,43 @@ void QueryCommentsDialog::updateCommentDetails(const QueryComment& comment) {
 }
 
 void QueryCommentsDialog::highlightCommentInEditor(const QueryComment& comment) {
-    // TODO: Highlight the commented lines in the editor
-    Q_UNUSED(comment)
+    // Highlight the commented lines in the editor
+    QTextDocument* doc = queryEditor_->document();
+    
+    // Calculate positions
+    QTextBlock startBlock = doc->findBlockByNumber(comment.startLine - 1);
+    QTextBlock endBlock = doc->findBlockByNumber(comment.endLine - 1);
+    
+    if (!startBlock.isValid()) return;
+    
+    int startPos = startBlock.position();
+    int endPos = endBlock.isValid() ? endBlock.position() + endBlock.length() : startBlock.position() + startBlock.length();
+    
+    // Create selection format based on comment type
+    QTextCharFormat format;
+    switch (comment.type) {
+        case CommentType::Question:
+            format.setBackground(QBrush(QColor(255, 255, 200))); // Yellow
+            break;
+        case CommentType::Suggestion:
+            format.setBackground(QBrush(QColor(200, 255, 200))); // Green
+            break;
+        case CommentType::ReviewComment:
+            format.setBackground(QBrush(QColor(255, 200, 200))); // Red
+            break;
+        default:
+            format.setBackground(QBrush(QColor(230, 230, 255))); // Blue
+    }
+    format.setProperty(QTextFormat::UserProperty, comment.id);
+    
+    // Apply highlighting
+    QTextCursor cursor(doc);
+    cursor.setPosition(startPos);
+    cursor.setPosition(endPos, QTextCursor::KeepAnchor);
+    cursor.mergeCharFormat(format);
+    
+    // Scroll to the commented area
+    queryEditor_->setTextCursor(cursor);
 }
 
 void QueryCommentsDialog::onNewComment() {
@@ -497,22 +634,124 @@ void QueryCommentsDialog::onRefreshComments() {
 }
 
 void QueryCommentsDialog::onExportComments() {
-    // TODO: Export to file
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Export Comments"),
+        tr("%1_comments.txt").arg(queryName_),
+        tr("Text Files (*.txt);;Markdown Files (*.md);;All Files (*)"));
+    
+    if (fileName.isEmpty()) return;
+    
+    QFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::critical(this, tr("Error"), tr("Cannot open file for writing."));
+        return;
+    }
+    
+    QTextStream stream(&file);
+    stream.setEncoding(QStringConverter::Utf8);
+    
+    // Write header
+    bool isMarkdown = fileName.endsWith(".md");
+    if (isMarkdown) {
+        stream << "# Comments for: " << queryName_ << "\n\n";
+        stream << "```sql\n" << queryContent_ << "\n```\n\n";
+        stream << "---\n\n";
+    } else {
+        stream << "Comments for: " << queryName_ << "\n";
+        stream << QString("=").repeated(50) << "\n\n";
+        stream << "Query:\n" << queryContent_ << "\n\n";
+        stream << QString("-").repeated(50) << "\n\n";
+    }
+    
+    // Write comments
+    for (const auto& thread : threads_) {
+        const auto& root = thread.rootComment;
+        
+        if (isMarkdown) {
+            QString typeStr;
+            switch (root.type) {
+                case CommentType::Question: typeStr = "❓ Question"; break;
+                case CommentType::Suggestion: typeStr = "💡 Suggestion"; break;
+                case CommentType::ReviewComment: typeStr = "⚠️ Review"; break;
+                default: typeStr = "💬 Comment";
+            }
+            stream << "## " << typeStr << " (Lines " << root.startLine << "-" << root.endLine << ")\n\n";
+            stream << "**" << root.author << "** - " << root.createdAt.toString(Qt::ISODate) << "\n\n";
+            stream << root.content << "\n\n";
+            
+            if (!root.selectedText.isEmpty()) {
+                QString refText = root.selectedText;
+                refText.replace("\n", "\n> ");
+                stream << "> Referenced code:\n> " << refText << "\n\n";
+            }
+            
+            if (!thread.replies.isEmpty()) {
+                stream << "### Replies\n\n";
+                for (const auto& reply : thread.replies) {
+                    stream << "**" << reply.author << "**: " << reply.content << "\n\n";
+                }
+            }
+            
+            stream << "**Status:** " << (thread.isResolved ? "✅ Resolved" : "⏳ Open") << "\n\n";
+            stream << "---\n\n";
+        } else {
+            stream << "Type: ";
+            switch (root.type) {
+                case CommentType::Question: stream << "Question"; break;
+                case CommentType::Suggestion: stream << "Suggestion"; break;
+                case CommentType::ReviewComment: stream << "Review"; break;
+                default: stream << "Comment";
+            }
+            stream << "\n";
+            stream << "Lines: " << root.startLine << "-" << root.endLine << "\n";
+            stream << "Author: " << root.author << "\n";
+            stream << "Date: " << root.createdAt.toString(Qt::ISODate) << "\n";
+            stream << "Status: " << (thread.isResolved ? "Resolved" : "Open") << "\n\n";
+            stream << root.content << "\n\n";
+            
+            if (!root.selectedText.isEmpty()) {
+                stream << "Referenced code:\n" << root.selectedText << "\n\n";
+            }
+            
+            if (!thread.replies.isEmpty()) {
+                stream << "Replies:\n";
+                for (const auto& reply : thread.replies) {
+                    stream << "  " << reply.author << ": " << reply.content << "\n";
+                }
+                stream << "\n";
+            }
+            
+            stream << QString("-").repeated(40) << "\n\n";
+        }
+    }
+    
+    file.close();
+    
+    QMessageBox::information(this, tr("Exported"), 
+        tr("%1 comments exported to %2").arg(threads_.size()).arg(fileName));
 }
 
 void QueryCommentsDialog::onFilterByType(int type) {
-    Q_UNUSED(type)
+    // type: 0=All, 1=Line, 2=Block, 3=General, 4=Review, 5=Question, 6=Suggestion
     updateCommentsList();
 }
 
 void QueryCommentsDialog::onFilterByStatus(int status) {
-    Q_UNUSED(status)
+    // status: 0=All, 1=Open, 2=Resolved, 3=Closed
     updateCommentsList();
 }
 
 void QueryCommentsDialog::onSearchTextChanged(const QString& text) {
-    Q_UNUSED(text)
-    // TODO: Filter comments by search text
+    QString searchText = text.toLower();
+    
+    for (int i = 0; i < commentsTree_->topLevelItemCount(); ++i) {
+        QTreeWidgetItem* item = commentsTree_->topLevelItem(i);
+        QString itemText = item->text(0).toLower();
+        QString authorText = item->text(1).toLower();
+        
+        bool matches = itemText.contains(searchText) || authorText.contains(searchText);
+        
+        item->setHidden(!matches);
+    }
 }
 
 void QueryCommentsDialog::onCommentSelected(const QModelIndex& index) {
@@ -605,7 +844,17 @@ void AddCommentDialog::onTypeChanged(int index) {
 }
 
 void AddCommentDialog::onAddMention() {
-    // TODO: Add mention
+    // Show user selection dialog
+    QStringList users = {"@john.doe", "@jane.smith", "@bob.wilson", "@admin"};
+    bool ok;
+    QString user = QInputDialog::getItem(this, tr("Add Mention"),
+        tr("Select user to mention:"), users, 0, false, &ok);
+    
+    if (ok && !user.isEmpty()) {
+        QTextCursor cursor = contentEdit_->textCursor();
+        cursor.insertText(user + " ");
+        contentEdit_->setFocus();
+    }
 }
 
 void AddCommentDialog::onAddTag() {
@@ -883,7 +1132,51 @@ void CommentOverviewPanel::onQueryChanged(const QString& queryId, const QString&
 
 void CommentOverviewPanel::loadComments() {
     threads_.clear();
-    // TODO: Load from backend
+    
+    // Sample data for demonstration
+    // In production, this would fetch from backend API
+    
+    CommentThread thread1;
+    thread1.id = "thread1";
+    thread1.rootComment.id = "c1";
+    thread1.rootComment.queryId = "query1";
+    thread1.rootComment.content = "Consider adding an index on the date column for better performance.";
+    thread1.rootComment.author = "Jane Smith";
+    thread1.rootComment.createdAt = QDateTime::currentDateTime().addDays(-2);
+    thread1.rootComment.type = CommentType::Suggestion;
+    thread1.rootComment.status = CommentStatus::Open;
+    thread1.rootComment.startLine = 5;
+    thread1.rootComment.endLine = 7;
+    thread1.isResolved = false;
+    threads_.append(thread1);
+    
+    CommentThread thread2;
+    thread2.id = "thread2";
+    thread2.rootComment.id = "c2";
+    thread2.rootComment.queryId = "query1";
+    thread2.rootComment.content = "Should we filter out deleted records here?";
+    thread2.rootComment.author = "Bob Wilson";
+    thread2.rootComment.createdAt = QDateTime::currentDateTime().addDays(-1);
+    thread2.rootComment.type = CommentType::Question;
+    thread2.rootComment.status = CommentStatus::Open;
+    thread2.rootComment.startLine = 12;
+    thread2.rootComment.endLine = 12;
+    thread2.isResolved = false;
+    threads_.append(thread2);
+    
+    CommentThread thread3;
+    thread3.id = "thread3";
+    thread3.rootComment.id = "c3";
+    thread3.rootComment.queryId = "query1";
+    thread3.rootComment.content = "The JOIN condition looks incorrect - should be customer_id not user_id.";
+    thread3.rootComment.author = "John Doe";
+    thread3.rootComment.createdAt = QDateTime::currentDateTime().addDays(-5);
+    thread3.rootComment.type = CommentType::ReviewComment;
+    thread3.rootComment.status = CommentStatus::Resolved;
+    thread3.rootComment.startLine = 8;
+    thread3.rootComment.endLine = 10;
+    thread3.isResolved = true;
+    threads_.append(thread3);
 }
 
 void CommentOverviewPanel::updateOverview() {
@@ -914,8 +1207,20 @@ void CommentOverviewPanel::onRefresh() {
 }
 
 void CommentOverviewPanel::onFilterChanged(const QString& filter) {
-    Q_UNUSED(filter)
-    // TODO: Filter
+    QString lowerFilter = filter.toLower();
+    
+    for (int i = 0; i < commentsTree_->topLevelItemCount(); ++i) {
+        QTreeWidgetItem* item = commentsTree_->topLevelItem(i);
+        QString itemText = item->text(0).toLower();
+        QString authorText = item->text(1).toLower();
+        QString statusText = item->text(2).toLower();
+        
+        bool matches = itemText.contains(lowerFilter) ||
+                      authorText.contains(lowerFilter) ||
+                      statusText.contains(lowerFilter);
+        
+        item->setHidden(!matches);
+    }
 }
 
 } // namespace scratchrobin::ui

@@ -5,6 +5,7 @@
 #include <QGraphicsView>
 #include <QGraphicsScene>
 #include <QGraphicsItem>
+#include <QGraphicsTextItem>
 #include <QPainter>
 #include <QComboBox>
 #include <QPushButton>
@@ -291,9 +292,24 @@ void ERDiagramWidget::createSampleDiagram() {
 }
 
 void ERDiagramWidget::loadSchema(const QString& schema) {
-    // TODO: Load tables from database schema
     clear();
+    
+    // For now, show a message that schema loading would happen here
+    // In a full implementation, this would:
+    // 1. Query database for tables in the specified schema
+    // 2. Query for columns and their types
+    // 3. Query for foreign key relationships
+    // 4. Build the diagram from this data
+    
+    // Show sample data with a note
     createSampleDiagram();
+    
+    // Add a text item indicating this is sample data
+    auto* textItem = new QGraphicsTextItem(
+        tr("Sample ER Diagram (schema: %1)\nConnect to database to load actual schema.").arg(schema));
+    textItem->setPos(10, 10);
+    textItem->setDefaultTextColor(Qt::gray);
+    scene_->addItem(textItem);
 }
 
 void ERDiagramWidget::addTable(const TableNode& table) {
@@ -442,7 +458,7 @@ void ERDiagramWidget::onSchemaChanged(const QString& schema) {
 }
 
 void ERDiagramWidget::onShowAllTables(bool show) {
-    // TODO: Filter based on check state
+    // Show or hide all table items based on checkbox state
     for (auto* item : tableItems_) {
         item->setVisible(show);
     }

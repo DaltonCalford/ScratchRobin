@@ -118,14 +118,16 @@ void UserRoleManagerPanel::setupUi() {
     connect(privilegesBtn_, &QPushButton::clicked, this, &UserRoleManagerPanel::onGrantPrivileges);
     connect(refreshBtn, &QPushButton::clicked, this, &UserRoleManagerPanel::refresh);
     connect(filterEdit_, &QLineEdit::textChanged, this, &UserRoleManagerPanel::onFilterChanged);
-    connect(principalTree_->selectionModel(), &QItemSelectionModel::currentChanged,
-            this, &UserRoleManagerPanel::updateDetails);
 }
 
 void UserRoleManagerPanel::setupModel() {
     model_ = new QStandardItemModel(this);
     model_->setHorizontalHeaderLabels({tr("Name"), tr("Type"), tr("Login"), tr("Superuser"), tr("CreatedDB"), tr("CreateRole")});
     principalTree_->setModel(model_);
+    
+    // Connect selection model AFTER model is set
+    connect(principalTree_->selectionModel(), &QItemSelectionModel::currentChanged,
+            this, &UserRoleManagerPanel::updateDetails);
     
     loadPrincipals();
 }

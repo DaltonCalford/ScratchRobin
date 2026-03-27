@@ -141,6 +141,30 @@ QStringList DataGrid::selectedRow() const {
   return result;
 }
 
+QStringList DataGrid::headers() const {
+  QStringList result;
+  for (int col = 0; col < model_->columnCount(); ++col) {
+    result.append(model_->headerData(col, Qt::Horizontal).toString());
+  }
+  return result;
+}
+
+QList<QStringList> DataGrid::allData() const {
+  QList<QStringList> result;
+  for (int row = 0; row < proxy_model_->rowCount(); ++row) {
+    QStringList row_data;
+    for (int col = 0; col < proxy_model_->columnCount(); ++col) {
+      row_data.append(proxy_model_->index(row, col).data().toString());
+    }
+    result.append(row_data);
+  }
+  return result;
+}
+
+bool DataGrid::hasData() const {
+  return total_rows_ > 0;
+}
+
 void DataGrid::refresh() {
   emit refresh_btn_->clicked();
 }

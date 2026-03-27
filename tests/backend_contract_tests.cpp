@@ -1,4 +1,5 @@
 #include <cassert>
+#include <iostream>
 
 #include "backend/native_adapter_gateway.h"
 #include "backend/native_parser_compiler.h"
@@ -16,8 +17,21 @@ int main() {
   scratchrobin::backend::NativeAdapterGateway adapter(&registry, &compiler, &session);
   scratchrobin::backend::SessionClient client(&adapter);
 
+  // Configure runtime for ScratchBird connection
+  scratchrobin::backend::ScratchbirdRuntimeConfig config;
+  config.database = "test_db";
+  config.host = "localhost";
+  config.port = 3050;
+  config.mode = scratchrobin::backend::TransportMode::kEmbedded;
+  config.user = "test_user";
+  client.ConfigureRuntime(config);
+
   {
     const auto ok = client.ExecuteSql(4044, "scratchbird-native", "select 1");
+    if (!ok.status.ok) {
+      std::cerr << "Error: " << ok.status.message << std::endl;
+      std::cerr << "Execution path: " << ok.execution_path << std::endl;
+    }
     assert(ok.status.ok);
     assert(ok.execution_path == "server_session::execute_validated_sblr");
   }

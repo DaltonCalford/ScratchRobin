@@ -56,6 +56,10 @@ class ProjectNavigator : public QWidget {
   
   // Drag drop
   void itemDragged(const QString& text);
+  
+  // Connection management
+  void newConnectionRequested();
+  void disconnectRequested(const QString& serverName);
 
  private slots:
   void onFilterTextChanged(const QString& text);

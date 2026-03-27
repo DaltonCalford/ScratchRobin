@@ -27,6 +27,11 @@ class DataGrid : public QWidget {
   
   QString selectedCellValue() const;
   QStringList selectedRow() const;
+  
+  // Export support - get all data
+  QStringList headers() const;
+  QList<QStringList> allData() const;
+  bool hasData() const;
 
  signals:
   void rowDoubleClicked(int row);

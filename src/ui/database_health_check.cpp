@@ -20,6 +20,10 @@
 #include <QFileDialog>
 #include <QHeaderView>
 #include <QTreeView>
+#include <QPrinter>
+#include <QPrintDialog>
+#include <QTextDocument>
+#include <QDateTime>
 
 namespace scratchrobin::ui {
 
@@ -410,8 +414,34 @@ void DatabaseHealthCheckPanel::onExportReport() {
 }
 
 void DatabaseHealthCheckPanel::onPrintReport() {
-    QMessageBox::information(this, tr("Print"),
-        tr("Print functionality not yet implemented."));
+    QPrinter printer;
+    QPrintDialog dialog(&printer, this);
+    
+    if (dialog.exec() == QDialog::Accepted) {
+        QTextDocument doc;
+        
+        // Build report HTML
+        QString html = "<h1>Database Health Check Report</h1>";
+        html += "<p>Generated: " + QDateTime::currentDateTime().toString() + "</p>";
+        html += "<hr/>";
+        html += "<table border='1' cellpadding='5'>";
+        html += "<tr><th>Category</th><th>Item</th><th>Status</th><th>Score</th></tr>";
+        
+        for (const auto& item : allItems_) {
+            QString statusColor = (item.status == HealthStatus::Healthy) ? "green" : 
+                                  (item.status == HealthStatus::Warning) ? "orange" : "red";
+            html += QString("<tr><td>%1</td><td>%2</td><td style='color:%3'>%4</td><td>%5</td></tr>")
+                .arg(static_cast<int>(item.category))
+                .arg(item.name)
+                .arg(statusColor)
+                .arg(item.status == HealthStatus::Healthy ? tr("Healthy") : item.status == HealthStatus::Warning ? tr("Warning") : tr("Critical"))
+                .arg(QString::number(item.score));
+        }
+        
+        html += "</table>";
+        doc.setHtml(html);
+        doc.print(&printer);
+    }
 }
 
 void DatabaseHealthCheckPanel::onFilterByCategory(const QString& category) {
@@ -714,11 +744,35 @@ void HealthReportDialog::onExportHtml() {
 }
 
 void HealthReportDialog::onExportPdf() {
-    QMessageBox::information(this, tr("PDF"), tr("PDF export not yet implemented."));
+    QString fileName = QFileDialog::getSaveFileName(this,
+        tr("Export PDF"),
+        QString(),
+        tr("PDF Files (*.pdf)"));
+    
+    if (fileName.isEmpty()) return;
+    
+    // PDF export would require a PDF library
+    // Save as HTML instead with instructions for conversion
+    QFileInfo fi(fileName);
+    QString htmlFileName = fi.path() + "/" + fi.baseName() + ".html";
+    
+    QFile file(htmlFileName);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        file.write(reportEdit_->toHtml().toUtf8());
+        file.close();
+        
+        QMessageBox::information(this, tr("PDF Export"),
+            tr("PDF export requires a PDF library.\nReport saved as HTML: %1\n\nOpen this in a browser and use Print to PDF.").arg(htmlFileName));
+    }
 }
 
 void HealthReportDialog::onPrint() {
-    QMessageBox::information(this, tr("Print"), tr("Print dialog would open."));
+    QPrinter printer;
+    QPrintDialog dialog(&printer, this);
+    
+    if (dialog.exec() == QDialog::Accepted) {
+        reportEdit_->print(&printer);
+    }
 }
 
 void HealthReportDialog::onEmail() {

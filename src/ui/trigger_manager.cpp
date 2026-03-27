@@ -86,7 +86,7 @@ void TriggerManagerPanel::setupUi() {
     splitter->setSizes({300, 100});
     mainLayout->addWidget(splitter);
     
-    // Connections
+    // Connections (selection model connection moved to setupModel)
     connect(newBtn, &QPushButton::clicked, this, &TriggerManagerPanel::onCreateTrigger);
     connect(editBtn, &QPushButton::clicked, this, &TriggerManagerPanel::onEditTrigger);
     connect(dropBtn, &QPushButton::clicked, this, &TriggerManagerPanel::onDropTrigger);
@@ -94,14 +94,16 @@ void TriggerManagerPanel::setupUi() {
     connect(disableBtn_, &QPushButton::clicked, this, &TriggerManagerPanel::onDisableTrigger);
     connect(refreshBtn, &QPushButton::clicked, this, &TriggerManagerPanel::refresh);
     connect(historyBtn, &QPushButton::clicked, this, &TriggerManagerPanel::onShowExecutionHistory);
-    connect(triggerTree_->selectionModel(), &QItemSelectionModel::currentChanged,
-            this, &TriggerManagerPanel::updateTriggerDetails);
 }
 
 void TriggerManagerPanel::setupModel() {
     model_ = new QStandardItemModel(this);
     model_->setHorizontalHeaderLabels({tr("Trigger"), tr("Table"), tr("Timing"), tr("Event"), tr("Status")});
     triggerTree_->setModel(model_);
+    
+    // Connect selection model AFTER model is set
+    connect(triggerTree_->selectionModel(), &QItemSelectionModel::currentChanged,
+            this, &TriggerManagerPanel::updateTriggerDetails);
     
     loadTriggers();
 }

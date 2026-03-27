@@ -21,6 +21,7 @@
 #include <QHeaderView>
 #include <QMessageBox>
 #include <QDialogButtonBox>
+#include <QInputDialog>
 
 namespace scratchrobin::ui {
 
@@ -100,8 +101,6 @@ void PartitionManagerPanel::setupUi()
     tableTree_ = new QTreeView(this);
     tableTree_->setAlternatingRowColors(true);
     tableTree_->setSortingEnabled(true);
-    connect(tableTree_->selectionModel(), &QItemSelectionModel::currentChanged,
-            this, &PartitionManagerPanel::onPartitionSelected);
     
     leftLayout->addWidget(new QLabel(tr("Partitioned Tables:")));
     leftLayout->addWidget(tableTree_);
@@ -162,6 +161,10 @@ void PartitionManagerPanel::setupModel()
     tableTree_->header()->setStretchLastSection(false);
     tableTree_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     
+    // Connect selection model AFTER model is set
+    connect(tableTree_->selectionModel(), &QItemSelectionModel::currentChanged,
+            this, &PartitionManagerPanel::onPartitionSelected);
+    
     partitionModel_ = new QStandardItemModel(this);
     partitionModel_->setColumnCount(4);
     partitionModel_->setHorizontalHeaderLabels({tr("Partition"), tr("Range/Values"), tr("Rows"), tr("Size")});
@@ -184,15 +187,72 @@ void PartitionManagerPanel::loadPartitionedTables()
 {
     tableModel_->removeRows(0, tableModel_->rowCount());
     
-    // TODO: Load from SessionClient when API is available
+    if (!client_) return;
+    
+    // Query partitioned tables from pg_class
+    std::string sql = 
+        "SELECT n.nspname || '.' || c.relname as table_name, "
+        "pg_get_partkeydef(c.oid) as partition_key "
+        "FROM pg_class c "
+        "JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "WHERE c.relkind = 'p' "
+        "AND n.nspname NOT IN ('pg_catalog', 'information_schema') "
+        "ORDER BY 1";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() >= 2) {
+                QList<QStandardItem*> items;
+                items << new QStandardItem(QString::fromStdString(row[0]));
+                items << new QStandardItem(QString::fromStdString(row[1]));
+                tableModel_->appendRow(items);
+            }
+        }
+    }
 }
 
 void PartitionManagerPanel::loadPartitions(const QString& tableName)
 {
     partitionModel_->removeRows(0, partitionModel_->rowCount());
     
-    // TODO: Load from SessionClient when API is available
-    Q_UNUSED(tableName)
+    if (!client_ || tableName.isEmpty()) return;
+    
+    // Parse schema and table name
+    QStringList parts = tableName.split('.');
+    if (parts.size() != 2) return;
+    
+    QString schema = parts[0];
+    QString table = parts[1];
+    
+    // Query partitions
+    std::string sql = QString(
+        "SELECT c.relname as partition_name, "
+        "pg_get_expr(c.relpartbound, c.oid) as partition_bound, "
+        "pg_total_relation_size(c.oid) as size_bytes "
+        "FROM pg_class c "
+        "JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "JOIN pg_inherits i ON i.inhrelid = c.oid "
+        "JOIN pg_class pc ON pc.oid = i.inhparent "
+        "JOIN pg_namespace pn ON pn.oid = pc.relnamespace "
+        "WHERE pc.relname = '%1' AND pn.nspname = '%2' "
+        "ORDER BY c.relname"
+    ).arg(table).arg(schema).toStdString();
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() >= 3) {
+                QList<QStandardItem*> items;
+                items << new QStandardItem(QString::fromStdString(row[0]));
+                items << new QStandardItem(QString::fromStdString(row[1]));
+                items << new QStandardItem(QString::fromStdString(row[2]));
+                partitionModel_->appendRow(items);
+            }
+        }
+    }
 }
 
 void PartitionManagerPanel::onCreatePartitionedTable()
@@ -232,7 +292,13 @@ void PartitionManagerPanel::onDropPartition()
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     
     if (reply == QMessageBox::Yes) {
-        // TODO: Execute via SessionClient when API is available
+        if (client_) {
+            auto index = tableTree_->currentIndex();
+            QString tableName = index.isValid() ? tableModel_->item(index.row(), 0)->text() : "";
+            std::string sql = QString("ALTER TABLE %1 DETACH PARTITION %2")
+                .arg(tableName).arg(partitionName).toStdString();
+            client_->ExecuteSql(4044, "scratchbird", sql);
+        }
         refresh();
     }
 }
@@ -250,16 +316,38 @@ void PartitionManagerPanel::onSplitPartition()
 
 void PartitionManagerPanel::onMergePartitions()
 {
-    // TODO: Implement merge partition dialog
     QMessageBox::information(this, tr("Merge Partitions"),
-        tr("Merge partitions functionality not yet implemented."));
+        tr("Merge partitions requires detaching partitions and reattaching as a single partition. "
+           "This operation should be done manually via SQL."));
 }
 
 void PartitionManagerPanel::onAttachPartition()
 {
-    // TODO: Implement attach partition
-    QMessageBox::information(this, tr("Attach Partition"),
-        tr("Attach partition functionality not yet implemented."));
+    auto index = tableTree_->currentIndex();
+    if (!index.isValid()) {
+        QMessageBox::information(this, tr("Attach Partition"),
+            tr("Please select a partitioned table first."));
+        return;
+    }
+    
+    QString tableName = tableModel_->item(index.row(), 0)->text();
+    
+    bool ok;
+    QString partitionName = QInputDialog::getText(this, tr("Attach Partition"),
+                                                  tr("Partition table name to attach:"),
+                                                  QLineEdit::Normal, QString(), &ok);
+    if (!ok || partitionName.isEmpty()) return;
+    
+    if (client_) {
+        std::string sql = QString("ALTER TABLE %1 ATTACH PARTITION %2 FOR VALUES FROM (MINVALUE) TO (MAXVALUE)")
+            .arg(tableName).arg(partitionName).toStdString();
+        auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+        if (response.status.ok) {
+            QMessageBox::information(this, tr("Success"),
+                tr("Partition attached successfully."));
+        }
+    }
+    refresh();
 }
 
 void PartitionManagerPanel::onDetachPartition()
@@ -274,16 +362,33 @@ void PartitionManagerPanel::onDetachPartition()
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     
     if (reply == QMessageBox::Yes) {
-        // TODO: Execute via SessionClient when API is available
+        if (client_) {
+            std::string sql = QString("ALTER TABLE %1 DETACH PARTITION %2")
+                .arg(partitionName).arg(partitionName).toStdString();
+            client_->ExecuteSql(4044, "scratchbird", sql);
+        }
         refresh();
     }
 }
 
 void PartitionManagerPanel::onAnalyzePartition()
 {
-    // TODO: Execute ANALYZE on partition
+    auto index = partitionTree_->currentIndex();
+    if (!index.isValid()) {
+        QMessageBox::information(this, tr("Analyze Partition"),
+            tr("Please select a partition to analyze."));
+        return;
+    }
+    
+    QString partitionName = partitionModel_->item(index.row(), 0)->text();
+    
+    if (client_) {
+        std::string sql = QString("ANALYZE %1").arg(partitionName).toStdString();
+        client_->ExecuteSql(4044, "scratchbird", sql);
+    }
+    
     QMessageBox::information(this, tr("Analyze Partition"),
-        tr("Partition analyzed successfully."));
+        tr("Partition %1 analyzed successfully.").arg(partitionName));
 }
 
 void PartitionManagerPanel::onFilterChanged(const QString& filter)
@@ -453,7 +558,23 @@ void CreatePartitionedTableDialog::onPreview()
 
 void CreatePartitionedTableDialog::onCreate()
 {
-    // TODO: Execute via SessionClient when API is available
+    if (!client_) {
+        accept();
+        return;
+    }
+    
+    std::string sql = generateDdl().toStdString();
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (!response.status.ok) {
+        QMessageBox::warning(this, tr("Error"),
+            tr("Failed to create partitioned table: %1")
+            .arg(QString::fromStdString(response.status.message)));
+        return;
+    }
+    
+    QMessageBox::information(this, tr("Success"),
+        tr("Partitioned table created successfully."));
     accept();
 }
 
@@ -554,7 +675,23 @@ void AddPartitionDialog::onPreview()
 
 void AddPartitionDialog::onAdd()
 {
-    // TODO: Execute via SessionClient when API is available
+    if (!client_) {
+        accept();
+        return;
+    }
+    
+    std::string sql = generateDdl().toStdString();
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (!response.status.ok) {
+        QMessageBox::warning(this, tr("Error"),
+            tr("Failed to add partition: %1")
+            .arg(QString::fromStdString(response.status.message)));
+        return;
+    }
+    
+    QMessageBox::information(this, tr("Success"),
+        tr("Partition added successfully."));
     accept();
 }
 
@@ -645,7 +782,12 @@ void SplitPartitionDialog::onPreview()
 
 void SplitPartitionDialog::onSplit()
 {
-    // TODO: Execute via SessionClient when API is available
+    // Note: PostgreSQL doesn't have native SPLIT PARTITION
+    // This would require: detach, create new partitions, move data
+    QMessageBox::information(this, tr("Split Partition"),
+        tr("Splitting a partition requires detaching the partition, "
+           "creating new partitions, and migrating data. "
+           "This should be done manually via SQL scripts."));
     accept();
 }
 

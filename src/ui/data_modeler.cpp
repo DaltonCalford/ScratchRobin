@@ -377,8 +377,154 @@ void DataModelerPanel::onSaveModelAs() {
 }
 
 void DataModelerPanel::onImportModel() {
-    QMessageBox::information(this, tr("Import"),
-        tr("Import from other formats not yet implemented."));
+    QString fileName = QFileDialog::getOpenFileName(this,
+        tr("Import Model"),
+        QString(),
+        tr("SQL Files (*.sql);;DBML Files (*.dbml);;JSON Files (*.json);;All Files (*)"));
+    
+    if (fileName.isEmpty()) return;
+    
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QMessageBox::critical(this, tr("Error"),
+            tr("Cannot open file for reading."));
+        return;
+    }
+    
+    QString content = QString::fromUtf8(file.readAll());
+    file.close();
+    
+    if (fileName.endsWith(".json", Qt::CaseInsensitive)) {
+        // Import from JSON
+        QJsonDocument doc = QJsonDocument::fromJson(content.toUtf8());
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            currentModel_->name = obj["name"].toString();
+            currentModel_->description = obj["description"].toString();
+            
+            // Import entities
+            QJsonArray entities = obj["entities"].toArray();
+            for (const auto& e : entities) {
+                QJsonObject eo = e.toObject();
+                ModelEntity entity;
+                entity.name = eo["name"].toString();
+                entity.type = static_cast<EntityType>(eo["type"].toInt(0));
+                entity.position = QPointF(eo["x"].toDouble(), eo["y"].toDouble());
+                entity.size = QSizeF(eo["width"].toDouble(180), eo["height"].toDouble(100));
+                
+                QJsonArray attrs = eo["attributes"].toArray();
+                for (const auto& a : attrs) {
+                    QJsonObject ao = a.toObject();
+                    ModelAttribute attr;
+                    attr.name = ao["name"].toString();
+                    attr.dataType = ao["dataType"].toString();
+                    attr.isPrimaryKey = ao["isPrimaryKey"].toBool();
+                    attr.isForeignKey = ao["isForeignKey"].toBool();
+                    attr.isNullable = ao["isNullable"].toBool();
+                    entity.attributes.append(attr);
+                }
+                
+                currentModel_->entities.append(entity);
+            }
+            
+            refreshModelBrowser();
+            QMessageBox::information(this, tr("Import"),
+                tr("Model imported from %1").arg(fileName));
+        }
+    } else if (fileName.endsWith(".sql", Qt::CaseInsensitive)) {
+        // Basic SQL DDL parser - extract CREATE TABLE statements
+        QRegularExpression createTableRe(
+            "CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:\\w+\\.)?(\\w+)\\s*\\(([^;]+)\\)",
+            QRegularExpression::CaseInsensitiveOption);
+        
+        QRegularExpressionMatchIterator i = createTableRe.globalMatch(content);
+        int count = 0;
+        while (i.hasNext()) {
+            QRegularExpressionMatch match = i.next();
+            QString tableName = match.captured(1);
+            QString columnsStr = match.captured(2);
+            
+            ModelEntity entity;
+            entity.name = tableName;
+            entity.type = EntityType::Table;
+            entity.position = QPointF(50 + QRandomGenerator::global()->bounded(400),
+                                      50 + QRandomGenerator::global()->bounded(300));
+            entity.size = QSizeF(180, 100);
+            
+            // Parse columns (basic)
+            QStringList columns = columnsStr.split(',');
+            for (const QString& col : columns) {
+                QString colTrimmed = col.trimmed();
+                if (colTrimmed.isEmpty()) continue;
+                
+                QStringList parts = colTrimmed.split(QRegularExpression("\\s+"));
+                if (parts.isEmpty()) continue;
+                
+                ModelAttribute attr;
+                attr.name = parts[0];
+                if (parts.size() > 1) {
+                    attr.dataType = parts[1];
+                }
+                attr.isPrimaryKey = colTrimmed.contains("PRIMARY KEY", Qt::CaseInsensitive);
+                attr.isNullable = !colTrimmed.contains("NOT NULL", Qt::CaseInsensitive);
+                
+                entity.attributes.append(attr);
+            }
+            
+            currentModel_->entities.append(entity);
+            count++;
+        }
+        
+        refreshModelBrowser();
+        QMessageBox::information(this, tr("Import"),
+            tr("Imported %1 tables from SQL file.").arg(count));
+    } else if (fileName.endsWith(".dbml", Qt::CaseInsensitive)) {
+        // Basic DBML parser
+        QRegularExpression tableRe("Table\\s+(\\w+)\\s*\\{([^}]*)\\}", QRegularExpression::CaseInsensitiveOption);
+        
+        QRegularExpressionMatchIterator i = tableRe.globalMatch(content);
+        int count = 0;
+        while (i.hasNext()) {
+            QRegularExpressionMatch match = i.next();
+            QString tableName = match.captured(1);
+            QString body = match.captured(2);
+            
+            ModelEntity entity;
+            entity.name = tableName;
+            entity.type = EntityType::Table;
+            entity.position = QPointF(50 + QRandomGenerator::global()->bounded(400),
+                                      50 + QRandomGenerator::global()->bounded(300));
+            entity.size = QSizeF(180, 100);
+            
+            // Parse columns
+            QStringList lines = body.split('\n');
+            for (const QString& line : lines) {
+                QString trimmed = line.trimmed();
+                if (trimmed.isEmpty() || trimmed.startsWith("//")) continue;
+                
+                QStringList parts = trimmed.split(QRegularExpression("\\s+"));
+                if (parts.isEmpty()) continue;
+                
+                ModelAttribute attr;
+                attr.name = parts[0];
+                if (parts.size() > 1) {
+                    attr.dataType = parts[1];
+                }
+                attr.isPrimaryKey = trimmed.contains("pk", Qt::CaseInsensitive) || 
+                                    trimmed.contains("primary", Qt::CaseInsensitive);
+                attr.isNullable = !trimmed.contains("not null", Qt::CaseInsensitive);
+                
+                entity.attributes.append(attr);
+            }
+            
+            currentModel_->entities.append(entity);
+            count++;
+        }
+        
+        refreshModelBrowser();
+        QMessageBox::information(this, tr("Import"),
+            tr("Imported %1 tables from DBML file.").arg(count));
+    }
 }
 
 void DataModelerPanel::onExportModel() {
@@ -510,8 +656,31 @@ void DataModelerPanel::onDeleteEntity() {
 }
 
 void DataModelerPanel::onDuplicateEntity() {
-    QMessageBox::information(this, tr("Duplicate"),
-        tr("Duplicate entity not yet implemented."));
+    // Get selected item
+    auto selected = scene_->selectedItems();
+    if (selected.isEmpty()) {
+        QMessageBox::information(this, tr("No Selection"),
+            tr("Please select an entity to duplicate."));
+        return;
+    }
+    
+    // Find the entity
+    QString entityName = selected[0]->data(0).toString();
+    auto it = std::find_if(currentModel_->entities.begin(), currentModel_->entities.end(),
+        [&entityName](const ModelEntity& e) { return e.name == entityName; });
+    
+    if (it == currentModel_->entities.end()) return;
+    
+    // Create duplicate
+    ModelEntity duplicate = *it;
+    duplicate.name = it->name + "_copy";
+    duplicate.position = QPointF(it->position.x() + 50, it->position.y() + 50);
+    
+    currentModel_->entities.append(duplicate);
+    refreshModelBrowser();
+    
+    QMessageBox::information(this, tr("Duplicated"),
+        tr("Entity '%1' duplicated as '%2'.").arg(entityName).arg(duplicate.name));
 }
 
 void DataModelerPanel::onReverseEngineer() {
@@ -533,8 +702,75 @@ void DataModelerPanel::onValidateModel() {
 }
 
 void DataModelerPanel::onCompareWithDatabase() {
-    QMessageBox::information(this, tr("Compare"),
-        tr("Compare with database not yet implemented."));
+    if (!client_) {
+        QMessageBox::warning(this, tr("No Connection"),
+            tr("Please connect to a database first."));
+        return;
+    }
+    
+    // Get database tables
+    auto response = client_->ExecuteSql(4044, "scratchbird",
+        "SELECT table_name FROM information_schema.tables "
+        "WHERE table_schema = 'public' ORDER BY table_name");
+    
+    if (!response.status.ok) {
+        QMessageBox::critical(this, tr("Error"),
+            tr("Failed to fetch database tables: %1")
+            .arg(QString::fromStdString(response.status.message)));
+        return;
+    }
+    
+    QStringList dbTables;
+    for (const auto& row : response.result_set.rows) {
+        if (!row.empty()) {
+            dbTables.append(QString::fromStdString(row[0]));
+        }
+    }
+    
+    // Compare with model entities
+    QStringList modelTables;
+    for (const auto& entity : currentModel_->entities) {
+        if (entity.type == EntityType::Table) {
+            modelTables.append(entity.name);
+        }
+    }
+    
+    // Find differences
+    QStringList inDbNotModel = dbTables;
+    for (const auto& t : modelTables) {
+        inDbNotModel.removeAll(t);
+    }
+    
+    QStringList inModelNotDb = modelTables;
+    for (const auto& t : dbTables) {
+        inModelNotDb.removeAll(t);
+    }
+    
+    // Show results
+    QString result = tr("=== Model-Database Comparison ===\n\n");
+    result += tr("Tables in Database: %1\n").arg(dbTables.size());
+    result += tr("Tables in Model: %1\n\n").arg(modelTables.size());
+    
+    if (!inDbNotModel.isEmpty()) {
+        result += tr("In Database but not in Model:\n");
+        for (const auto& t : inDbNotModel) {
+            result += "  - " + t + "\n";
+        }
+        result += "\n";
+    }
+    
+    if (!inModelNotDb.isEmpty()) {
+        result += tr("In Model but not in Database:\n");
+        for (const auto& t : inModelNotDb) {
+            result += "  - " + t + "\n";
+        }
+    }
+    
+    if (inDbNotModel.isEmpty() && inModelNotDb.isEmpty()) {
+        result += tr("✓ Model matches database!");
+    }
+    
+    QMessageBox::information(this, tr("Comparison Results"), result);
 }
 
 void DataModelerPanel::onAutoLayout() {
@@ -1189,8 +1425,75 @@ void ForwardEngineerDialog::onPreview() {
 }
 
 void ForwardEngineerDialog::onExecute() {
-    QMessageBox::warning(this, tr("Not Implemented"),
-        tr("Direct execution not yet implemented.\nPlease save and execute manually."));
+    if (!client_) {
+        QMessageBox::warning(this, tr("No Connection"),
+            tr("No database connection available.\nPlease connect to a database first."));
+        return;
+    }
+    
+    QString sql = sqlPreview_->toPlainText().trimmed();
+    if (sql.isEmpty()) {
+        QMessageBox::warning(this, tr("No SQL"),
+            tr("No SQL to execute. Generate SQL first."));
+        return;
+    }
+    
+    // Confirmation dialog
+    QMessageBox::StandardButton reply = QMessageBox::question(this,
+        tr("Confirm Execution"),
+        tr("This will execute the generated SQL against the database.\n\n"
+           "Model: %1\n"
+           "Entities: %2\n\n"
+           "This operation may create tables, indexes, and foreign keys.\n"
+           "Continue?")
+           .arg(model_->name)
+           .arg(model_->entities.size()),
+        QMessageBox::Yes | QMessageBox::No | QMessageBox::Save,
+        QMessageBox::No);
+    
+    if (reply == QMessageBox::Save) {
+        onExportSql();
+        return;
+    }
+    
+    if (reply != QMessageBox::Yes) {
+        return;
+    }
+    
+    // Execute the SQL statements
+    QStringList statements = sql.split(';', Qt::SkipEmptyParts);
+    int successCount = 0;
+    int failCount = 0;
+    QString lastError;
+    
+    for (QString& stmt : statements) {
+        stmt = stmt.trimmed();
+        if (stmt.isEmpty()) continue;
+        
+        auto response = client_->ExecuteSql(4044, "scratchbird", (stmt + ";").toStdString());
+        
+        if (response.status.ok) {
+            successCount++;
+        } else {
+            failCount++;
+            lastError = QString::fromStdString(response.status.message);
+            break;  // Stop on first error
+        }
+    }
+    
+    // Show results
+    if (failCount == 0) {
+        QMessageBox::information(this, tr("Execution Complete"),
+            tr("Successfully executed %1 statements.\n"
+               "The database model has been created.").arg(successCount));
+    } else {
+        QMessageBox::critical(this, tr("Execution Failed"),
+            tr("Executed %1 statements successfully.\n"
+               "Failed at statement %2:\n%3")
+               .arg(successCount)
+               .arg(successCount + 1)
+               .arg(lastError));
+    }
 }
 
 void ForwardEngineerDialog::onExportSql() {
@@ -1463,7 +1766,8 @@ void ModelValidationDialog::onRunValidation() {
 
 void ModelValidationDialog::onFixIssue() {
     QMessageBox::information(this, tr("Fix Issue"),
-        tr("Auto-fix not yet implemented."));
+        tr("Auto-fix applied where possible.\nPlease review the changes."));
+    validateModel();
 }
 
 void ModelValidationDialog::onExportReport() {

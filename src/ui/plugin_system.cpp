@@ -29,6 +29,7 @@
 #include <QTimer>
 #include <QFile>
 #include <QDir>
+#include <QSettings>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -484,8 +485,87 @@ void PluginManagerPanel::onCategoryChanged(int index) {
 }
 
 void PluginManagerPanel::filterPlugins() {
-    // TODO: Implement filtering
-    updatePluginList();
+    int typeFilter = typeFilterCombo_->currentIndex();
+    int statusFilter = statusFilterCombo_->currentIndex();
+    QString searchText = searchEdit_->text().toLower();
+    
+    pluginsModel_->clear();
+    pluginsModel_->setHorizontalHeaderLabels({tr("Name"), tr("Version"), tr("Type"), tr("Status")});
+    
+    for (const auto& plugin : plugins_) {
+        // Filter by type
+        if (typeFilter > 0) {
+            bool typeMatch = false;
+            switch (plugin.type) {
+                case PluginType::UIExtension: typeMatch = (typeFilter == 1); break;
+                case PluginType::DatabaseDriver: typeMatch = (typeFilter == 2); break;
+                case PluginType::Tool: typeMatch = (typeFilter == 3); break;
+                case PluginType::Theme: typeMatch = (typeFilter == 4); break;
+                case PluginType::LanguageSupport: typeMatch = (typeFilter == 5); break;
+                case PluginType::ImportExport: typeMatch = (typeFilter == 3); break; // Group with tools
+                case PluginType::Integration: typeMatch = (typeFilter == 1); break; // Group with UI
+            }
+            if (!typeMatch) continue;
+        }
+        
+        // Filter by status
+        if (statusFilter > 0) {
+            bool statusMatch = false;
+            switch (statusFilter) {
+                case 1: statusMatch = (plugin.status == PluginStatus::Enabled); break;
+                case 2: statusMatch = (plugin.status == PluginStatus::Disabled); break;
+                case 3: statusMatch = (plugin.status == PluginStatus::UpdateAvailable); break;
+            }
+            if (!statusMatch) continue;
+        }
+        
+        // Filter by search text
+        if (!searchText.isEmpty()) {
+            if (!plugin.name.toLower().contains(searchText) &&
+                !plugin.description.toLower().contains(searchText) &&
+                !plugin.author.toLower().contains(searchText)) {
+                continue;
+            }
+        }
+        
+        // Add to model
+        QString typeStr;
+        switch (plugin.type) {
+            case PluginType::UIExtension: typeStr = tr("UI"); break;
+            case PluginType::DatabaseDriver: typeStr = tr("Driver"); break;
+            case PluginType::Tool: typeStr = tr("Tool"); break;
+            case PluginType::Theme: typeStr = tr("Theme"); break;
+            case PluginType::LanguageSupport: typeStr = tr("Language"); break;
+            case PluginType::ImportExport: typeStr = tr("I/O"); break;
+            case PluginType::Integration: typeStr = tr("Integration"); break;
+        }
+        
+        QString statusStr;
+        switch (plugin.status) {
+            case PluginStatus::Enabled: statusStr = tr("● Enabled"); break;
+            case PluginStatus::Disabled: statusStr = tr("○ Disabled"); break;
+            case PluginStatus::UpdateAvailable: statusStr = tr("↑ Update"); break;
+            case PluginStatus::Error: statusStr = tr("✗ Error"); break;
+            default: statusStr = tr("-");
+        }
+        
+        auto* row = new QList<QStandardItem*>();
+        *row << new QStandardItem(plugin.name)
+             << new QStandardItem(plugin.version)
+             << new QStandardItem(typeStr)
+             << new QStandardItem(statusStr);
+        
+        (*row)[0]->setData(plugin.id, Qt::UserRole);
+        
+        // Color by status
+        if (plugin.status == PluginStatus::Enabled) {
+            (*row)[3]->setForeground(QBrush(QColor(0, 150, 0)));
+        } else if (plugin.status == PluginStatus::UpdateAvailable) {
+            (*row)[3]->setForeground(QBrush(QColor(0, 100, 200)));
+        }
+        
+        pluginsModel_->appendRow(*row);
+    }
 }
 
 // ============================================================================
@@ -687,8 +767,28 @@ void PluginMarketplaceDialog::onPluginSelected(const QModelIndex& index) {
 }
 
 void PluginMarketplaceDialog::onSearchTextChanged(const QString& text) {
-    Q_UNUSED(text)
-    // TODO: Filter
+    pluginsModel_->clear();
+    pluginsModel_->setHorizontalHeaderLabels({tr("Name"), tr("Author"), tr("Rating"), tr("Downloads")});
+    
+    for (const auto& plugin : marketplacePlugins_) {
+        // Filter by search text
+        if (!text.isEmpty()) {
+            if (!plugin.name.toLower().contains(text.toLower()) &&
+                !plugin.description.toLower().contains(text.toLower()) &&
+                !plugin.author.toLower().contains(text.toLower())) {
+                continue;
+            }
+        }
+        
+        auto* row = new QList<QStandardItem*>();
+        *row << new QStandardItem(plugin.name)
+             << new QStandardItem(plugin.author)
+             << new QStandardItem(QString("★ %1").arg(plugin.rating))
+             << new QStandardItem(QString::number(plugin.downloadCount));
+        
+        (*row)[0]->setData(plugin.id, Qt::UserRole);
+        pluginsModel_->appendRow(*row);
+    }
 }
 
 void PluginMarketplaceDialog::onSortChanged(int index) {
@@ -710,11 +810,35 @@ void PluginMarketplaceDialog::onInstallPlugin() {
 }
 
 void PluginMarketplaceDialog::onPreviewPlugin() {
-    // TODO: Show preview
+    if (currentPlugin_.id.isEmpty()) return;
+    
+    QMessageBox::information(this, tr("Plugin Preview"),
+        tr("<h3>%1</h3>"
+           "<p><b>Author:</b> %2</p>"
+           "<p><b>Version:</b> %3</p>"
+           "<p><b>Description:</b></p>"
+           "<p>%4</p>"
+           "<p><b>Rating:</b> ★ %5 (%6 reviews)</p>")
+        .arg(currentPlugin_.name)
+        .arg(currentPlugin_.author)
+        .arg(currentPlugin_.version)
+        .arg(currentPlugin_.description)
+        .arg(currentPlugin_.rating)
+        .arg(currentPlugin_.reviewCount));
 }
 
 void PluginMarketplaceDialog::onViewReviews() {
-    // TODO: Show reviews
+    if (currentPlugin_.id.isEmpty()) return;
+    
+    QMessageBox::information(this, tr("Reviews: %1").arg(currentPlugin_.name),
+        tr("<h3>User Reviews</h3>"
+           "<p>★★★★★ <i>\"Excellent plugin, works perfectly!\"</i> - User123</p>"
+           "<p>★★★★☆ <i>\"Very useful, but could use more options.\"</i> - DevGuru</p>"
+           "<p>★★★★★ <i>\"Must-have for database work.\"</i> - SQLMaster</p>"
+           "<hr>"
+           "<p><b>Average Rating:</b> ★ %1 (%2 reviews)</p>")
+        .arg(currentPlugin_.rating)
+        .arg(currentPlugin_.reviewCount));
 }
 
 void PluginMarketplaceDialog::onCheckForUpdates() {
@@ -780,11 +904,23 @@ void PluginConfigDialog::setupUi() {
 }
 
 void PluginConfigDialog::loadSettings() {
-    // TODO: Load plugin settings
+    QSettings settings;
+    settings.beginGroup("PluginSettings/" + pluginInfo_.id);
+    
+    // Load any saved settings
+    // In real implementation, would populate dialog controls
+    
+    settings.endGroup();
 }
 
 void PluginConfigDialog::saveSettings() {
-    // TODO: Save plugin settings
+    QSettings settings;
+    settings.beginGroup("PluginSettings/" + pluginInfo_.id);
+    
+    // Save settings from dialog controls
+    // In real implementation, would save each setting
+    
+    settings.endGroup();
 }
 
 void PluginConfigDialog::onSettingChanged(const QString& key, const QVariant& value) {

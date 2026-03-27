@@ -88,6 +88,7 @@ private:
     void setupModels();
     void runComparison();
     void displayResults();
+    QString generateAlterStatement(const SchemaObjectDiff& diff);
     
     backend::SessionClient* client_;
     
@@ -160,7 +161,9 @@ class SchemaSyncScriptDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit SchemaSyncScriptDialog(const QString& script, QWidget* parent = nullptr);
+    explicit SchemaSyncScriptDialog(const QString& script, 
+                                    backend::SessionClient* client = nullptr,
+                                    QWidget* parent = nullptr);
 
 public slots:
     void onApply();
@@ -169,8 +172,11 @@ public slots:
 
 private:
     void setupUi();
+    void executeScript();
     
     QTextEdit* scriptEdit_ = nullptr;
+    backend::SessionClient* client_ = nullptr;
+    QPushButton* applyBtn_ = nullptr;
 };
 
 } // namespace scratchrobin::ui

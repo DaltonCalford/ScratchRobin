@@ -114,11 +114,61 @@ void FtsManagerPanel::panelActivated()
 void FtsManagerPanel::loadConfigurations()
 {
     configModel_->removeRows(0, configModel_->rowCount());
+    
+    if (!client_) return;
+    
+    // Query pg_ts_config for text search configurations
+    std::string sql = 
+        "SELECT c.cfgname, p.prsname as parser, "
+        "COALESCE(obj_description(c.oid, 'pg_ts_config'), '') as description "
+        "FROM pg_ts_config c "
+        "JOIN pg_ts_parser p ON c.cfgparser = p.oid "
+        "ORDER BY c.cfgname";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() < 3) continue;
+            
+            QList<QStandardItem*> items;
+            items << new QStandardItem(QString::fromStdString(row[0])); // Configuration
+            items << new QStandardItem(QString::fromStdString(row[1])); // Parser
+            items << new QStandardItem(QString::fromStdString(row[2])); // Description
+            
+            configModel_->appendRow(items);
+        }
+    }
 }
 
 void FtsManagerPanel::loadDictionaries()
 {
     dictionaryModel_->removeRows(0, dictionaryModel_->rowCount());
+    
+    if (!client_) return;
+    
+    // Query pg_ts_dict for text search dictionaries
+    std::string sql = 
+        "SELECT d.dictname, t.tmplname as template, "
+        "COALESCE(obj_description(d.oid, 'pg_ts_dict'), '') as description "
+        "FROM pg_ts_dict d "
+        "JOIN pg_ts_template t ON d.dicttemplate = t.oid "
+        "ORDER BY d.dictname";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() < 3) continue;
+            
+            QList<QStandardItem*> items;
+            items << new QStandardItem(QString::fromStdString(row[0])); // Dictionary
+            items << new QStandardItem(QString::fromStdString(row[1])); // Template
+            items << new QStandardItem(QString::fromStdString(row[2])); // Description
+            
+            dictionaryModel_->appendRow(items);
+        }
+    }
 }
 
 void FtsManagerPanel::onCreateConfiguration()
@@ -135,14 +185,58 @@ void FtsManagerPanel::onCreateDictionary()
 
 void FtsManagerPanel::onAlterConfiguration()
 {
-    // TODO: Get selected config
-    AlterFtsConfigurationDialog dialog(client_, "config", this);
+    auto index = configTree_->currentIndex();
+    if (!index.isValid()) {
+        QMessageBox::information(this, tr("Alter Configuration"), tr("Please select a configuration."));
+        return;
+    }
+    
+    QString configName = configModel_->item(index.row(), 0)->text();
+    AlterFtsConfigurationDialog dialog(client_, configName, this);
     dialog.exec();
 }
 
 void FtsManagerPanel::onDropObject()
 {
-    // TODO: Drop selected object
+    int tab = tabWidget_->currentIndex();
+    
+    if (tab == 0) { // Configurations
+        auto index = configTree_->currentIndex();
+        if (!index.isValid()) {
+            QMessageBox::information(this, tr("Drop"), tr("Please select a configuration."));
+            return;
+        }
+        
+        QString configName = configModel_->item(index.row(), 0)->text();
+        
+        auto reply = QMessageBox::question(this, tr("Drop Configuration"),
+            tr("Drop text search configuration '%1'?").arg(configName),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        
+        if (reply == QMessageBox::Yes && client_) {
+            std::string sql = QString("DROP TEXT SEARCH CONFIGURATION IF EXISTS %1 CASCADE").arg(configName).toStdString();
+            client_->ExecuteSql(4044, "scratchbird", sql);
+            refresh();
+        }
+    } else if (tab == 1) { // Dictionaries
+        auto index = dictionaryTree_->currentIndex();
+        if (!index.isValid()) {
+            QMessageBox::information(this, tr("Drop"), tr("Please select a dictionary."));
+            return;
+        }
+        
+        QString dictName = dictionaryModel_->item(index.row(), 0)->text();
+        
+        auto reply = QMessageBox::question(this, tr("Drop Dictionary"),
+            tr("Drop text search dictionary '%1'?").arg(dictName),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        
+        if (reply == QMessageBox::Yes && client_) {
+            std::string sql = QString("DROP TEXT SEARCH DICTIONARY IF EXISTS %1 CASCADE").arg(dictName).toStdString();
+            client_->ExecuteSql(4044, "scratchbird", sql);
+            refresh();
+        }
+    }
 }
 
 void FtsManagerPanel::onTestConfiguration()
@@ -153,7 +247,37 @@ void FtsManagerPanel::onTestConfiguration()
 
 void FtsManagerPanel::onFilterChanged(const QString& filter)
 {
-    Q_UNUSED(filter)
+    int tab = tabWidget_->currentIndex();
+    
+    if (tab == 0) { // Configurations
+        for (int i = 0; i < configModel_->rowCount(); ++i) {
+            bool match = filter.isEmpty();
+            if (!match) {
+                for (int j = 0; j < configModel_->columnCount(); ++j) {
+                    auto* item = configModel_->item(i, j);
+                    if (item && item->text().contains(filter, Qt::CaseInsensitive)) {
+                        match = true;
+                        break;
+                    }
+                }
+            }
+            configTree_->setRowHidden(i, QModelIndex(), !match);
+        }
+    } else if (tab == 1) { // Dictionaries
+        for (int i = 0; i < dictionaryModel_->rowCount(); ++i) {
+            bool match = filter.isEmpty();
+            if (!match) {
+                for (int j = 0; j < dictionaryModel_->columnCount(); ++j) {
+                    auto* item = dictionaryModel_->item(i, j);
+                    if (item && item->text().contains(filter, Qt::CaseInsensitive)) {
+                        match = true;
+                        break;
+                    }
+                }
+            }
+            dictionaryTree_->setRowHidden(i, QModelIndex(), !match);
+        }
+    }
 }
 
 // ============================================================================
@@ -194,11 +318,46 @@ void CreateFtsConfigurationDialog::setupUi()
 
 void CreateFtsConfigurationDialog::loadParsers()
 {
-    parserCombo_->addItem("default");
+    parserCombo_->clear();
+    
+    if (!client_) {
+        parserCombo_->addItem("default");
+        return;
+    }
+    
+    std::string sql = "SELECT prsname FROM pg_ts_parser ORDER BY prsname";
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (!row.empty()) {
+                parserCombo_->addItem(QString::fromStdString(row[0]));
+            }
+        }
+    }
+    
+    if (parserCombo_->count() == 0) {
+        parserCombo_->addItem("default");
+    }
 }
 
 void CreateFtsConfigurationDialog::loadCopyFromConfigs()
 {
+    copyFromCombo_->clear();
+    copyFromCombo_->addItem(tr("(none)"));
+    
+    if (!client_) return;
+    
+    std::string sql = "SELECT cfgname FROM pg_ts_config ORDER BY cfgname";
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (!row.empty()) {
+                copyFromCombo_->addItem(QString::fromStdString(row[0]));
+            }
+        }
+    }
 }
 
 void CreateFtsConfigurationDialog::onPreview()
@@ -208,7 +367,21 @@ void CreateFtsConfigurationDialog::onPreview()
 
 void CreateFtsConfigurationDialog::onCreate()
 {
-    accept();
+    if (!client_) {
+        accept();
+        return;
+    }
+    
+    QString sql = generateDdl();
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql.toStdString());
+    
+    if (response.status.ok) {
+        accept();
+    } else {
+        QMessageBox::warning(this, tr("Error"),
+            tr("Failed to create configuration: %1")
+            .arg(QString::fromStdString(response.status.message)));
+    }
 }
 
 QString CreateFtsConfigurationDialog::generateDdl()
@@ -260,10 +433,33 @@ void CreateFtsDictionaryDialog::setupUi()
 
 void CreateFtsDictionaryDialog::loadTemplates()
 {
-    templateCombo_->addItem("simple");
-    templateCombo_->addItem("synonym");
-    templateCombo_->addItem("ispell");
-    templateCombo_->addItem("snowball");
+    templateCombo_->clear();
+    
+    if (!client_) {
+        templateCombo_->addItem("simple");
+        templateCombo_->addItem("synonym");
+        templateCombo_->addItem("ispell");
+        templateCombo_->addItem("snowball");
+        return;
+    }
+    
+    std::string sql = "SELECT tmplname FROM pg_ts_template ORDER BY tmplname";
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (!row.empty()) {
+                templateCombo_->addItem(QString::fromStdString(row[0]));
+            }
+        }
+    }
+    
+    if (templateCombo_->count() == 0) {
+        templateCombo_->addItem("simple");
+        templateCombo_->addItem("synonym");
+        templateCombo_->addItem("ispell");
+        templateCombo_->addItem("snowball");
+    }
 }
 
 void CreateFtsDictionaryDialog::onPreview()
@@ -273,7 +469,21 @@ void CreateFtsDictionaryDialog::onPreview()
 
 void CreateFtsDictionaryDialog::onCreate()
 {
-    accept();
+    if (!client_) {
+        accept();
+        return;
+    }
+    
+    QString sql = generateDdl();
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql.toStdString());
+    
+    if (response.status.ok) {
+        accept();
+    } else {
+        QMessageBox::warning(this, tr("Error"),
+            tr("Failed to create dictionary: %1")
+            .arg(QString::fromStdString(response.status.message)));
+    }
 }
 
 QString CreateFtsDictionaryDialog::generateDdl()
@@ -321,22 +531,107 @@ void AlterFtsConfigurationDialog::setupUi()
 
 void AlterFtsConfigurationDialog::loadTokenTypes()
 {
+    tokenTypeCombo_->clear();
+    
+    if (!client_) return;
+    
+    // Get token types from the parser associated with this config
+    std::string sql = QString(
+        "SELECT t.alias "
+        "FROM pg_ts_config c "
+        "JOIN pg_ts_parser p ON c.cfgparser = p.oid "
+        "JOIN pg_ts_config_map m ON m.mapcfg = c.oid "
+        "JOIN pg_ts_token_type t ON t.tokid = m.maptokentype AND t.tokid != 0 "
+        "WHERE c.cfgname = '%1' "
+        "GROUP BY t.alias "
+        "ORDER BY t.alias"
+    ).arg(configName_).toStdString();
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (!row.empty()) {
+                tokenTypeCombo_->addItem(QString::fromStdString(row[0]));
+            }
+        }
+    }
 }
 
 void AlterFtsConfigurationDialog::loadDictionaries()
 {
+    dictionaryList_->clear();
+    
+    if (!client_) return;
+    
+    std::string sql = 
+        "SELECT dictname FROM pg_ts_dict ORDER BY dictname";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (!row.empty()) {
+                dictionaryList_->addItem(QString::fromStdString(row[0]));
+            }
+        }
+    }
 }
 
 void AlterFtsConfigurationDialog::onAddMapping()
 {
+    QString tokenType = tokenTypeCombo_->currentText();
+    QString dictName = dictionaryList_->currentItem() ? dictionaryList_->currentItem()->text() : QString();
+    
+    if (tokenType.isEmpty() || dictName.isEmpty()) {
+        QMessageBox::warning(this, tr("Add Mapping"), tr("Please select a token type and dictionary."));
+        return;
+    }
+    
+    if (client_) {
+        std::string sql = QString("ALTER TEXT SEARCH CONFIGURATION %1 ADD MAPPING FOR '%2' WITH %3")
+            .arg(configName_).arg(tokenType).arg(dictName).toStdString();
+        client_->ExecuteSql(4044, "scratchbird", sql);
+    }
+    
+    previewEdit_->setPlainText(generateDdl());
 }
 
 void AlterFtsConfigurationDialog::onAlterMapping()
 {
+    QString tokenType = tokenTypeCombo_->currentText();
+    QString dictName = dictionaryList_->currentItem() ? dictionaryList_->currentItem()->text() : QString();
+    
+    if (tokenType.isEmpty() || dictName.isEmpty()) {
+        QMessageBox::warning(this, tr("Alter Mapping"), tr("Please select a token type and dictionary."));
+        return;
+    }
+    
+    if (client_) {
+        std::string sql = QString("ALTER TEXT SEARCH CONFIGURATION %1 ALTER MAPPING FOR '%2' WITH %3")
+            .arg(configName_).arg(tokenType).arg(dictName).toStdString();
+        client_->ExecuteSql(4044, "scratchbird", sql);
+    }
+    
+    previewEdit_->setPlainText(generateDdl());
 }
 
 void AlterFtsConfigurationDialog::onDropMapping()
 {
+    QString tokenType = tokenTypeCombo_->currentText();
+    
+    if (tokenType.isEmpty()) {
+        QMessageBox::warning(this, tr("Drop Mapping"), tr("Please select a token type."));
+        return;
+    }
+    
+    if (client_) {
+        std::string sql = QString("ALTER TEXT SEARCH CONFIGURATION %1 DROP MAPPING FOR '%2'")
+            .arg(configName_).arg(tokenType).toStdString();
+        client_->ExecuteSql(4044, "scratchbird", sql);
+    }
+    
+    previewEdit_->setPlainText(generateDdl());
 }
 
 void AlterFtsConfigurationDialog::onPreview()
@@ -346,6 +641,17 @@ void AlterFtsConfigurationDialog::onPreview()
 
 void AlterFtsConfigurationDialog::onApply()
 {
+    if (client_) {
+        QString sql = generateDdl();
+        auto response = client_->ExecuteSql(4044, "scratchbird", sql.toStdString());
+        
+        if (!response.status.ok) {
+            QMessageBox::warning(this, tr("Error"),
+                tr("Failed to alter configuration: %1")
+                .arg(QString::fromStdString(response.status.message)));
+            return;
+        }
+    }
     accept();
 }
 
@@ -411,29 +717,82 @@ void TestFtsConfigurationDialog::setupUi()
 
 void TestFtsConfigurationDialog::loadConfigurations()
 {
-    configCombo_->addItem("english");
-    configCombo_->addItem("simple");
+    configCombo_->clear();
+    
+    if (!client_) {
+        configCombo_->addItem("english");
+        configCombo_->addItem("simple");
+        return;
+    }
+    
+    std::string sql = "SELECT cfgname FROM pg_ts_config ORDER BY cfgname";
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (!row.empty()) {
+                configCombo_->addItem(QString::fromStdString(row[0]));
+            }
+        }
+    }
+    
+    if (configCombo_->count() == 0) {
+        configCombo_->addItem("english");
+        configCombo_->addItem("simple");
+    }
 }
 
 void TestFtsConfigurationDialog::onTest()
 {
-    resultEdit_->setPlainText(tr("Test executed (not implemented)."));
+    onTestToTsvector();
 }
 
 void TestFtsConfigurationDialog::onTestToTsvector()
 {
-    QString sql = QString("SELECT to_tsvector('%1', '%2');")
+    if (!client_) {
+        QString sql = QString("SELECT to_tsvector('%1', '%2');")
+            .arg(configCombo_->currentText())
+            .arg(inputEdit_->toPlainText());
+        resultEdit_->setPlainText(tr("Would execute:\n%1\n\n(Offline mode)").arg(sql));
+        return;
+    }
+    
+    QString sql = QString("SELECT to_tsvector('%1', '%2')::text")
         .arg(configCombo_->currentText())
         .arg(inputEdit_->toPlainText());
-    resultEdit_->setPlainText(sql);
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql.toStdString());
+    
+    if (response.status.ok && !response.result_set.rows.empty()) {
+        resultEdit_->setPlainText(QString::fromStdString(response.result_set.rows[0][0]));
+    } else {
+        resultEdit_->setPlainText(tr("Error: %1")
+            .arg(QString::fromStdString(response.status.message)));
+    }
 }
 
 void TestFtsConfigurationDialog::onTestToTsquery()
 {
-    QString sql = QString("SELECT to_tsquery('%1', '%2');")
+    if (!client_) {
+        QString sql = QString("SELECT to_tsquery('%1', '%2');")
+            .arg(configCombo_->currentText())
+            .arg(inputEdit_->toPlainText());
+        resultEdit_->setPlainText(tr("Would execute:\n%1\n\n(Offline mode)").arg(sql));
+        return;
+    }
+    
+    QString sql = QString("SELECT to_tsquery('%1', '%2')::text")
         .arg(configCombo_->currentText())
         .arg(inputEdit_->toPlainText());
-    resultEdit_->setPlainText(sql);
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql.toStdString());
+    
+    if (response.status.ok && !response.result_set.rows.empty()) {
+        resultEdit_->setPlainText(QString::fromStdString(response.result_set.rows[0][0]));
+    } else {
+        resultEdit_->setPlainText(tr("Error: %1")
+            .arg(QString::fromStdString(response.status.message)));
+    }
 }
 
 } // namespace scratchrobin::ui

@@ -138,6 +138,11 @@ void MacroManagerPanel::updateMacroList() {
     macroModel_->setHorizontalHeaderLabels({tr("Name"), tr("Hotkey"), tr("Actions"), tr("Last Run")});
     
     for (const auto& macro : macros_) {
+        // Apply filter
+        if (!currentFilter_.matches(macro)) {
+            continue;
+        }
+        
         auto* row = new QList<QStandardItem*>();
         *row << new QStandardItem(macro.name)
              << new QStandardItem(macro.hotkey.toString())
@@ -309,14 +314,12 @@ void MacroManagerPanel::onImportMacro() {
 }
 
 void MacroManagerPanel::onFilterByCategory(const QString& category) {
-    Q_UNUSED(category)
-    // TODO: Filter
+    currentFilter_.category = category;
     updateMacroList();
 }
 
 void MacroManagerPanel::onSearchTextChanged(const QString& text) {
-    Q_UNUSED(text)
-    // TODO: Filter
+    currentFilter_.searchText = text.toLower();
     updateMacroList();
 }
 

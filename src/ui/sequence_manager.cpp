@@ -88,8 +88,6 @@ void SequenceManagerPanel::setupUi()
     sequenceTree_ = new QTreeView(this);
     sequenceTree_->setAlternatingRowColors(true);
     sequenceTree_->setSortingEnabled(true);
-    connect(sequenceTree_->selectionModel(), &QItemSelectionModel::currentChanged,
-            this, &SequenceManagerPanel::onSequenceSelected);
     
     splitter->addWidget(sequenceTree_);
     
@@ -138,6 +136,10 @@ void SequenceManagerPanel::setupModel()
     sequenceTree_->setModel(model_);
     sequenceTree_->header()->setStretchLastSection(false);
     sequenceTree_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    
+    // Connect selection model AFTER model is set
+    connect(sequenceTree_->selectionModel(), &QItemSelectionModel::currentChanged,
+            this, &SequenceManagerPanel::onSequenceSelected);
 }
 
 void SequenceManagerPanel::refresh()
@@ -154,7 +156,33 @@ void SequenceManagerPanel::loadSequences()
 {
     model_->removeRows(0, model_->rowCount());
     
-    // TODO: Load from SessionClient when API is available
+    if (!client_) return;
+    
+    // Query sequences from information_schema
+    std::string sql = 
+        "SELECT sequence_schema, sequence_name, "
+        "data_type, numeric_precision, numeric_scale, "
+        "minimum_value, maximum_value, increment, cycle_option "
+        "FROM information_schema.sequences "
+        "WHERE sequence_schema NOT IN ('pg_catalog', 'information_schema') "
+        "ORDER BY sequence_schema, sequence_name";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() < 9) continue;
+            
+            QList<QStandardItem*> items;
+            items << new QStandardItem(QString::fromStdString(row[1])); // Name
+            items << new QStandardItem(QString::fromStdString(row[0])); // Schema
+            items << new QStandardItem(QString::fromStdString(row[7])); // Increment
+            items << new QStandardItem(QString::fromStdString(row[6])); // Max Value
+            items << new QStandardItem(QString::fromStdString(row[8]) == "YES" ? tr("Yes") : tr("No")); // Cycle
+            
+            model_->appendRow(items);
+        }
+    }
 }
 
 void SequenceManagerPanel::onCreateSequence()
@@ -187,7 +215,11 @@ void SequenceManagerPanel::onDropSequence()
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     
     if (reply == QMessageBox::Yes) {
-        // TODO: Execute via SessionClient when API is available
+        if (client_) {
+            std::string sql = QString("DROP SEQUENCE IF EXISTS %1.%2")
+                .arg(schema).arg(name).toStdString();
+            client_->ExecuteSql(4044, "scratchbird", sql);
+        }
         refresh();
     }
 }
@@ -216,7 +248,11 @@ void SequenceManagerPanel::onResetSequence()
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     
     if (reply == QMessageBox::Yes) {
-        // TODO: Execute via SessionClient when API is available
+        if (client_) {
+            std::string sql = QString("ALTER SEQUENCE %1.%2 RESTART")
+                .arg(schema).arg(name).toStdString();
+            client_->ExecuteSql(4044, "scratchbird", sql);
+        }
         refresh();
     }
 }
@@ -257,7 +293,24 @@ void SequenceManagerPanel::onSequenceSelected(const QModelIndex& index)
     incrementLabel_->setText(increment);
     cycleLabel_->setText(cycle);
     
-    // TODO: Load full details from SessionClient when API is available
+    // Load full details if client available
+    if (client_) {
+        std::string sql = QString(
+            "SELECT start_value, increment, minimum_value, maximum_value, cycle_option "
+            "FROM information_schema.sequences "
+            "WHERE sequence_schema = '%1' AND sequence_name = '%2'"
+        ).arg(schema).arg(name).toStdString();
+        
+        auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+        if (response.status.ok && !response.result_set.rows.empty()) {
+            const auto& row = response.result_set.rows[0];
+            if (row.size() >= 5) {
+                currentValueLabel_->setText(QString::fromStdString(row[0]));
+                incrementLabel_->setText(QString::fromStdString(row[1]));
+                cycleLabel_->setText(QString::fromStdString(row[4]) == "YES" ? tr("Yes") : tr("No"));
+            }
+        }
+    }
     
     // Generate DDL preview
     QString ddl = QString("CREATE SEQUENCE %1.%2;").arg(schema).arg(name);
@@ -396,7 +449,18 @@ void SequenceEditorDialog::onSave()
         return;
     }
     
-    // TODO: Save via SessionClient when API is available
+    if (client_) {
+        std::string sql = generateDdl().toStdString();
+        auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+        
+        if (!response.status.ok) {
+            QMessageBox::warning(this, tr("Error"),
+                tr("Failed to save sequence: %1")
+                .arg(QString::fromStdString(response.status.message)));
+            return;
+        }
+    }
+    
     accept();
 }
 
@@ -491,7 +555,26 @@ void SetSequenceValueDialog::setupUi()
     mainLayout->addWidget(buttonBox);
     
     connect(setBtn, &QPushButton::clicked, [this]() {
-        // TODO: Execute via SessionClient when API is available
+        if (client_) {
+            qint64 newValue = newValueSpin_->value();
+            bool isCalled = isCalledCheck_->isChecked();
+            
+            // Set sequence value using setval()
+            std::string sql = QString("SELECT setval('%1', %2, %3)")
+                .arg(sequenceName_)
+                .arg(newValue)
+                .arg(isCalled ? "true" : "false")
+                .toStdString();
+            
+            auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+            
+            if (!response.status.ok) {
+                QMessageBox::warning(this, tr("Error"),
+                    tr("Failed to set sequence value: %1")
+                    .arg(QString::fromStdString(response.status.message)));
+                return;
+            }
+        }
         accept();
     });
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);

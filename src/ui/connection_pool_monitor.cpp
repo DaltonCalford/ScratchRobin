@@ -157,14 +157,40 @@ void ConnectionPoolMonitorPanel::panelDeactivated()
 
 void ConnectionPoolMonitorPanel::loadPoolStatistics()
 {
-    // TODO: Load from SessionClient when API is available
-    
     PoolStatistics stats;
-    stats.totalConnections = 10;
-    stats.activeConnections = 3;
-    stats.idleConnections = 7;
-    stats.waitingClients = 0;
-    stats.maxConnections = 100;
+    
+    if (client_) {
+        // Query pg_stat_activity for connection stats
+        std::string sql = 
+            "SELECT "
+            "  COUNT(*) as total, "
+            "  COUNT(*) FILTER (WHERE state = 'active') as active, "
+            "  COUNT(*) FILTER (WHERE state = 'idle') as idle, "
+            "  COUNT(*) FILTER (WHERE wait_event_type IS NOT NULL) as waiting, "
+            "  (SELECT setting::int FROM pg_settings WHERE name = 'max_connections') as max_conn "
+            "FROM pg_stat_activity "
+            "WHERE backend_type = 'client backend'";
+        
+        auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+        
+        if (response.status.ok && !response.result_set.rows.empty()) {
+            const auto& row = response.result_set.rows[0];
+            if (row.size() >= 5) {
+                stats.totalConnections = QString::fromStdString(row[0]).toInt();
+                stats.activeConnections = QString::fromStdString(row[1]).toInt();
+                stats.idleConnections = QString::fromStdString(row[2]).toInt();
+                stats.waitingClients = QString::fromStdString(row[3]).toInt();
+                stats.maxConnections = QString::fromStdString(row[4]).toInt();
+            }
+        }
+    } else {
+        // Default values when offline
+        stats.totalConnections = 0;
+        stats.activeConnections = 0;
+        stats.idleConnections = 0;
+        stats.waitingClients = 0;
+        stats.maxConnections = 100;
+    }
     
     totalLabel_->setText(tr("Total Connections: %1").arg(stats.totalConnections));
     activeLabel_->setText(tr("Active: %1").arg(stats.activeConnections));
@@ -172,7 +198,7 @@ void ConnectionPoolMonitorPanel::loadPoolStatistics()
     waitingLabel_->setText(tr("Waiting: %1").arg(stats.waitingClients));
     maxLabel_->setText(tr("Max: %1").arg(stats.maxConnections));
     
-    int usage = (stats.totalConnections * 100) / stats.maxConnections;
+    int usage = (stats.maxConnections > 0) ? (stats.totalConnections * 100) / stats.maxConnections : 0;
     usageBar_->setValue(usage);
     usageBar_->setFormat(QString("%1%").arg(usage));
     
@@ -189,7 +215,35 @@ void ConnectionPoolMonitorPanel::loadConnections()
 {
     model_->removeRows(0, model_->rowCount());
     
-    // TODO: Load from SessionClient when API is available
+    if (!client_) return;
+    
+    std::string sql = 
+        "SELECT pid, application_name, client_addr::text, "
+        "backend_start::text, state_change::text, state, "
+        "usename, query "
+        "FROM pg_stat_activity "
+        "WHERE backend_type = 'client backend' "
+        "ORDER BY backend_start DESC";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() < 8) continue;
+            
+            QList<QStandardItem*> items;
+            items << new QStandardItem(QString::fromStdString(row[0])); // PID
+            items << new QStandardItem(QString::fromStdString(row[1])); // Application
+            items << new QStandardItem(QString::fromStdString(row[2])); // Client Host
+            items << new QStandardItem(QString::fromStdString(row[3])); // Connected
+            items << new QStandardItem(QString::fromStdString(row[4])); // Last Activity
+            items << new QStandardItem(QString::fromStdString(row[5])); // State
+            items << new QStandardItem(QString::fromStdString(row[6])); // Pool Entry (user)
+            items << new QStandardItem(QString::fromStdString(row[7])); // Current Query
+            
+            model_->appendRow(items);
+        }
+    }
 }
 
 void ConnectionPoolMonitorPanel::startAutoRefresh()
@@ -218,9 +272,20 @@ void ConnectionPoolMonitorPanel::onRefreshIntervalChanged(int seconds)
 
 void ConnectionPoolMonitorPanel::onResetStatistics()
 {
-    // TODO: Reset statistics via SessionClient
-    QMessageBox::information(this, tr("Reset Statistics"),
-        tr("Pool statistics have been reset."));
+    if (client_) {
+        // Reset pg_stat statistics (requires admin privileges)
+        std::string sql = "SELECT pg_stat_reset()";
+        auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+        
+        if (response.status.ok) {
+            QMessageBox::information(this, tr("Reset Statistics"),
+                tr("Pool statistics have been reset."));
+        } else {
+            QMessageBox::warning(this, tr("Error"),
+                tr("Failed to reset statistics: %1")
+                .arg(QString::fromStdString(response.status.message)));
+        }
+    }
     refresh();
 }
 
@@ -232,7 +297,39 @@ void ConnectionPoolMonitorPanel::onConfigurePool()
 
 void ConnectionPoolMonitorPanel::onViewConnectionDetails()
 {
-    // TODO: Show connection details dialog
+    auto index = connectionTable_->currentIndex();
+    if (!index.isValid()) return;
+    
+    int pid = model_->item(index.row(), 0)->text().toInt();
+    
+    if (!client_) {
+        QMessageBox::information(this, tr("Connection Details"),
+            tr("Connection details not available (offline mode)."));
+        return;
+    }
+    
+    std::string sql = QString(
+        "SELECT * FROM pg_stat_activity WHERE pid = %1"
+    ).arg(pid).toStdString();
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    QString details;
+    if (response.status.ok && !response.result_set.rows.empty()) {
+        details = tr("PID: %1\nUser: %2\nDatabase: %3\nApplication: %4\n"
+                     "Client: %5\nState: %6\nQuery: %7")
+            .arg(QString::fromStdString(response.result_set.rows[0][0]))
+            .arg(QString::fromStdString(response.result_set.rows[0][1]))
+            .arg(QString::fromStdString(response.result_set.rows[0][2]))
+            .arg(QString::fromStdString(response.result_set.rows[0][3]))
+            .arg(QString::fromStdString(response.result_set.rows[0][4]))
+            .arg(QString::fromStdString(response.result_set.rows[0][5]))
+            .arg(QString::fromStdString(response.result_set.rows[0][6]));
+    } else {
+        details = tr("Could not retrieve connection details.");
+    }
+    
+    QMessageBox::information(this, tr("Connection Details"), details);
 }
 
 void ConnectionPoolMonitorPanel::onDisconnectConnection()
@@ -246,8 +343,9 @@ void ConnectionPoolMonitorPanel::onDisconnectConnection()
         tr("Disconnect connection %1?").arg(pid),
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     
-    if (reply == QMessageBox::Yes) {
-        // TODO: Execute via SessionClient
+    if (reply == QMessageBox::Yes && client_) {
+        std::string sql = QString("SELECT pg_terminate_backend(%1)").arg(pid).toStdString();
+        client_->ExecuteSql(4044, "scratchbird", sql);
         refresh();
     }
 }
@@ -328,12 +426,39 @@ void ConfigurePoolDialog::setupUi()
 
 void ConfigurePoolDialog::loadCurrentSettings()
 {
-    // TODO: Load from SessionClient when API is available
+    if (!client_) return;
+    
+    // Load current PostgreSQL settings
+    std::string sql = 
+        "SELECT name, setting FROM pg_settings "
+        "WHERE name IN ('max_connections', 'superuser_reserved_connections')";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() < 2) continue;
+            
+            QString name = QString::fromStdString(row[0]);
+            int value = QString::fromStdString(row[1]).toInt();
+            
+            if (name == "max_connections") {
+                maxConnectionsSpin_->setValue(value);
+            }
+        }
+    }
 }
 
 void ConfigurePoolDialog::onSave()
 {
-    // TODO: Save via SessionClient when API is available
+    // Note: Changing PostgreSQL connection settings typically requires
+    // modifying postgresql.conf and restarting. We show a message about this.
+    
+    QMessageBox::information(this, tr("Configure Pool"),
+        tr("PostgreSQL connection pool settings are managed in postgresql.conf.\n\n"
+           "Current settings will be applied on next restart.\n\n"
+           "max_connections: %1").arg(maxConnectionsSpin_->value()));
+    
     accept();
 }
 

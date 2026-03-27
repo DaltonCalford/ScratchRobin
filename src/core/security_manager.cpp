@@ -11,6 +11,12 @@
 #include "core/security_manager.h"
 
 #include <mutex>
+#include <random>
+#include <sstream>
+#include <iomanip>
+#include <openssl/evp.h>
+#include <openssl/rand.h>
+#include <openssl/sha.h>
 
 namespace scratchrobin::core {
 
@@ -198,10 +204,37 @@ std::string SecurityManager::ApplyMasking(const std::string& table,
                                           const std::string& column,
                                           const std::string& value,
                                           const std::string& user_role) const {
-  (void)table;
-  (void)column;
-  (void)user_role;
-  return value;  // Stub - return unmasked
+  // Check if there's a masking rule for this table/column
+  for (const auto& rule : impl_->masking_rules) {
+    if (rule.table == table && rule.column == column) {
+      // Check if this role is exempt
+      if (std::find(rule.exempt_roles.begin(), rule.exempt_roles.end(), user_role) 
+          != rule.exempt_roles.end()) {
+        return value;  // Role is exempt, return full value
+      }
+      
+      // Apply masking based on rule type
+      switch (rule.mask_type) {
+        case MaskingRule::MaskType::Full:
+          return std::string(value.length(), '*');
+        case MaskingRule::MaskType::Partial:
+          if (value.length() > 4) {
+            return std::string(value.length() - 4, '*') + value.substr(value.length() - 4);
+          }
+          return std::string(value.length(), '*');
+        case MaskingRule::MaskType::Regex:
+          // Would apply regex-based masking
+          return "[MASKED]";
+        case MaskingRule::MaskType::Null:
+          return "NULL";
+        case MaskingRule::MaskType::Custom:
+          return rule.custom_value;
+      }
+    }
+  }
+  
+  // No masking rule found, return original value
+  return value;
 }
 
 Status SecurityManager::EncryptData(const std::string& plaintext,
@@ -227,19 +260,92 @@ Status SecurityManager::DecryptData(const std::string& ciphertext,
 }
 
 std::string SecurityManager::GenerateSecureKey(int length) {
-  (void)length;
-  return "stub_key";
+  if (length <= 0 || length > 1024) {
+    length = 32; // Default to 256 bits
+  }
+  
+  std::vector<unsigned char> key(length);
+  if (RAND_bytes(key.data(), length) != 1) {
+    // Fallback to random device if OpenSSL fails
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, 255);
+    for (int i = 0; i < length; ++i) {
+      key[i] = static_cast<unsigned char>(dis(gen));
+    }
+  }
+  
+  // Convert to hex string
+  std::ostringstream oss;
+  for (auto byte : key) {
+    oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte);
+  }
+  return oss.str();
 }
 
 std::string SecurityManager::HashPassword(const std::string& password, 
                                           const std::string& salt) {
-  (void)password;
-  (void)salt;
-  return "stub_hash";
+  if (password.empty()) {
+    return "";
+  }
+  
+  // Use PBKDF2 with SHA-256 for password hashing
+  const int iterations = 100000;
+  const int keylen = 32; // 256 bits
+  
+  std::vector<unsigned char> out(keylen);
+  
+  if (PKCS5_PBKDF2_HMAC(password.c_str(), static_cast<int>(password.length()),
+                        reinterpret_cast<const unsigned char*>(salt.c_str()), 
+                        static_cast<int>(salt.length()),
+                        iterations, EVP_sha256(), keylen, out.data()) != 1) {
+    return "";
+  }
+  
+  // Format: $pbkdf2-sha256$iterations$salt$hash
+  std::ostringstream oss;
+  oss << "$pbkdf2-sha256$" << iterations << "$" << salt << "$";
+  
+  for (auto byte : out) {
+    oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte);
+  }
+  
+  return oss.str();
 }
 
 std::string SecurityManager::GenerateSalt() {
-  return "stub_salt";
+  // Generate 16 bytes (128 bits) of random salt
+  const int salt_length = 16;
+  std::vector<unsigned char> salt(salt_length);
+  
+  if (RAND_bytes(salt.data(), salt_length) != 1) {
+    // Fallback
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, 255);
+    for (int i = 0; i < salt_length; ++i) {
+      salt[i] = static_cast<unsigned char>(dis(gen));
+    }
+  }
+  
+  // Encode as base64-like string (url-safe)
+  static const char* chars = 
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
+  std::string result;
+  result.reserve(salt_length * 4 / 3 + 4);
+  
+  for (size_t i = 0; i < salt.size(); i += 3) {
+    uint32_t b = (static_cast<uint32_t>(salt[i]) << 16);
+    if (i + 1 < salt.size()) b |= (static_cast<uint32_t>(salt[i + 1]) << 8);
+    if (i + 2 < salt.size()) b |= static_cast<uint32_t>(salt[i + 2]);
+    
+    result += chars[(b >> 18) & 0x3F];
+    result += chars[(b >> 12) & 0x3F];
+    if (i + 1 < salt.size()) result += chars[(b >> 6) & 0x3F];
+    if (i + 2 < salt.size()) result += chars[b & 0x3F];
+  }
+  
+  return result;
 }
 
 VulnerabilityScan SecurityManager::RunVulnerabilityScan() {

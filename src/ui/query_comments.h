@@ -144,6 +144,7 @@ private:
     void setupCommentDetails();
     void setupEditor();
     void loadComments();
+    void loadSampleComments();  // Fallback sample data
     void updateCommentsList();
     void updateCommentDetails(const QueryComment& comment);
     void highlightCommentInEditor(const QueryComment& comment);

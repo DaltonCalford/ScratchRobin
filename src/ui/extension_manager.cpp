@@ -19,6 +19,8 @@
 #include <QToolBar>
 #include <QLabel>
 #include <QCheckBox>
+#include <QDesktopServices>
+#include <QUrl>
 
 namespace scratchrobin::ui {
 
@@ -83,8 +85,6 @@ void ExtensionManagerPanel::setupUi()
     extensionTree_ = new QTreeView(this);
     extensionTree_->setAlternatingRowColors(true);
     extensionTree_->setSortingEnabled(true);
-    connect(extensionTree_->selectionModel(), &QItemSelectionModel::currentChanged,
-            this, &ExtensionManagerPanel::onExtensionSelected);
     
     splitter->addWidget(extensionTree_);
     
@@ -134,6 +134,10 @@ void ExtensionManagerPanel::setupModel()
     extensionTree_->setModel(model_);
     extensionTree_->header()->setStretchLastSection(false);
     extensionTree_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    
+    // Connect selection model AFTER model is set
+    connect(extensionTree_->selectionModel(), &QItemSelectionModel::currentChanged,
+            this, &ExtensionManagerPanel::onExtensionSelected);
 }
 
 void ExtensionManagerPanel::refresh()
@@ -150,7 +154,34 @@ void ExtensionManagerPanel::loadExtensions()
 {
     model_->removeRows(0, model_->rowCount());
     
-    // TODO: Load from SessionClient when API is available
+    if (!client_) return;
+    
+    // Query installed extensions from pg_extension
+    std::string sql = 
+        "SELECT e.extname, e.extversion, n.nspname, c.description "
+        "FROM pg_extension e "
+        "JOIN pg_namespace n ON n.oid = e.extnamespace "
+        "LEFT JOIN pg_description c ON c.objoid = e.oid "
+        "ORDER BY e.extname";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() < 4) continue;
+            
+            QList<QStandardItem*> items;
+            items << new QStandardItem(QString::fromStdString(row[0])); // Name
+            items << new QStandardItem(QString::fromStdString(row[1])); // Version
+            items << new QStandardItem(QString::fromStdString(row[2])); // Schema
+            items << new QStandardItem(QString::fromStdString(row[3])); // Description
+            
+            // Determine status based on version (simplified)
+            items << new QStandardItem(tr("Active"));
+            
+            model_->appendRow(items);
+        }
+    }
 }
 
 void ExtensionManagerPanel::onInstallExtension()
@@ -173,7 +204,11 @@ void ExtensionManagerPanel::onUninstallExtension()
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     
     if (reply == QMessageBox::Yes) {
-        // TODO: Execute via SessionClient when API is available
+        if (client_) {
+            // Note: Actual uninstall requires DROP EXTENSION
+            std::string sql = QString("DROP EXTENSION IF EXISTS %1").arg(name).toStdString();
+            client_->ExecuteSql(4044, "scratchbird", sql);
+        }
         refresh();
     }
 }
@@ -190,7 +225,11 @@ void ExtensionManagerPanel::onUpdateExtension()
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     
     if (reply == QMessageBox::Yes) {
-        // TODO: Execute via SessionClient when API is available
+        // Note: Extension updates typically require:
+        // ALTER EXTENSION name UPDATE TO 'new_version'
+        QMessageBox::information(this, tr("Update Extension"),
+            tr("Extension updates should be performed manually via SQL:\n"
+               "ALTER EXTENSION %1 UPDATE TO 'new_version';").arg(name));
         refresh();
     }
 }
@@ -213,9 +252,9 @@ void ExtensionManagerPanel::onViewDocumentation()
     
     QString name = model_->item(index.row(), 0)->text();
     
-    // TODO: Open documentation URL
-    QMessageBox::information(this, tr("Documentation"),
-        tr("Opening documentation for extension: %1").arg(name));
+    // Open PostgreSQL documentation for this extension
+    QString url = QString("https://www.postgresql.org/docs/current/%1.html").arg(name);
+    QDesktopServices::openUrl(QUrl(url));
 }
 
 void ExtensionManagerPanel::onFilterChanged(const QString& filter)
@@ -318,11 +357,41 @@ void InstallExtensionDialog::setupUi()
 
 void InstallExtensionDialog::loadAvailableExtensions()
 {
-    // TODO: Load from SessionClient when API is available
-    extensionCombo_->addItem("postgis");
-    extensionCombo_->addItem("uuid-ossp");
-    extensionCombo_->addItem("pgcrypto");
-    extensionCombo_->addItem("hstore");
+    if (!client_) {
+        // Add common extensions as defaults
+        extensionCombo_->addItem("postgis");
+        extensionCombo_->addItem("uuid-ossp");
+        extensionCombo_->addItem("pgcrypto");
+        extensionCombo_->addItem("hstore");
+        extensionCombo_->addItem("pg_stat_statements");
+        extensionCombo_->addItem("pg_trgm");
+        return;
+    }
+    
+    // Query available extensions from pg_available_extensions
+    std::string sql = 
+        "SELECT name, default_version, comment "
+        "FROM pg_available_extensions "
+        "WHERE installed_version IS NULL "
+        "ORDER BY name";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() > 0) {
+                extensionCombo_->addItem(QString::fromStdString(row[0]));
+            }
+        }
+    }
+    
+    if (extensionCombo_->count() == 0) {
+        // Fallback: add common extensions
+        extensionCombo_->addItem("postgis");
+        extensionCombo_->addItem("uuid-ossp");
+        extensionCombo_->addItem("pgcrypto");
+        extensionCombo_->addItem("hstore");
+    }
 }
 
 void InstallExtensionDialog::onPreview()
@@ -332,7 +401,17 @@ void InstallExtensionDialog::onPreview()
 
 void InstallExtensionDialog::onInstall()
 {
-    // TODO: Execute via SessionClient when API is available
+    if (client_) {
+        std::string sql = generateDdl().toStdString();
+        auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+        
+        if (!response.status.ok) {
+            QMessageBox::warning(this, tr("Installation Failed"),
+                                 tr("Failed to install extension: %1")
+                                 .arg(QString::fromStdString(response.status.message)));
+            return;
+        }
+    }
     accept();
 }
 
@@ -398,13 +477,88 @@ void ConfigureExtensionDialog::setupUi()
 
 void ConfigureExtensionDialog::loadSettings()
 {
-    // TODO: Load from SessionClient when API is available
     settingsTable_->setRowCount(0);
+    
+    if (!client_) return;
+    
+    // Query extension settings from pg_settings
+    // Extension settings typically have the extension name as prefix
+    std::string sql = QString(
+        "SELECT name, setting, unit, short_desc "
+        "FROM pg_settings "
+        "WHERE name LIKE '%1.%' OR context = 'user' "
+        "ORDER BY name"
+    ).arg(extensionName_.toLower()).toStdString();
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        int row = 0;
+        for (const auto& rowData : response.result_set.rows) {
+            if (rowData.size() < 4) continue;
+            
+            settingsTable_->insertRow(row);
+            settingsTable_->setItem(row, 0, new QTableWidgetItem(QString::fromStdString(rowData[0])));
+            
+            QString value = QString::fromStdString(rowData[1]);
+            if (!rowData[2].empty()) {
+                value += " " + QString::fromStdString(rowData[2]);
+            }
+            settingsTable_->setItem(row, 1, new QTableWidgetItem(value));
+            
+            // Store description as tooltip
+            settingsTable_->item(row, 0)->setToolTip(QString::fromStdString(rowData[3]));
+            settingsTable_->item(row, 1)->setToolTip(QString::fromStdString(rowData[3]));
+            
+            row++;
+        }
+    }
+    
+    // If no settings found, show a message
+    if (settingsTable_->rowCount() == 0) {
+        settingsTable_->insertRow(0);
+        auto* item = new QTableWidgetItem(tr("No configurable settings found for this extension"));
+        item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+        settingsTable_->setItem(0, 0, item);
+        settingsTable_->setItem(0, 1, new QTableWidgetItem(""));
+    }
 }
 
 void ConfigureExtensionDialog::onSave()
 {
-    // TODO: Execute via SessionClient when API is available
+    if (!client_) {
+        accept();
+        return;
+    }
+    
+    // Apply changed settings
+    bool hasErrors = false;
+    for (int row = 0; row < settingsTable_->rowCount(); ++row) {
+        QString name = settingsTable_->item(row, 0)->text();
+        QString value = settingsTable_->item(row, 1)->text();
+        
+        // Skip the "no settings" row
+        if (name.startsWith(tr("No configurable"))) continue;
+        
+        std::string sql = QString("ALTER SYSTEM SET %1 = '%2'").arg(name).arg(value).toStdString();
+        auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+        
+        if (!response.status.ok) {
+            hasErrors = true;
+            QMessageBox::warning(this, tr("Setting Failed"),
+                                 tr("Failed to set %1: %2")
+                                 .arg(name)
+                                 .arg(QString::fromStdString(response.status.message)));
+        }
+    }
+    
+    if (!hasErrors) {
+        // Reload to confirm changes
+        QMessageBox::information(this, tr("Settings Saved"),
+                                 tr("Extension settings have been updated. "
+                                    "Some changes may require a server restart."));
+    }
+    
     accept();
 }
 

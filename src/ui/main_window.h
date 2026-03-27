@@ -4,6 +4,8 @@
 #include <QSplitter>
 #include <memory>
 
+#include "core/async_query_executor.h"
+
 QT_BEGIN_NAMESPACE
 class QTreeWidget;
 class QTreeWidgetItem;
@@ -65,6 +67,9 @@ class DataGeneratorPanel;
 class DataMaskingPanel;
 class DataCleansingPanel;
 class DataLineagePanel;
+
+// Forward declaration for preferences
+struct Preferences;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -242,9 +247,16 @@ class MainWindow : public QMainWindow {
   
   SqlEditor* currentEditor() const;
   void executeCurrentEditor();
+  void applyPreferences(const Preferences& prefs);
+  void updateWindowTitle(const QString& filename = QString());
 
   backend::SessionClient* session_client_;
   std::unique_ptr<backend::ScratchbirdConnection> db_connection_;
+  
+  // Async query execution
+  core::AsyncQueryExecutor async_executor_;
+  std::string current_query_task_id_;
+  bool query_running_ = false;
   
   // Dock Workspace (new)
   DockWorkspace* dock_workspace_;

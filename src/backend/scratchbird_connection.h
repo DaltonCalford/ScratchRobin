@@ -83,6 +83,7 @@ class ScratchbirdConnection {
     
     QueryResult resultFromSbResult(sb_result* result);
     void clearError();
+    std::string escapeString(const std::string& str);
 };
 
 }  // namespace scratchrobin::backend

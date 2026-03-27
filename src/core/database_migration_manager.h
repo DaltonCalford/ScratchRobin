@@ -190,6 +190,11 @@ class DatabaseMigrationManager {
   Status GenerateBaseline(const std::string& output_path);
 
  private:
+  Status ExecuteMigrationScript(const std::string& script);
+  Status RecordMigration(const Migration& migration);
+  std::vector<Migration> GetPendingMigrations();
+  bool IsVersionApplied(const std::string& version) const;
+  
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

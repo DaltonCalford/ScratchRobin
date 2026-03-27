@@ -154,6 +154,7 @@ private:
     QPushButton* useBtn_ = nullptr;
     QPushButton* executeBtn_ = nullptr;
     QPushButton* favoriteBtn_ = nullptr;
+    QPushButton* addTagBtn_ = nullptr;
     QPushButton* deleteBtn_ = nullptr;
     
     // State

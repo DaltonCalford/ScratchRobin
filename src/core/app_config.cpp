@@ -1,3 +1,10 @@
+/*
+ * ScratchRobin
+ * Copyright (c) 2025-2026 Dalton Calford
+ *
+ * Licensed under the Initial Developer's Public License Version 1.0
+ */
+
 #include "core/app_config.h"
 
 #include <QStandardPaths>
@@ -7,8 +14,6 @@
 #include <algorithm>
 
 namespace scratchrobin::core {
-
-// Simple stub implementation for Qt6 transition
 
 std::string loginMethodToString(LoginMethod method) {
     switch (method) {
@@ -89,11 +94,180 @@ bool AppConfig::configExists() const {
 
 bool AppConfig::load(const std::string& key) {
     Q_UNUSED(key)
-    resetToDefaults();
+    
+    QSettings settings(QString::fromStdString(getConfigFilePath()), QSettings::IniFormat);
+    
+    // Clear existing data
+    layouts_.clear();
+    servers_.clear();
+    
+    // Load general settings
+    current_layout_name_ = settings.value("General/current_layout", "default").toString().toStdString();
+    
+    // Load layouts
+    int layoutCount = settings.beginReadArray("Layouts");
+    for (int i = 0; i < layoutCount; ++i) {
+        settings.setArrayIndex(i);
+        ScreenLayout layout;
+        layout.profile_name = settings.value("name").toString().toStdString();
+        layout.auto_save = settings.value("auto_save", true).toBool();
+        
+        // Load windows for this layout
+        int windowCount = settings.beginReadArray("windows");
+        for (int j = 0; j < windowCount; ++j) {
+            settings.setArrayIndex(j);
+            WindowLayout win;
+            win.window_id = settings.value("id").toString().toStdString();
+            win.x = settings.value("x", 100).toInt();
+            win.y = settings.value("y", 100).toInt();
+            win.width = settings.value("width", 1024).toInt();
+            win.height = settings.value("height", 768).toInt();
+            win.maximized = settings.value("maximized", false).toBool();
+            win.visible = settings.value("visible", true).toBool();
+            win.display_index = settings.value("display", 0).toInt();
+            layout.windows.push_back(win);
+        }
+        settings.endArray();
+        
+        layouts_.push_back(layout);
+    }
+    settings.endArray();
+    
+    // Load servers
+    int serverCount = settings.beginReadArray("Servers");
+    for (int i = 0; i < serverCount; ++i) {
+        settings.setArrayIndex(i);
+        ServerConfig server;
+        server.server_id = settings.value("id").toString().toStdString();
+        server.display_name = settings.value("display_name").toString().toStdString();
+        server.hostname = settings.value("hostname").toString().toStdString();
+        server.port = settings.value("port", 3050).toInt();
+        server.description = settings.value("description").toString().toStdString();
+        server.is_active = settings.value("is_active", true).toBool();
+        server.group = settings.value("group").toString().toStdString();
+        
+        // Load engines for this server
+        int engineCount = settings.beginReadArray("engines");
+        for (int j = 0; j < engineCount; ++j) {
+            settings.setArrayIndex(j);
+            DatabaseEngine engine;
+            engine.engine_type = stringToDbEngineType(
+                settings.value("type").toString().toStdString());
+            engine.version = settings.value("version").toString().toStdString();
+            engine.host_path = settings.value("host_path").toString().toStdString();
+            
+            // Load databases for this engine
+            int dbCount = settings.beginReadArray("databases");
+            for (int k = 0; k < dbCount; ++k) {
+                settings.setArrayIndex(k);
+                DatabaseConnection db;
+                db.database_name = settings.value("name").toString().toStdString();
+                db.connection_string = settings.value("connection_string").toString().toStdString();
+                db.username = settings.value("username").toString().toStdString();
+                db.encrypted_password = settings.value("encrypted_password").toString().toStdString();
+                db.login_method = stringToLoginMethod(
+                    settings.value("login_method", "standard").toString().toStdString());
+                db.auto_connect = settings.value("auto_connect", false).toBool();
+                db.save_password = settings.value("save_password", false).toBool();
+                engine.databases.push_back(db);
+            }
+            settings.endArray();
+            
+            server.engines.push_back(engine);
+        }
+        settings.endArray();
+        
+        servers_.push_back(server);
+    }
+    settings.endArray();
+    
+    // If no data was loaded, reset to defaults
+    if (layouts_.empty() && servers_.empty()) {
+        resetToDefaults();
+    }
+    
+    modified_ = false;
     return true;
 }
 
 bool AppConfig::save() {
+    QSettings settings(QString::fromStdString(getConfigFilePath()), QSettings::IniFormat);
+    settings.clear();
+    
+    // Save general settings
+    settings.setValue("General/current_layout", QString::fromStdString(current_layout_name_));
+    
+    // Save layouts
+    settings.beginWriteArray("Layouts");
+    for (size_t i = 0; i < layouts_.size(); ++i) {
+        settings.setArrayIndex(static_cast<int>(i));
+        const auto& layout = layouts_[i];
+        settings.setValue("name", QString::fromStdString(layout.profile_name));
+        settings.setValue("auto_save", layout.auto_save);
+        
+        // Save windows
+        settings.beginWriteArray("windows");
+        for (size_t j = 0; j < layout.windows.size(); ++j) {
+            settings.setArrayIndex(static_cast<int>(j));
+            const auto& win = layout.windows[j];
+            settings.setValue("id", QString::fromStdString(win.window_id));
+            settings.setValue("x", win.x);
+            settings.setValue("y", win.y);
+            settings.setValue("width", win.width);
+            settings.setValue("height", win.height);
+            settings.setValue("maximized", win.maximized);
+            settings.setValue("visible", win.visible);
+            settings.setValue("display", win.display_index);
+        }
+        settings.endArray();
+    }
+    settings.endArray();
+    
+    // Save servers
+    settings.beginWriteArray("Servers");
+    for (size_t i = 0; i < servers_.size(); ++i) {
+        settings.setArrayIndex(static_cast<int>(i));
+        const auto& server = servers_[i];
+        settings.setValue("id", QString::fromStdString(server.server_id));
+        settings.setValue("display_name", QString::fromStdString(server.display_name));
+        settings.setValue("hostname", QString::fromStdString(server.hostname));
+        settings.setValue("port", server.port);
+        settings.setValue("description", QString::fromStdString(server.description));
+        settings.setValue("is_active", server.is_active);
+        settings.setValue("group", QString::fromStdString(server.group));
+        
+        // Save engines
+        settings.beginWriteArray("engines");
+        for (size_t j = 0; j < server.engines.size(); ++j) {
+            settings.setArrayIndex(static_cast<int>(j));
+            const auto& engine = server.engines[j];
+            settings.setValue("type", QString::fromStdString(dbEngineTypeToString(engine.engine_type)));
+            settings.setValue("version", QString::fromStdString(engine.version));
+            settings.setValue("host_path", QString::fromStdString(engine.host_path));
+            
+            // Save databases
+            settings.beginWriteArray("databases");
+            for (size_t k = 0; k < engine.databases.size(); ++k) {
+                settings.setArrayIndex(static_cast<int>(k));
+                const auto& db = engine.databases[k];
+                settings.setValue("name", QString::fromStdString(db.database_name));
+                settings.setValue("connection_string", QString::fromStdString(db.connection_string));
+                settings.setValue("username", QString::fromStdString(db.username));
+                if (db.save_password) {
+                    settings.setValue("encrypted_password", QString::fromStdString(db.encrypted_password));
+                }
+                settings.setValue("login_method", QString::fromStdString(loginMethodToString(db.login_method)));
+                settings.setValue("auto_connect", db.auto_connect);
+                settings.setValue("save_password", db.save_password);
+            }
+            settings.endArray();
+        }
+        settings.endArray();
+    }
+    settings.endArray();
+    
+    settings.sync();
+    modified_ = false;
     return true;
 }
 
@@ -159,11 +333,22 @@ ServerConfig* AppConfig::findServer(const std::string& server_id) {
 }
 
 bool AppConfig::hasEncryptedPasswords() const {
+    for (const auto& server : servers_) {
+        for (const auto& engine : server.engines) {
+            for (const auto& db : engine.databases) {
+                if (!db.encrypted_password.empty()) {
+                    return true;
+                }
+            }
+        }
+    }
     return false;
 }
 
 bool AppConfig::decryptPasswords(const std::string& key) {
     Q_UNUSED(key)
+    // TODO: Implement actual decryption when encryption is added
+    decrypted_ = true;
     return true;
 }
 
@@ -174,7 +359,31 @@ bool AppConfig::shouldAutoSavePositions() const {
 }
 
 bool AppConfig::validateAndFixPositions() {
-    return false;
+    // Check if window positions are valid (on screen)
+    // Return true if any positions were fixed
+    bool fixed = false;
+    for (auto& layout : layouts_) {
+        for (auto& win : layout.windows) {
+            // Ensure windows have reasonable positions
+            if (win.x < -1000 || win.x > 10000) {
+                win.x = 100;
+                fixed = true;
+            }
+            if (win.y < -1000 || win.y > 10000) {
+                win.y = 100;
+                fixed = true;
+            }
+            if (win.width < 100 || win.width > 10000) {
+                win.width = 1024;
+                fixed = true;
+            }
+            if (win.height < 100 || win.height > 10000) {
+                win.height = 768;
+                fixed = true;
+            }
+        }
+    }
+    return fixed;
 }
 
 }  // namespace scratchrobin::core

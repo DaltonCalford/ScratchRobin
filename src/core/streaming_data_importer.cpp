@@ -17,6 +17,8 @@ struct StreamingDataImporter::Impl {
   ProgressCallback progress_callback;
   ErrorCallback error_callback;
   CompletionCallback completion_callback;
+  std::map<std::string, ImportProgress> active_imports;
+  std::map<std::string, ImportResult> completed_imports;
 };
 
 StreamingDataImporter::StreamingDataImporter()
@@ -29,17 +31,27 @@ ImportResult StreamingDataImporter::ExecuteImport(const ImportConfig& config) {
   ImportResult result;
   result.import_id = config.import_id;
   result.status = Status::Ok();
+  result.started_at = std::chrono::system_clock::now();
+  
+  // Track active import
+  ImportProgress progress;
+  progress.import_id = config.import_id;
+  progress.status_message = "Starting import...";
+  progress.total_rows = config.total_rows_hint;
+  impl_->active_imports[config.import_id] = progress;
   
   if (impl_->progress_callback) {
-    ImportProgress progress;
-    progress.import_id = config.import_id;
-    progress.status_message = "Starting import...";
     impl_->progress_callback(progress);
   }
   
-  // Stub implementation
+  // Simulate import processing
   result.total_rows_processed = 0;
   result.total_rows_inserted = 0;
+  
+  // Move from active to completed
+  impl_->active_imports.erase(config.import_id);
+  result.completed_at = std::chrono::system_clock::now();
+  impl_->completed_imports[config.import_id] = result;
   
   if (impl_->completion_callback) {
     impl_->completion_callback(result);
@@ -62,29 +74,43 @@ Status StreamingDataImporter::StreamImport(const ImportConfig& config,
 }
 
 void StreamingDataImporter::CancelImport(const std::string& import_id) {
-  (void)import_id;
+  auto it = impl_->active_imports.find(import_id);
+  if (it != impl_->active_imports.end()) {
+    it->second.status_message = "Cancelled";
+  }
 }
 
 void StreamingDataImporter::PauseImport(const std::string& import_id) {
-  (void)import_id;
+  auto it = impl_->active_imports.find(import_id);
+  if (it != impl_->active_imports.end()) {
+    it->second.status_message = "Paused";
+  }
 }
 
 void StreamingDataImporter::ResumeImport(const std::string& import_id) {
-  (void)import_id;
+  auto it = impl_->active_imports.find(import_id);
+  if (it != impl_->active_imports.end()) {
+    it->second.status_message = "Resumed";
+  }
 }
 
 bool StreamingDataImporter::IsImportRunning(const std::string& import_id) const {
-  (void)import_id;
-  return false;
+  return impl_->active_imports.find(import_id) != impl_->active_imports.end();
 }
 
 ImportProgress StreamingDataImporter::GetProgress(const std::string& import_id) const {
-  (void)import_id;
+  auto it = impl_->active_imports.find(import_id);
+  if (it != impl_->active_imports.end()) {
+    return it->second;
+  }
   return ImportProgress{};
 }
 
 std::optional<ImportResult> StreamingDataImporter::GetResult(const std::string& import_id) {
-  (void)import_id;
+  auto it = impl_->completed_imports.find(import_id);
+  if (it != impl_->completed_imports.end()) {
+    return it->second;
+  }
   return std::nullopt;
 }
 
@@ -164,11 +190,12 @@ std::vector<ValidationError> StreamingDataImporter::ValidateImportConfig(
 }
 
 void StreamingDataImporter::ClearCompletedImports() {
-  // Stub implementation
+  impl_->completed_imports.clear();
 }
 
 void StreamingDataImporter::ClearAllImports() {
-  // Stub implementation
+  impl_->completed_imports.clear();
+  impl_->active_imports.clear();
 }
 
 }  // namespace scratchrobin::core

@@ -79,6 +79,8 @@ struct QueryColumn {
     bool isDistinct = false;
     QString sortOrder; // ASC, DESC
     int sortPriority = 0;
+    QString expression; // For INSERT/UPDATE values
+    QString defaultValue; // For INSERT default values
 };
 
 struct QueryCondition {

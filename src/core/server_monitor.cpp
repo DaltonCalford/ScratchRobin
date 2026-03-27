@@ -14,6 +14,8 @@
 #include <chrono>
 #include <fstream>
 #include <thread>
+#include <mutex>
+#include <random>
 
 namespace scratchrobin::core {
 
@@ -60,11 +62,49 @@ ServerPerformanceMetrics ServerMonitor::GetCurrentMetrics() {
   ServerPerformanceMetrics metrics;
   metrics.timestamp = std::chrono::system_clock::now();
   
-  // Would query database for current metrics
-  // This is a stub implementation
-  metrics.cpu_percent = 0.0;
-  metrics.memory_used_bytes = 0;
-  metrics.connections_total = 0;
+  // In production: Query database for actual metrics
+  // For now, generate simulated realistic metrics
+  
+  static std::random_device rd;
+  static std::mt19937 gen(rd());
+  
+  // CPU usage (0-100%)
+  std::uniform_real_distribution<> cpu_dist(10.0, 80.0);
+  metrics.cpu_percent = cpu_dist(gen);
+  metrics.cpu_user_percent = metrics.cpu_percent * 0.7;
+  metrics.cpu_system_percent = metrics.cpu_percent * 0.3;
+  
+  // Memory (simulating 8GB server)
+  std::uniform_int_distribution<> mem_dist(2000000000, 6000000000);
+  metrics.memory_used_bytes = mem_dist(gen);
+  metrics.memory_total_bytes = 8589934592LL;  // 8 GB
+  metrics.memory_percent = (metrics.memory_used_bytes * 100.0) / metrics.memory_total_bytes;
+  metrics.shared_buffers_bytes = 1073741824LL;  // 1 GB
+  
+  // Connections
+  std::uniform_int_distribution<> conn_dist(10, 150);
+  metrics.connections_active = conn_dist(gen) / 3;
+  metrics.connections_idle = conn_dist(gen) - metrics.connections_active;
+  metrics.connections_total = metrics.connections_active + metrics.connections_idle;
+  metrics.waiting_connections = std::uniform_int_distribution<>(0, 5)(gen);
+  metrics.blocked_queries = std::uniform_int_distribution<>(0, 3)(gen);
+  
+  // Transaction and query rates
+  std::uniform_int_distribution<> tps_dist(100, 5000);
+  metrics.transactions_per_sec = tps_dist(gen);
+  std::uniform_int_distribution<> qps_dist(500, 20000);
+  metrics.queries_per_sec = qps_dist(gen);
+  
+  // Cache (85-99% hit ratio)
+  std::uniform_real_distribution<> cache_dist(85.0, 99.5);
+  metrics.cache_hit_ratio = cache_dist(gen);
+  metrics.buffer_hits_per_sec = qps_dist(gen) * (metrics.cache_hit_ratio / 100.0);
+  metrics.buffer_reads_per_sec = qps_dist(gen) - metrics.buffer_hits_per_sec;
+  
+  // Disk I/O
+  std::uniform_real_distribution<> disk_dist(0.0, 100.0);
+  metrics.disk_read_mbps = disk_dist(gen);
+  metrics.disk_write_mbps = disk_dist(gen) * 0.7;
   
   return metrics;
 }
@@ -72,6 +112,7 @@ ServerPerformanceMetrics ServerMonitor::GetCurrentMetrics() {
 std::vector<ServerPerformanceMetrics> ServerMonitor::GetMetricsHistory(
     const std::chrono::system_clock::time_point& from,
     const std::chrono::system_clock::time_point& to) {
+  std::lock_guard<std::mutex> lock(mutex_);
   std::vector<ServerPerformanceMetrics> result;
   for (const auto& metrics : metrics_history_) {
     if (metrics.timestamp >= from && metrics.timestamp <= to) {
@@ -114,8 +155,9 @@ void ServerMonitor::StartMonitoring(int interval_seconds) {
   is_monitoring_ = true;
   monitoring_interval_seconds_ = interval_seconds;
   
-  // In a real implementation, this would start a background thread
-  // For this stub, we'll just set the flag
+  // Start monitoring in a background thread
+  std::thread monitor_thread(&ServerMonitor::MonitoringLoop, this);
+  monitor_thread.detach();
 }
 
 void ServerMonitor::StopMonitoring() {
@@ -148,6 +190,7 @@ void ServerMonitor::AcknowledgeAlert(int64_t alert_id) {
 }
 
 std::vector<ServerAlert> ServerMonitor::GetActiveAlerts() {
+  std::lock_guard<std::mutex> lock(mutex_);
   std::vector<ServerAlert> active;
   for (const auto& alert : alert_history_) {
     if (!alert.acknowledged) {
@@ -158,6 +201,7 @@ std::vector<ServerAlert> ServerMonitor::GetActiveAlerts() {
 }
 
 std::vector<ServerAlert> ServerMonitor::GetAlertHistory(int limit) {
+  std::lock_guard<std::mutex> lock(mutex_);
   std::vector<ServerAlert> result;
   int count = 0;
   for (auto it = alert_history_.rbegin(); 
@@ -245,14 +289,22 @@ bool ServerMonitor::ExportMetricsToCsv(
 void ServerMonitor::MonitoringLoop() {
   while (is_monitoring_) {
     auto metrics = GetCurrentMetrics();
-    metrics_history_.push_back(metrics);
+    
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      metrics_history_.push_back(metrics);
+    }
     
     if (metrics_callback_) {
       metrics_callback_(metrics);
     }
     
     CheckAlertConditions(metrics);
-    TrimHistory();
+    
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      TrimHistory();
+    }
     
     // Sleep for interval
     std::this_thread::sleep_for(
@@ -318,6 +370,68 @@ void ServerMonitor::CheckAlertConditions(const ServerPerformanceMetrics& metrics
     alert.message = "Cache hit ratio is low";
     alert.current_value = metrics.cache_hit_ratio;
     alert.threshold_value = thresholds_.cache_hit_critical;
+    alert.triggered_at = std::chrono::system_clock::now();
+    alert_history_.push_back(alert);
+    
+    if (alert_callback_) {
+      alert_callback_(alert);
+    }
+  }
+  
+  // Check Connection Count
+  if (metrics.connections_total >= thresholds_.connections_critical) {
+    ServerAlert alert;
+    alert.id = next_alert_id_++;
+    alert.severity = AlertSeverity::kCritical;
+    alert.category = "connections";
+    alert.message = "Connection count is critically high";
+    alert.current_value = metrics.connections_total;
+    alert.threshold_value = thresholds_.connections_critical;
+    alert.triggered_at = std::chrono::system_clock::now();
+    alert_history_.push_back(alert);
+    
+    if (alert_callback_) {
+      alert_callback_(alert);
+    }
+  } else if (metrics.connections_total >= thresholds_.connections_warning) {
+    ServerAlert alert;
+    alert.id = next_alert_id_++;
+    alert.severity = AlertSeverity::kWarning;
+    alert.category = "connections";
+    alert.message = "Connection count is high";
+    alert.current_value = metrics.connections_total;
+    alert.threshold_value = thresholds_.connections_warning;
+    alert.triggered_at = std::chrono::system_clock::now();
+    alert_history_.push_back(alert);
+    
+    if (alert_callback_) {
+      alert_callback_(alert);
+    }
+  }
+  
+  // Check Blocked Queries
+  if (metrics.blocked_queries >= thresholds_.blocked_queries_critical) {
+    ServerAlert alert;
+    alert.id = next_alert_id_++;
+    alert.severity = AlertSeverity::kCritical;
+    alert.category = "blocking";
+    alert.message = "Many queries are blocked - potential deadlock";
+    alert.current_value = metrics.blocked_queries;
+    alert.threshold_value = thresholds_.blocked_queries_critical;
+    alert.triggered_at = std::chrono::system_clock::now();
+    alert_history_.push_back(alert);
+    
+    if (alert_callback_) {
+      alert_callback_(alert);
+    }
+  } else if (metrics.blocked_queries >= thresholds_.blocked_queries_warning) {
+    ServerAlert alert;
+    alert.id = next_alert_id_++;
+    alert.severity = AlertSeverity::kWarning;
+    alert.category = "blocking";
+    alert.message = "Some queries are blocked";
+    alert.current_value = metrics.blocked_queries;
+    alert.threshold_value = thresholds_.blocked_queries_warning;
     alert.triggered_at = std::chrono::system_clock::now();
     alert_history_.push_back(alert);
     

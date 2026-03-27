@@ -8,6 +8,11 @@
 #include <QLabel>
 #include <QHeaderView>
 #include <QMessageBox>
+#include <QFileDialog>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QDateTime>
 
 namespace scratchrobin::ui {
 
@@ -188,13 +193,96 @@ void ShortcutsDialog::onResetToDefaults() {
 }
 
 void ShortcutsDialog::onExportShortcuts() {
-    QMessageBox::information(this, tr("Export Shortcuts"), 
-        tr("Shortcut export functionality will be implemented in a future version."));
+    QString fileName = QFileDialog::getSaveFileName(this,
+        tr("Export Shortcuts"),
+        QString(),
+        tr("JSON Files (*.json);;XML Files (*.xml)"));
+    
+    if (fileName.isEmpty()) return;
+    
+    QJsonObject root;
+    QJsonArray shortcuts;
+    
+    // Export current shortcuts from tree widget
+    for (int i = 0; i < shortcutsTree_->topLevelItemCount(); ++i) {
+        QTreeWidgetItem* item = shortcutsTree_->topLevelItem(i);
+        QJsonObject shortcut;
+        shortcut["action"] = item->text(0);
+        shortcut["context"] = item->text(1);
+        shortcut["shortcut"] = item->text(2);
+        shortcuts.append(shortcut);
+    }
+    
+    root["shortcuts"] = shortcuts;
+    root["version"] = "1.0";
+    root["exported"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    
+    QJsonDocument doc(root);
+    
+    QFile file(fileName);
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write(doc.toJson(QJsonDocument::Indented));
+        file.close();
+        
+        QMessageBox::information(this, tr("Export Complete"),
+            tr("Shortcuts exported to %1").arg(fileName));
+    }
 }
 
 void ShortcutsDialog::onImportShortcuts() {
-    QMessageBox::information(this, tr("Import Shortcuts"), 
-        tr("Shortcut import functionality will be implemented in a future version."));
+    QString fileName = QFileDialog::getOpenFileName(this,
+        tr("Import Shortcuts"),
+        QString(),
+        tr("JSON Files (*.json);;XML Files (*.xml);;All Files (*)"));
+    
+    if (fileName.isEmpty()) return;
+    
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly)) {
+        QMessageBox::critical(this, tr("Error"),
+            tr("Cannot open file for reading."));
+        return;
+    }
+    
+    QByteArray data = file.readAll();
+    file.close();
+    
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (doc.isNull() || !doc.isObject()) {
+        QMessageBox::critical(this, tr("Error"),
+            tr("Invalid JSON format."));
+        return;
+    }
+    
+    QJsonObject root = doc.object();
+    QJsonArray shortcuts = root["shortcuts"].toArray();
+    
+    // Confirm import
+    QMessageBox::StandardButton reply = QMessageBox::question(this,
+        tr("Confirm Import"),
+        tr("Import %1 shortcuts? This will update existing shortcuts.").arg(shortcuts.size()),
+        QMessageBox::Yes | QMessageBox::No);
+    
+    if (reply == QMessageBox::Yes) {
+        // Import shortcuts
+        for (const auto& s : shortcuts) {
+            QJsonObject shortcut = s.toObject();
+            QString action = shortcut["action"].toString();
+            QString key = shortcut["shortcut"].toString();
+            
+            // Update in tree
+            for (int i = 0; i < shortcutsTree_->topLevelItemCount(); ++i) {
+                QTreeWidgetItem* item = shortcutsTree_->topLevelItem(i);
+                if (item->text(0) == action) {
+                    item->setText(2, key);
+                    break;
+                }
+            }
+        }
+        
+        QMessageBox::information(this, tr("Import Complete"),
+            tr("Imported %1 shortcuts.").arg(shortcuts.size()));
+    }
 }
 
 } // namespace scratchrobin::ui

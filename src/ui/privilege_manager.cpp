@@ -21,6 +21,7 @@
 #include <QLabel>
 #include <QToolBar>
 #include <QTabWidget>
+#include <QDebug>
 
 namespace scratchrobin::ui {
 
@@ -140,14 +141,60 @@ void PrivilegeManagerPanel::loadObjects()
 {
     byObjectModel_->removeRows(0, byObjectModel_->rowCount());
     
-    // TODO: Load from SessionClient when API is available
+    if (!client_) return;
+    
+    // Query all database objects (tables, views, functions, etc.)
+    std::string sql = 
+        "SELECT schemaname || '.' || tablename as object_name, 'TABLE' as type "
+        "FROM pg_tables WHERE schemaname NOT IN ('pg_catalog', 'information_schema') "
+        "UNION ALL "
+        "SELECT schemaname || '.' || viewname as object_name, 'VIEW' as type "
+        "FROM pg_views WHERE schemaname NOT IN ('pg_catalog', 'information_schema') "
+        "UNION ALL "
+        "SELECT n.nspname || '.' || p.proname as object_name, 'FUNCTION' as type "
+        "FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+        "WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') "
+        "ORDER BY 1";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() >= 2) {
+                QList<QStandardItem*> items;
+                items << new QStandardItem(QString::fromStdString(row[0]));
+                items << new QStandardItem(QString::fromStdString(row[1]));
+                byObjectModel_->appendRow(items);
+            }
+        }
+    }
 }
 
 void PrivilegeManagerPanel::loadGrantees()
 {
     byGranteeModel_->removeRows(0, byGranteeModel_->rowCount());
     
-    // TODO: Load from SessionClient when API is available
+    if (!client_) return;
+    
+    // Query all users and roles
+    std::string sql = 
+        "SELECT rolname, CASE WHEN rolcanlogin THEN 'USER' ELSE 'ROLE' END as type "
+        "FROM pg_roles "
+        "WHERE rolname NOT LIKE 'pg_%' AND rolname NOT LIKE 'rds%' "
+        "ORDER BY rolname";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() >= 2) {
+                QList<QStandardItem*> items;
+                items << new QStandardItem(QString::fromStdString(row[0]));
+                items << new QStandardItem(QString::fromStdString(row[1]));
+                byGranteeModel_->appendRow(items);
+            }
+        }
+    }
 }
 
 void PrivilegeManagerPanel::onGrant()
@@ -172,14 +219,52 @@ void PrivilegeManagerPanel::onShowEffective()
 
 void PrivilegeManagerPanel::loadPrivilegesByObject(const QString& objectName)
 {
-    // TODO: Load from SessionClient when API is available
-    Q_UNUSED(objectName)
+    if (!client_ || objectName.isEmpty()) return;
+    
+    // Parse schema.object
+    QStringList parts = objectName.split('.');
+    if (parts.size() != 2) return;
+    
+    QString schema = parts[0];
+    QString object = parts[1];
+    
+    // Query table_privileges
+    std::string sql = QString(
+        "SELECT grantee, privilege_type, is_grantable "
+        "FROM information_schema.table_privileges "
+        "WHERE table_schema = '%1' AND table_name = '%2' "
+        "ORDER BY grantee, privilege_type"
+    ).arg(schema).arg(object).toStdString();
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        // Would display in a detail panel - for now just log
+        qDebug() << "Loaded privileges for" << objectName;
+    }
 }
 
 void PrivilegeManagerPanel::loadPrivilegesByGrantee(const QString& grantee)
 {
-    // TODO: Load from SessionClient when API is available
-    Q_UNUSED(grantee)
+    if (!client_ || grantee.isEmpty()) return;
+    
+    // Query privileges granted to this grantee
+    std::string sql = QString(
+        "SELECT table_schema || '.' || table_name as object, "
+        "string_agg(privilege_type, ', ') as privileges, "
+        "is_grantable "
+        "FROM information_schema.table_privileges "
+        "WHERE grantee = '%1' "
+        "GROUP BY table_schema, table_name, is_grantable "
+        "ORDER BY object"
+    ).arg(grantee).toStdString();
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        // Would display in a detail panel - for now just log
+        qDebug() << "Loaded privileges for grantee" << grantee;
+    }
 }
 
 void PrivilegeManagerPanel::onFilterChanged(const QString& filter)
@@ -285,7 +370,51 @@ void GrantDialog::setupUi()
 
 void GrantDialog::onGrant()
 {
-    // TODO: Execute via SessionClient when API is available
+    if (!client_) {
+        accept();
+        return;
+    }
+    
+    QString privs;
+    if (allCheck_->isChecked()) {
+        privs = "ALL PRIVILEGES";
+    } else {
+        QStringList list;
+        if (selectCheck_->isChecked()) list.append("SELECT");
+        if (insertCheck_->isChecked()) list.append("INSERT");
+        if (updateCheck_->isChecked()) list.append("UPDATE");
+        if (deleteCheck_->isChecked()) list.append("DELETE");
+        privs = list.join(", ");
+    }
+    
+    if (privs.isEmpty()) {
+        QMessageBox::warning(this, tr("Error"), tr("No privileges selected."));
+        return;
+    }
+    
+    QString sql = QString("GRANT %1 ON %2 %3 TO %4 %5")
+        .arg(privs)
+        .arg(objectTypeCombo_->currentText())
+        .arg(objectNameCombo_->currentText())
+        .arg(granteeTypeCombo_->currentText())
+        .arg(granteeEdit_->text());
+    
+    if (withGrantOption_->isChecked()) {
+        sql += " WITH GRANT OPTION";
+    }
+    sql += ";";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql.toStdString());
+    
+    if (!response.status.ok) {
+        QMessageBox::warning(this, tr("Error"),
+            tr("Failed to grant privileges: %1")
+            .arg(QString::fromStdString(response.status.message)));
+        return;
+    }
+    
+    QMessageBox::information(this, tr("Success"),
+        tr("Privileges granted successfully."));
     accept();
 }
 
@@ -380,7 +509,34 @@ void RevokeDialog::setupUi()
 
 void RevokeDialog::onRevoke()
 {
-    // TODO: Execute via SessionClient when API is available
+    if (!client_) {
+        accept();
+        return;
+    }
+    
+    QString sql = QString("REVOKE %1 ON %2 %3 FROM %4 %5")
+        .arg(privilegesEdit_->text())
+        .arg(objectTypeCombo_->currentText())
+        .arg(objectNameEdit_->text())
+        .arg(granteeTypeCombo_->currentText())
+        .arg(granteeEdit_->text());
+    
+    if (cascadeCheck_->isChecked()) {
+        sql += " CASCADE";
+    }
+    sql += ";";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql.toStdString());
+    
+    if (!response.status.ok) {
+        QMessageBox::warning(this, tr("Error"),
+            tr("Failed to revoke privileges: %1")
+            .arg(QString::fromStdString(response.status.message)));
+        return;
+    }
+    
+    QMessageBox::information(this, tr("Success"),
+        tr("Privileges revoked successfully."));
     accept();
 }
 
@@ -447,10 +603,38 @@ void EffectivePermissionsDialog::onCalculate()
 {
     resultsModel_->removeRows(0, resultsModel_->rowCount());
     
-    // TODO: Calculate via SessionClient when API is available
+    QString user = userCombo_->currentText();
+    
+    if (!client_) {
+        QMessageBox::information(this, tr("Effective Permissions"),
+            tr("Offline mode - effective permissions for user: %1").arg(user));
+        return;
+    }
+    
+    // Query effective permissions using has_database_privilege and similar functions
+    std::string sql = QString(
+        "SELECT 'CONNECT' as privilege, has_database_privilege('%1', oid, 'CONNECT') as granted "
+        "FROM pg_database WHERE datname = current_database() "
+        "UNION ALL "
+        "SELECT 'CREATE' as privilege, has_database_privilege('%1', oid, 'CREATE') as granted "
+        "FROM pg_database WHERE datname = current_database() "
+    ).arg(user).toStdString();
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() >= 2) {
+                QList<QStandardItem*> items;
+                items << new QStandardItem(QString::fromStdString(row[0]));
+                items << new QStandardItem(QString::fromStdString(row[1]) == "t" ? tr("Yes") : tr("No"));
+                resultsModel_->appendRow(items);
+            }
+        }
+    }
     
     QMessageBox::information(this, tr("Effective Permissions"),
-        tr("Effective permissions calculated for user: %1").arg(userCombo_->currentText()));
+        tr("Effective permissions calculated for user: %1").arg(user));
 }
 
 } // namespace scratchrobin::ui

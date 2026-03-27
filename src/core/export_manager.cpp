@@ -18,6 +18,8 @@ struct ExportManager::Impl {
   CompletionCallback completion_callback;
   RowTransformCallback row_transform_callback;
   std::vector<ExportTemplate> templates;
+  std::map<std::string, ExportResult> completed_exports;
+  std::map<std::string, ExportProgress> active_exports;
 };
 
 ExportManager::ExportManager()
@@ -31,15 +33,25 @@ ExportResult ExportManager::ExecuteExport(const ExportConfig& config) {
   result.export_id = config.export_id;
   result.status = Status::Ok();
   
+  // Track active export
+  ExportProgress progress;
+  progress.export_id = config.export_id;
+  progress.status_message = "Starting export...";
+  progress.percent_complete = 0;
+  impl_->active_exports[config.export_id] = progress;
+  
   if (impl_->progress_callback) {
-    ExportProgress progress;
-    progress.export_id = config.export_id;
-    progress.status_message = "Starting export...";
     impl_->progress_callback(progress);
   }
   
+  // Simulate export completion
   result.output_path = config.output_path;
   result.total_rows = 0;
+  result.completed_at = std::chrono::system_clock::now();
+  
+  // Move from active to completed
+  impl_->active_exports.erase(config.export_id);
+  impl_->completed_exports[config.export_id] = result;
   
   if (impl_->completion_callback) {
     impl_->completion_callback(result);
@@ -71,17 +83,22 @@ void ExportManager::ResumeExport(const std::string& export_id) {
 }
 
 bool ExportManager::IsExportRunning(const std::string& export_id) const {
-  (void)export_id;
-  return false;
+  return impl_->active_exports.find(export_id) != impl_->active_exports.end();
 }
 
 ExportProgress ExportManager::GetProgress(const std::string& export_id) const {
-  (void)export_id;
+  auto it = impl_->active_exports.find(export_id);
+  if (it != impl_->active_exports.end()) {
+    return it->second;
+  }
   return ExportProgress{};
 }
 
 std::optional<ExportResult> ExportManager::GetResult(const std::string& export_id) {
-  (void)export_id;
+  auto it = impl_->completed_exports.find(export_id);
+  if (it != impl_->completed_exports.end()) {
+    return it->second;
+  }
   return std::nullopt;
 }
 
@@ -241,11 +258,12 @@ Status ExportManager::ImportConfigFromFile(const std::string& file_path,
 }
 
 void ExportManager::ClearCompletedExports() {
-  // Stub implementation
+  impl_->completed_exports.clear();
 }
 
 void ExportManager::ClearAllExports() {
-  // Stub implementation
+  impl_->completed_exports.clear();
+  impl_->active_exports.clear();
 }
 
 }  // namespace scratchrobin::core

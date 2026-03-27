@@ -12,6 +12,8 @@
 
 #include <algorithm>
 #include <thread>
+#include <fstream>
+#include <sstream>
 
 namespace scratchrobin::core {
 
@@ -247,9 +249,61 @@ std::optional<ConnectionPoolMetrics> PerformanceMonitor::GetPoolMetrics(
 SystemMetrics PerformanceMonitor::GetCurrentSystemMetrics() const {
   SystemMetrics metrics;
   metrics.timestamp = std::chrono::system_clock::now();
-  // Stub - would read actual system metrics
-  metrics.cpu_percent = 0.0;
-  metrics.memory_used_bytes = 0;
+  
+  // Read CPU usage from /proc/stat (Linux)
+  std::ifstream stat_file("/proc/stat");
+  if (stat_file.is_open()) {
+    std::string line;
+    std::getline(stat_file, line);
+    // Parse CPU line: cpu user nice system idle iowait irq softirq steal guest guest_nice
+    std::istringstream iss(line);
+    std::string cpu_label;
+    long user, nice, system, idle, iowait;
+    iss >> cpu_label >> user >> nice >> system >> idle >> iowait;
+    
+    long total_idle = idle + iowait;
+    long total_non_idle = user + nice + system;
+    long total = total_idle + total_non_idle;
+    
+    // Calculate CPU percentage (simplified)
+    if (total > 0) {
+      metrics.cpu_percent = 100.0 * (1.0 - (double)total_idle / total);
+    }
+    stat_file.close();
+  }
+  
+  // Read memory usage from /proc/meminfo (Linux)
+  std::ifstream mem_file("/proc/meminfo");
+  if (mem_file.is_open()) {
+    std::string line;
+    long total_mem = 0;
+    long free_mem = 0;
+    long available_mem = 0;
+    
+    while (std::getline(mem_file, line)) {
+      std::istringstream iss(line);
+      std::string key;
+      long value;
+      std::string unit;
+      
+      iss >> key >> value >> unit;
+      
+      if (key == "MemTotal:") total_mem = value;
+      else if (key == "MemFree:") free_mem = value;
+      else if (key == "MemAvailable:") available_mem = value;
+    }
+    
+    if (available_mem > 0) {
+      metrics.memory_used_bytes = (total_mem - available_mem) * 1024;
+    } else if (total_mem > 0 && free_mem > 0) {
+      metrics.memory_used_bytes = (total_mem - free_mem) * 1024;
+    }
+    mem_file.close();
+  }
+  
+  // Get number of active threads
+  metrics.active_threads = std::thread::hardware_concurrency();
+  
   return metrics;
 }
 

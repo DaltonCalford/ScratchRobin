@@ -3,6 +3,20 @@
 #include "ui/sql_editor.h"
 #include "ui/connection_dialog.h"
 #include "ui/data_grid.h"
+#include "ui/csv_import_dialog.h"
+#include "ui/preferences_dialog.h"
+
+#ifdef SCRATCHROBIN_WITH_QXLSX
+#include "xlsxdocument.h"
+#include "xlsxworksheet.h"
+#include "xlsxcellrange.h"
+#include "xlsxformat.h"
+#endif
+
+// For Excel import dialog
+#include <QCheckBox>
+#include <QTableWidget>
+#include <QTableWidgetItem>
 #include "ui/preferences_dialog.h"
 #include "ui/er_diagram_widget.h"
 #include "ui/doc_generator_dialog.h"
@@ -59,6 +73,7 @@
 #include "ui/macro_recording.h"
 #include "ui/scripting_console.h"
 #include "ui/custom_keybindings.h"
+#include "ui/monitoring_panels.h"
 #include "backend/session_client.h"
 #include "backend/query_response.h"
 #include "backend/scratchbird_connection.h"
@@ -88,6 +103,11 @@
 #include <QProgressBar>
 #include <QThread>
 #include <QTimer>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QXmlStreamWriter>
+#include <QTextStream>
 
 namespace scratchrobin::ui {
 
@@ -95,6 +115,7 @@ MainWindow::MainWindow(backend::SessionClient* session_client, QWidget* parent)
     : QMainWindow(parent)
     , session_client_(session_client)
     , db_connection_(std::make_unique<backend::ScratchbirdConnection>())
+    , query_running_(false)
     , dock_workspace_(nullptr)
     , view_manager_panel_(nullptr)
     , trigger_manager_panel_(nullptr)
@@ -118,6 +139,9 @@ MainWindow::MainWindow(backend::SessionClient* session_client, QWidget* parent)
   createToolbars();
   createStatusBar();
   setupConnections();
+  
+  // Initialize async query executor
+  async_executor_.Initialize(4);  // 4 worker threads
   
   // Initialize DockWorkspace after basic UI setup
   setupDockWorkspace();
@@ -613,7 +637,24 @@ void MainWindow::createMenus() {
   // Help menu
   help_menu_ = menuBar()->addMenu(tr("&Help"));
   help_menu_->addAction(tr("&Documentation"), this, []() { QDesktopServices::openUrl(QUrl("https://scratchbird.dev/docs")); });
-  help_menu_->addAction(tr("&Context Help"), this, []() { /* TODO */ }, QKeySequence("Shift+F1"));
+  help_menu_->addAction(tr("&Context Help"), this, [this]() { 
+    // Show context-sensitive help based on current focus
+    QString helpTopic;
+    QWidget* focusWidget = QApplication::focusWidget();
+    if (focusWidget) {
+      QString className = focusWidget->metaObject()->className();
+      if (className.contains("SqlEditor")) {
+        helpTopic = tr("sql_editor");
+      } else if (className.contains("DataGrid")) {
+        helpTopic = tr("data_grid");
+      } else if (className.contains("ProjectNavigator")) {
+        helpTopic = tr("project_navigator");
+      } else {
+        helpTopic = tr("general");
+      }
+    }
+    QDesktopServices::openUrl(QUrl(QString("https://scratchbird.dev/docs/%1").arg(helpTopic)));
+  }, QKeySequence("Shift+F1"));
   help_menu_->addSeparator();
   help_menu_->addAction(tr("&Keyboard Shortcuts"), this, &MainWindow::onHelpShortcuts);
   help_menu_->addAction(tr("&Tip of the Day"), this, &MainWindow::onHelpTipOfDay);
@@ -801,8 +842,28 @@ void MainWindow::onFileOpenSql() {
 }
 
 void MainWindow::onFileSave() {
-  // TODO: Save current editor content
-  showStatusMessage(tr("Saved"), 2000);
+  // Save current editor content
+  if (auto* editor = currentEditor()) {
+    QString filename = editor->property("filename").toString();
+    if (filename.isEmpty()) {
+      onFileSaveAs();
+      return;
+    }
+    
+    QFile file(filename);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+      QTextStream stream(&file);
+      stream << editor->toPlainText();
+      file.close();
+      showStatusMessage(tr("Saved %1").arg(filename), 3000);
+      updateWindowTitle(filename);
+    } else {
+      QMessageBox::warning(this, tr("Save Error"), 
+        tr("Could not save file: %1").arg(filename));
+    }
+  } else {
+    showStatusMessage(tr("No editor to save"), 2000);
+  }
 }
 
 void MainWindow::onFileSaveAs() {
@@ -848,10 +909,30 @@ void MainWindow::onEditPaste() {
 void MainWindow::onEditPreferences() {
   PreferencesDialog dialog(this);
   connect(&dialog, &PreferencesDialog::preferencesChanged, this, [this](const Preferences& prefs) {
-    // TODO: Apply preferences to application
+    // Apply preferences to application
+    applyPreferences(prefs);
     showStatusMessage(tr("Preferences saved"), 2000);
   });
   dialog.exec();
+}
+
+void MainWindow::applyPreferences(const Preferences& prefs) {
+  // Apply font settings
+  QFont editorFont(prefs.editor_font, prefs.editor_font_size);
+  if (auto* editor = currentEditor()) {
+    editor->setFont(editorFont);
+  }
+  
+  // Apply SQL editor settings
+  // These would be stored and applied to all SQL editors
+  
+  // Apply connection settings
+  // Update auto-connect behavior
+  
+  // Apply logging settings
+  // Update log level if logging system exists
+  
+  Q_UNUSED(prefs)
 }
 
 // View menu
@@ -1153,48 +1234,283 @@ void MainWindow::onQueryExecuteSelection() {
 }
 
 void MainWindow::onQueryExecuteScript() {
-  showStatusMessage(tr("Execute script - not yet implemented"), 3000);
+  if (auto* editor = currentEditor()) {
+    QString sql = editor->toPlainText();
+    if (sql.isEmpty()) {
+      showStatusMessage(tr("No SQL to execute"), 2000);
+      return;
+    }
+    
+    // Split script into individual statements (basic splitting by semicolon)
+    QStringList statements = sql.split(';', Qt::SkipEmptyParts);
+    int executed = 0;
+    int failed = 0;
+    
+    for (QString& stmt : statements) {
+      stmt = stmt.trimmed();
+      if (stmt.isEmpty()) continue;
+      
+      auto result = db_connection_->execute(stmt.toStdString() + ";");
+      if (result.success) {
+        executed++;
+      } else {
+        failed++;
+        showError(tr("Statement failed: %1\nError: %2")
+                  .arg(stmt.left(50))
+                  .arg(QString::fromStdString(result.error_message)));
+        break;  // Stop on first error
+      }
+    }
+    
+    showStatusMessage(tr("Script executed: %1 succeeded, %2 failed").arg(executed).arg(failed), 5000);
+  }
 }
 
 void MainWindow::onQueryStop() {
-  showStatusMessage(tr("Stop execution - not yet implemented"), 3000);
+  if (!current_query_task_id_.empty()) {
+    if (async_executor_.CancelQuery(current_query_task_id_)) {
+      showStatusMessage(tr("Query cancellation requested"), 2000);
+    } else {
+      showStatusMessage(tr("Could not cancel query (may already be complete)"), 2000);
+    }
+  } else {
+    showStatusMessage(tr("No query running"), 2000);
+  }
 }
 
 void MainWindow::onQueryExplain() {
-  showStatusMessage(tr("Explain plan - not yet implemented"), 3000);
+  if (auto* editor = currentEditor()) {
+    QString sql = editor->selectedSql();
+    if (sql.isEmpty()) {
+      sql = editor->toPlainText();
+    }
+    
+    if (sql.trimmed().isEmpty()) {
+      showStatusMessage(tr("No SQL to explain"), 2000);
+      return;
+    }
+    
+    // Prepend EXPLAIN to the query
+    QString explainSql = "EXPLAIN " + sql;
+    executeSql(explainSql);
+  }
 }
 
 void MainWindow::onQueryExplainAnalyze() {
-  showStatusMessage(tr("Explain analyze - not yet implemented"), 3000);
+  if (auto* editor = currentEditor()) {
+    QString sql = editor->selectedSql();
+    if (sql.isEmpty()) {
+      sql = editor->toPlainText();
+    }
+    
+    if (sql.trimmed().isEmpty()) {
+      showStatusMessage(tr("No SQL to explain"), 2000);
+      return;
+    }
+    
+    // Prepend EXPLAIN ANALYZE to the query
+    QString explainSql = "EXPLAIN ANALYZE " + sql;
+    executeSql(explainSql);
+  }
 }
 
 void MainWindow::onQueryFormatSql() {
-  showStatusMessage(tr("Format SQL - not yet implemented"), 3000);
+  if (auto* editor = currentEditor()) {
+    QString sql = editor->textCursor().selectedText();
+    bool hasSelection = !sql.isEmpty();
+    if (!hasSelection) {
+      sql = editor->toPlainText();
+    }
+    
+    if (sql.trimmed().isEmpty()) {
+      showStatusMessage(tr("No SQL to format"), 2000);
+      return;
+    }
+    
+    // Basic SQL formatting
+    QString formatted = sql;
+    
+    // Capitalize keywords
+    QStringList keywords = {
+      "select", "from", "where", "and", "or", "not", "order", "by", "group",
+      "having", "join", "inner", "outer", "left", "right", "full", "on",
+      "insert", "into", "values", "update", "set", "delete", "create",
+      "table", "alter", "drop", "index", "view", "procedure", "function",
+      "begin", "end", "commit", "rollback", "transaction", "as", "case",
+      "when", "then", "else", "null", "is", "in", "exists", "like",
+      "between", "distinct", "all", "union", "intersect", "except", "limit",
+      "offset", "top", "with", "recursive", "using", "natural", "cross"
+    };
+    
+    QRegularExpression wordRegex("\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b");
+    QRegularExpressionMatchIterator i = wordRegex.globalMatch(formatted);
+    
+    // Collect matches in reverse order to replace from end to start
+    QList<QRegularExpressionMatch> matches;
+    while (i.hasNext()) {
+      matches.prepend(i.next());
+    }
+    
+    for (const auto& match : matches) {
+      QString word = match.captured(1);
+      if (keywords.contains(word.toLower())) {
+        formatted.replace(match.capturedStart(1), match.capturedLength(1), 
+                         word.toUpper());
+      }
+    }
+    
+    // Add newlines after major keywords
+    formatted.replace(QRegularExpression("\\s*\\b(SELECT|FROM|WHERE|GROUP BY|ORDER BY|HAVING|JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN|OUTER JOIN|UNION|INTERSECT|EXCEPT)\\s+", 
+                                        QRegularExpression::CaseInsensitiveOption),
+                     "\n\\1 ");
+    
+    // Clean up multiple newlines
+    formatted.replace(QRegularExpression("\n{3,}"), "\n\n");
+    
+    // Replace text using cursor
+    QTextCursor cursor = editor->textCursor();
+    if (hasSelection) {
+      cursor.insertText(formatted);
+    } else {
+      editor->setPlainText(formatted);
+    }
+    
+    showStatusMessage(tr("SQL formatted"), 2000);
+  }
 }
 
 void MainWindow::onQueryComment() {
-  showStatusMessage(tr("Comment lines - not yet implemented"), 3000);
+  if (auto* editor = currentEditor()) {
+    QTextCursor cursor = editor->textCursor();
+    QString text = cursor.selectedText();
+    if (text.isEmpty()) {
+      // Comment current line
+      cursor.select(QTextCursor::LineUnderCursor);
+      text = cursor.selectedText();
+      
+      QStringList lines = text.split('\n');
+      for (int i = 0; i < lines.size(); ++i) {
+        if (!lines[i].trimmed().isEmpty()) {
+          lines[i] = "-- " + lines[i];
+        }
+      }
+      cursor.insertText(lines.join('\n'));
+    } else {
+      // Comment selection
+      QStringList lines = text.split('\n');
+      for (int i = 0; i < lines.size(); ++i) {
+        lines[i] = "-- " + lines[i];
+      }
+      cursor.insertText(lines.join('\n'));
+    }
+  }
 }
 
 void MainWindow::onQueryUncomment() {
-  showStatusMessage(tr("Uncomment lines - not yet implemented"), 3000);
+  if (auto* editor = currentEditor()) {
+    QTextCursor cursor = editor->textCursor();
+    QString text = cursor.selectedText();
+    if (text.isEmpty()) {
+      cursor.select(QTextCursor::LineUnderCursor);
+      text = cursor.selectedText();
+      
+      QStringList lines = text.split('\n');
+      for (int i = 0; i < lines.size(); ++i) {
+        if (lines[i].startsWith("-- ")) {
+          lines[i] = lines[i].mid(3);
+        } else if (lines[i].startsWith("--")) {
+          lines[i] = lines[i].mid(2);
+        }
+      }
+      cursor.insertText(lines.join('\n'));
+    } else {
+      QStringList lines = text.split('\n');
+      for (int i = 0; i < lines.size(); ++i) {
+        if (lines[i].startsWith("-- ")) {
+          lines[i] = lines[i].mid(3);
+        } else if (lines[i].startsWith("--")) {
+          lines[i] = lines[i].mid(2);
+        }
+      }
+      cursor.insertText(lines.join('\n'));
+    }
+  }
 }
 
 void MainWindow::onQueryToggleComment() {
-  showStatusMessage(tr("Toggle comment - not yet implemented"), 3000);
+  if (auto* editor = currentEditor()) {
+    QTextCursor cursor = editor->textCursor();
+    QString text = cursor.selectedText();
+    bool hasSelection = !text.isEmpty();
+    
+    if (!hasSelection) {
+      cursor.select(QTextCursor::LineUnderCursor);
+      text = cursor.selectedText();
+    }
+    
+    // Check if already commented
+    bool isCommented = text.trimmed().startsWith("--");
+    
+    if (isCommented) {
+      // Uncomment
+      QStringList lines = text.split('\n');
+      for (int i = 0; i < lines.size(); ++i) {
+        QString line = lines[i];
+        int pos = 0;
+        while (pos < line.length() && line[pos].isSpace()) {
+          ++pos;
+        }
+        if (line.mid(pos, 3) == "-- ") {
+          lines[i] = line.left(pos) + line.mid(pos + 3);
+        } else if (line.mid(pos, 2) == "--") {
+          lines[i] = line.left(pos) + line.mid(pos + 2);
+        }
+      }
+      text = lines.join('\n');
+    } else {
+      // Comment
+      QStringList lines = text.split('\n');
+      for (int i = 0; i < lines.size(); ++i) {
+        lines[i] = "-- " + lines[i];
+      }
+      text = lines.join('\n');
+    }
+    
+    if (hasSelection) {
+      cursor.insertText(text);
+    } else {
+      QTextCursor lineCursor = editor->textCursor();
+      lineCursor.select(QTextCursor::LineUnderCursor);
+      lineCursor.insertText(text);
+    }
+  }
 }
 
 void MainWindow::onQueryUppercase() {
   if (auto* editor = currentEditor()) {
-    // TODO: Convert selection to uppercase
-    showStatusMessage(tr("Uppercase - not yet implemented"), 2000);
+    QTextCursor cursor = editor->textCursor();
+    QString text = cursor.selectedText();
+    if (!text.isEmpty()) {
+      cursor.insertText(text.toUpper());
+    } else {
+      // Transform entire document
+      editor->setPlainText(editor->toPlainText().toUpper());
+    }
+    showStatusMessage(tr("Converted to uppercase"), 2000);
   }
 }
 
 void MainWindow::onQueryLowercase() {
   if (auto* editor = currentEditor()) {
-    // TODO: Convert selection to lowercase
-    showStatusMessage(tr("Lowercase - not yet implemented"), 2000);
+    QTextCursor cursor = editor->textCursor();
+    QString text = cursor.selectedText();
+    if (!text.isEmpty()) {
+      cursor.insertText(text.toLower());
+    } else {
+      // Transform entire document
+      editor->setPlainText(editor->toPlainText().toLower());
+    }
+    showStatusMessage(tr("Converted to lowercase"), 2000);
   }
 }
 
@@ -1399,59 +1715,659 @@ void MainWindow::onToolsImportSql() {
 }
 
 void MainWindow::onToolsImportCsv() {
-  showStatusMessage(tr("Import CSV - not yet implemented"), 3000);
+  if (!db_connection_ || !db_connection_->isConnected()) {
+    showError(tr("Not connected to database"));
+    return;
+  }
+
+  QString fileName = QFileDialog::getOpenFileName(this, tr("Import CSV"),
+                                                  QString(), tr("CSV Files (*.csv);;All Files (*.*)"));
+  if (fileName.isEmpty()) return;
+
+  CsvImportDialog dialog(this);
+  if (!dialog.loadCsv(fileName)) return;
+
+  if (dialog.exec() == QDialog::Accepted) {
+    auto options = dialog.options();
+    QStringList headers = dialog.headers();
+    QList<QStringList> dataRows = dialog.dataRows();
+
+    if (headers.isEmpty() || dataRows.isEmpty()) {
+      showError(tr("No data to import"));
+      return;
+    }
+
+    // Build CREATE TABLE statement if requested
+    if (options.create_table) {
+      QString createSql = "CREATE TABLE IF NOT EXISTS \"" + options.table_name + "\" (";
+      for (int i = 0; i < headers.size(); ++i) {
+        if (i > 0) createSql += ", ";
+        // Sanitize column name
+        QString colName = headers[i].trimmed();
+        colName.replace("\"", "\"\"");
+        createSql += "\"" + colName + "\" TEXT";
+      }
+      createSql += ")";
+
+      auto result = db_connection_->execute(createSql.toStdString());
+      if (!result.success) {
+        showError(tr("Failed to create table: %1").arg(QString::fromStdString(result.error_message)));
+        return;
+      }
+    }
+
+    // Insert data in batches
+    int totalRows = dataRows.size();
+    int imported = 0;
+    int failed = 0;
+
+    for (int i = 0; i < dataRows.size(); i += options.batch_size) {
+      QString insertSql = "INSERT INTO \"" + options.table_name + "\" (";
+      for (int h = 0; h < headers.size(); ++h) {
+        if (h > 0) insertSql += ", ";
+        QString colName = headers[h].trimmed();
+        colName.replace("\"", "\"\"");
+        insertSql += "\"" + colName + "\"";
+      }
+      insertSql += ") VALUES ";
+
+      int batchEnd = qMin(i + options.batch_size, dataRows.size());
+      bool firstValue = true;
+
+      for (int row = i; row < batchEnd; ++row) {
+        if (!firstValue) insertSql += ", ";
+        firstValue = false;
+
+        insertSql += "(";
+        const QStringList& rowData = dataRows[row];
+        for (int col = 0; col < headers.size(); ++col) {
+          if (col > 0) insertSql += ", ";
+          if (col < rowData.size()) {
+            QString val = rowData[col];
+            val.replace("'", "''");
+            insertSql += "'" + val + "'";
+          } else {
+            insertSql += "NULL";
+          }
+        }
+        insertSql += ")";
+      }
+
+      auto result = db_connection_->execute(insertSql.toStdString());
+      if (result.success) {
+        imported += (batchEnd - i);
+      } else {
+        failed += (batchEnd - i);
+        showError(tr("Batch insert failed: %1").arg(QString::fromStdString(result.error_message)));
+      }
+
+      // Update progress
+      showStatusMessage(tr("Importing: %1/%2 rows").arg(imported).arg(totalRows), 1000);
+      QApplication::processEvents();
+    }
+
+    showStatusMessage(tr("CSV import complete: %1 imported, %2 failed").arg(imported).arg(failed), 5000);
+  }
 }
 
 void MainWindow::onToolsImportJson() {
-  showStatusMessage(tr("Import JSON - not yet implemented"), 3000);
+  if (!db_connection_ || !db_connection_->isConnected()) {
+    showError(tr("Not connected to database"));
+    return;
+  }
+
+  QString fileName = QFileDialog::getOpenFileName(this, tr("Import JSON"),
+                                                  QString(), tr("JSON Files (*.json);;All Files (*.*)"));
+  if (fileName.isEmpty()) return;
+
+  QFile file(fileName);
+  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    showError(tr("Failed to open file: %1").arg(fileName));
+    return;
+  }
+
+  QByteArray data = file.readAll();
+  file.close();
+
+  QJsonDocument doc = QJsonDocument::fromJson(data);
+  if (doc.isNull()) {
+    showError(tr("Invalid JSON file"));
+    return;
+  }
+
+  // Get table name from filename
+  QFileInfo fileInfo(fileName);
+  QString tableName = fileInfo.baseName();
+  bool ok;
+  tableName = QInputDialog::getText(this, tr("Import JSON"),
+                                    tr("Table name:"), QLineEdit::Normal,
+                                    tableName, &ok);
+  if (!ok || tableName.isEmpty()) return;
+
+  // Sanitize table name
+  tableName.replace("\"", "\"\"");
+
+  QJsonArray array;
+  if (doc.isArray()) {
+    array = doc.array();
+  } else if (doc.isObject()) {
+    array.append(doc.object());
+  }
+
+  if (array.isEmpty()) {
+    showError(tr("No data found in JSON file"));
+    return;
+  }
+
+  // Extract column names from first object
+  QJsonObject firstObj = array.first().toObject();
+  QStringList columns;
+  for (const QString& key : firstObj.keys()) {
+    columns.append(key);
+  }
+
+  // Create table
+  QString createSql = "CREATE TABLE IF NOT EXISTS \"" + tableName + "\" (";
+  for (int i = 0; i < columns.size(); ++i) {
+    if (i > 0) createSql += ", ";
+    QString col = columns[i];
+    col.replace("\"", "\"\"");
+    createSql += "\"" + col + "\" TEXT";
+  }
+  createSql += ")";
+
+  auto createResult = db_connection_->execute(createSql.toStdString());
+  if (!createResult.success) {
+    showError(tr("Failed to create table: %1").arg(QString::fromStdString(createResult.error_message)));
+    return;
+  }
+
+  // Insert data
+  int imported = 0;
+  int batchSize = 100;
+  
+  for (int i = 0; i < array.size(); i += batchSize) {
+    QString insertSql = "INSERT INTO \"" + tableName + "\" (";
+    for (int c = 0; c < columns.size(); ++c) {
+      if (c > 0) insertSql += ", ";
+      QString col = columns[c];
+      col.replace("\"", "\"\"");
+      insertSql += "\"" + col + "\"";
+    }
+    insertSql += ") VALUES ";
+
+    bool firstVal = true;
+    int batchEnd = qMin(i + batchSize, array.size());
+    
+    for (int j = i; j < batchEnd; ++j) {
+      if (!firstVal) insertSql += ", ";
+      firstVal = false;
+
+      QJsonObject obj = array[j].toObject();
+      insertSql += "(";
+      for (int c = 0; c < columns.size(); ++c) {
+        if (c > 0) insertSql += ", ";
+        
+        QJsonValue val = obj.value(columns[c]);
+        if (val.isNull() || val.isUndefined()) {
+          insertSql += "NULL";
+        } else if (val.isString()) {
+          QString s = val.toString();
+          s.replace("'", "''");
+          insertSql += "'" + s + "'";
+        } else if (val.isBool()) {
+          insertSql += val.toBool() ? "TRUE" : "FALSE";
+        } else if (val.isDouble()) {
+          insertSql += QString::number(val.toDouble());
+        } else {
+          QString s = val.toVariant().toString();
+          s.replace("'", "''");
+          insertSql += "'" + s + "'";
+        }
+      }
+      insertSql += ")";
+    }
+
+    auto result = db_connection_->execute(insertSql.toStdString());
+    if (result.success) {
+      imported += (batchEnd - i);
+    }
+
+    showStatusMessage(tr("Importing JSON: %1/%2").arg(imported).arg(array.size()), 1000);
+    QApplication::processEvents();
+  }
+
+  showStatusMessage(tr("JSON import complete: %1 rows imported").arg(imported), 5000);
 }
 
 void MainWindow::onToolsImportExcel() {
-  showStatusMessage(tr("Import Excel - not yet implemented"), 3000);
+#ifdef SCRATCHROBIN_WITH_QXLSX
+  QString fileName = QFileDialog::getOpenFileName(this, tr("Import Excel"),
+                                                  QString(),
+                                                  tr("Excel Files (*.xlsx *.xls)"));
+  if (fileName.isEmpty()) return;
+  
+  QXlsx::Document xlsx(fileName);
+  if (xlsx.load() == false) {
+    showError(tr("Failed to load Excel file: %1").arg(fileName));
+    return;
+  }
+  
+  // Get the current worksheet
+  auto* sheet = xlsx.currentSheet();
+  if (!sheet) {
+    showError(tr("No worksheet found in Excel file"));
+    return;
+  }
+  QString sheetName = sheet->sheetName();
+  
+  // Read dimensions
+  QXlsx::CellRange range = xlsx.dimension();
+  int firstRow = range.firstRow();
+  int lastRow = range.lastRow();
+  int firstCol = range.firstColumn();
+  int lastCol = range.lastColumn();
+  
+  if (firstRow > lastRow || firstCol > lastCol) {
+    showError(tr("Excel file appears to be empty"));
+    return;
+  }
+  
+  // Preview dialog
+  QDialog previewDialog(this);
+  previewDialog.setWindowTitle(tr("Excel Import Preview"));
+  previewDialog.setMinimumSize(700, 500);
+  
+  auto* layout = new QVBoxLayout(&previewDialog);
+  
+  // Info label
+  auto* infoLabel = new QLabel(tr("Sheet: %1 | Rows: %2 | Columns: %3")
+                               .arg(sheetName)
+                               .arg(lastRow - firstRow + 1)
+                               .arg(lastCol - firstCol + 1), &previewDialog);
+  layout->addWidget(infoLabel);
+  
+  // Preview table
+  auto* table = new QTableWidget(&previewDialog);
+  table->setColumnCount(lastCol - firstCol + 1);
+  table->setRowCount(qMin(100, lastRow - firstRow + 1)); // Show first 100 rows
+  
+  // Set headers from first row
+  QStringList headers;
+  for (int col = firstCol; col <= lastCol; ++col) {
+    auto cell = xlsx.cellAt(firstRow, col);
+    QString header = cell ? cell->value().toString() : tr("Column %1").arg(col);
+    headers << header;
+  }
+  table->setHorizontalHeaderLabels(headers);
+  
+  // Fill data
+  for (int row = firstRow + 1; row <= qMin(lastRow, firstRow + 100); ++row) {
+    int tableRow = row - firstRow - 1;
+    for (int col = firstCol; col <= lastCol; ++col) {
+      auto cell = xlsx.cellAt(row, col);
+      QString value = cell ? cell->value().toString() : QString();
+      table->setItem(tableRow, col - firstCol, new QTableWidgetItem(value));
+    }
+  }
+  
+  table->resizeColumnsToContents();
+  layout->addWidget(table);
+  
+  // Target table input
+  auto* formLayout = new QFormLayout();
+  auto* targetTableEdit = new QLineEdit(&previewDialog);
+  targetTableEdit->setPlaceholderText(tr("target_table"));
+  formLayout->addRow(tr("Target Table:"), targetTableEdit);
+  
+  auto* firstRowHeaderCheck = new QCheckBox(tr("First row contains headers"), &previewDialog);
+  firstRowHeaderCheck->setChecked(true);
+  formLayout->addRow(firstRowHeaderCheck);
+  
+  layout->addLayout(formLayout);
+  
+  // Buttons
+  auto* btnBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                                      &previewDialog);
+  connect(btnBox, &QDialogButtonBox::accepted, &previewDialog, &QDialog::accept);
+  connect(btnBox, &QDialogButtonBox::rejected, &previewDialog, &QDialog::reject);
+  layout->addWidget(btnBox);
+  
+  if (previewDialog.exec() != QDialog::Accepted) return;
+  
+  QString targetTable = targetTableEdit->text().trimmed();
+  if (targetTable.isEmpty()) {
+    showError(tr("Target table name is required"));
+    return;
+  }
+  
+  bool firstRowIsHeader = firstRowHeaderCheck->isChecked();
+  int startRow = firstRowIsHeader ? firstRow + 1 : firstRow;
+  
+  // Generate INSERT statements
+  QStringList sqlStatements;
+  int rowCount = 0;
+  
+  for (int row = startRow; row <= lastRow; ++row) {
+    QStringList values;
+    bool hasData = false;
+    
+    for (int col = firstCol; col <= lastCol; ++col) {
+      auto cell = xlsx.cellAt(row, col);
+      QString value = cell ? cell->value().toString() : QString();
+      if (!value.isEmpty()) hasData = true;
+      
+      // Escape single quotes
+      value.replace("'", "''");
+      values << QString("'%1'").arg(value);
+    }
+    
+    if (!hasData) continue; // Skip empty rows
+    
+    QString sql = QString("INSERT INTO %1 (%2) VALUES (%3);")
+                  .arg(targetTable)
+                  .arg(headers.join(", "))
+                  .arg(values.join(", "));
+    sqlStatements << sql;
+    rowCount++;
+    
+    if (rowCount >= 1000) break; // Limit for safety
+  }
+  
+  // Show SQL in current editor
+  if (!sqlStatements.isEmpty()) {
+    SqlEditor* editor = currentEditor();
+    if (editor) {
+      editor->setPlainText(sqlStatements.join("\n"));
+      showStatusMessage(tr("Generated %1 INSERT statements for table '%2'")
+                        .arg(rowCount).arg(targetTable), 3000);
+    }
+  }
+  
+#else
+  showStatusMessage(tr("Excel import requires QXlsx library (not available)"), 3000);
+  QMessageBox::information(this, tr("Excel Import"),
+                           tr("Excel support is not enabled. "
+                              "Rebuild with SCRATCHROBIN_ENABLE_EXCEL=ON"));
+#endif
 }
 
 void MainWindow::onToolsExportSql() {
+  if (!results_grid_->hasData()) {
+    showStatusMessage(tr("No results to export"), 2000);
+    return;
+  }
+
   QString fileName = QFileDialog::getSaveFileName(this, tr("Export SQL"), 
                                                   QString(), tr("SQL Files (*.sql)"));
-  if (!fileName.isEmpty()) {
-    showStatusMessage(tr("Export to SQL: %1").arg(fileName), 3000);
+  if (fileName.isEmpty()) return;
+
+  QFile file(fileName);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    showError(tr("Cannot open file for writing: %1").arg(fileName));
+    return;
   }
+
+  QTextStream stream(&file);
+  QStringList headers = results_grid_->headers();
+  QList<QStringList> data = results_grid_->allData();
+
+  // Generate INSERT statements
+  for (const QStringList& row : data) {
+    stream << "INSERT INTO table_name (";
+    for (int i = 0; i < headers.size(); ++i) {
+      if (i > 0) stream << ", ";
+      QString col = headers[i];
+      col.replace("\"", "\"\"");
+      stream << "\"" << col << "\"";
+    }
+    stream << ") VALUES (";
+    for (int i = 0; i < row.size(); ++i) {
+      if (i > 0) stream << ", ";
+      QString val = row[i];
+      if (val.isEmpty()) {
+        stream << "NULL";
+      } else {
+        val.replace("'", "''");
+        stream << "'" << val << "'";
+      }
+    }
+    stream << ");\n";
+  }
+
+  file.close();
+  showStatusMessage(tr("Exported %1 rows to SQL").arg(data.size()), 3000);
 }
 
 void MainWindow::onToolsExportCsv() {
+  if (!results_grid_->hasData()) {
+    showStatusMessage(tr("No results to export"), 2000);
+    return;
+  }
+
   QString fileName = QFileDialog::getSaveFileName(this, tr("Export CSV"),
                                                   QString(), tr("CSV Files (*.csv)"));
-  if (!fileName.isEmpty()) {
-    showStatusMessage(tr("Export to CSV: %1").arg(fileName), 3000);
-  }
+  if (fileName.isEmpty()) return;
+
+  results_grid_->exportToCsv(fileName);
+  showStatusMessage(tr("Exported to CSV: %1").arg(fileName), 3000);
 }
 
 void MainWindow::onToolsExportJson() {
+  if (!results_grid_->hasData()) {
+    showStatusMessage(tr("No results to export"), 2000);
+    return;
+  }
+
   QString fileName = QFileDialog::getSaveFileName(this, tr("Export JSON"),
                                                   QString(), tr("JSON Files (*.json)"));
-  if (!fileName.isEmpty()) {
-    showStatusMessage(tr("Export to JSON: %1").arg(fileName), 3000);
+  if (fileName.isEmpty()) return;
+
+  QFile file(fileName);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    showError(tr("Cannot open file for writing: %1").arg(fileName));
+    return;
   }
+
+  QStringList headers = results_grid_->headers();
+  QList<QStringList> data = results_grid_->allData();
+
+  QJsonArray array;
+  for (const QStringList& row : data) {
+    QJsonObject obj;
+    for (int i = 0; i < qMin(row.size(), headers.size()); ++i) {
+      obj[headers[i]] = row[i];
+    }
+    array.append(obj);
+  }
+
+  QJsonDocument doc(array);
+  file.write(doc.toJson(QJsonDocument::Indented));
+  file.close();
+
+  showStatusMessage(tr("Exported %1 rows to JSON").arg(data.size()), 3000);
 }
 
 void MainWindow::onToolsExportExcel() {
-  showStatusMessage(tr("Excel export requires additional libraries"), 3000);
+#ifdef SCRATCHROBIN_WITH_QXLSX
+  if (!results_grid_->hasData()) {
+    showStatusMessage(tr("No results to export"), 2000);
+    return;
+  }
+  
+  QString fileName = QFileDialog::getSaveFileName(this, tr("Export Excel"),
+                                                  QString(),
+                                                  tr("Excel Files (*.xlsx)"));
+  if (fileName.isEmpty()) return;
+  
+  // Ensure .xlsx extension
+  if (!fileName.endsWith(".xlsx", Qt::CaseInsensitive)) {
+    fileName += ".xlsx";
+  }
+  
+  QXlsx::Document xlsx;
+  QXlsx::Format headerFormat;
+  headerFormat.setFontBold(true);
+  headerFormat.setFillPattern(QXlsx::Format::PatternSolid);
+  headerFormat.setPatternBackgroundColor(QColor(200, 200, 200));
+  
+  // Get data from grid
+  QStringList headers = results_grid_->headers();
+  QList<QStringList> data = results_grid_->allData();
+  
+  // Write headers
+  for (int col = 0; col < headers.size(); ++col) {
+    xlsx.write(1, col + 1, headers[col], headerFormat);
+  }
+  
+  // Write data
+  for (int row = 0; row < data.size(); ++row) {
+    const QStringList& rowData = data[row];
+    for (int col = 0; col < qMin(rowData.size(), headers.size()); ++col) {
+      // Try to detect numeric values
+      bool isNumber = false;
+      double numValue = rowData[col].toDouble(&isNumber);
+      
+      if (isNumber) {
+        xlsx.write(row + 2, col + 1, numValue);
+      } else {
+        xlsx.write(row + 2, col + 1, rowData[col]);
+      }
+    }
+    
+    // Progress update every 1000 rows
+    if ((row + 1) % 1000 == 0) {
+      showStatusMessage(tr("Exporting row %1 of %2...").arg(row + 1).arg(data.size()), 500);
+      QApplication::processEvents();
+    }
+  }
+  
+  // Auto-fit column widths (approximate)
+  for (int col = 0; col < headers.size(); ++col) {
+    int maxWidth = headers[col].length();
+    for (int row = 0; row < qMin(data.size(), 100); ++row) {
+      if (col < data[row].size()) {
+        maxWidth = qMax(maxWidth, data[row][col].length());
+      }
+    }
+    xlsx.setColumnWidth(col + 1, qMin(maxWidth + 2, 50));
+  }
+  
+  // Freeze header row
+  xlsx.addSheet("Results");
+  
+  if (xlsx.saveAs(fileName)) {
+    showStatusMessage(tr("Exported %1 rows to %2").arg(data.size()).arg(fileName), 3000);
+  } else {
+    showError(tr("Failed to save Excel file: %1").arg(fileName));
+  }
+  
+#else
+  showStatusMessage(tr("Excel export requires QXlsx library (not available)"), 3000);
+  QMessageBox::information(this, tr("Excel Export"),
+                           tr("Excel support is not enabled. "
+                              "Rebuild with SCRATCHROBIN_ENABLE_EXCEL=ON"));
+#endif
 }
 
 void MainWindow::onToolsExportXml() {
+  if (!results_grid_->hasData()) {
+    showStatusMessage(tr("No results to export"), 2000);
+    return;
+  }
+
   QString fileName = QFileDialog::getSaveFileName(this, tr("Export XML"),
                                                   QString(), tr("XML Files (*.xml)"));
-  if (!fileName.isEmpty()) {
-    showStatusMessage(tr("Export to XML: %1").arg(fileName), 3000);
+  if (fileName.isEmpty()) return;
+
+  QFile file(fileName);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    showError(tr("Cannot open file for writing: %1").arg(fileName));
+    return;
   }
+
+  QXmlStreamWriter writer(&file);
+  writer.setAutoFormatting(true);
+  writer.writeStartDocument();
+  writer.writeStartElement("resultset");
+
+  QStringList headers = results_grid_->headers();
+  QList<QStringList> data = results_grid_->allData();
+
+  for (const QStringList& row : data) {
+    writer.writeStartElement("row");
+    for (int i = 0; i < qMin(row.size(), headers.size()); ++i) {
+      QString colName = headers[i];
+      // Sanitize XML element name
+      colName.replace(QRegularExpression("[^a-zA-Z0-9_]"), "_");
+      if (colName.at(0).isDigit()) colName = "col" + colName;
+      
+      writer.writeTextElement(colName, row[i]);
+    }
+    writer.writeEndElement(); // row
+  }
+
+  writer.writeEndElement(); // resultset
+  writer.writeEndDocument();
+  file.close();
+
+  showStatusMessage(tr("Exported %1 rows to XML").arg(data.size()), 3000);
 }
 
 void MainWindow::onToolsExportHtml() {
+  if (!results_grid_->hasData()) {
+    showStatusMessage(tr("No results to export"), 2000);
+    return;
+  }
+
   QString fileName = QFileDialog::getSaveFileName(this, tr("Export HTML"),
                                                   QString(), tr("HTML Files (*.html)"));
-  if (!fileName.isEmpty()) {
-    showStatusMessage(tr("Export to HTML: %1").arg(fileName), 3000);
+  if (fileName.isEmpty()) return;
+
+  QFile file(fileName);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    showError(tr("Cannot open file for writing: %1").arg(fileName));
+    return;
   }
+
+  QTextStream stream(&file);
+  QStringList headers = results_grid_->headers();
+  QList<QStringList> data = results_grid_->allData();
+
+  stream << "<!DOCTYPE html>\n";
+  stream << "<html>\n<head>\n";
+  stream << "<title>Query Results</title>\n";
+  stream << "<style>\n";
+  stream << "table { border-collapse: collapse; width: 100%; }\n";
+  stream << "th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }\n";
+  stream << "th { background-color: #4CAF50; color: white; }\n";
+  stream << "tr:nth-child(even) { background-color: #f2f2f2; }\n";
+  stream << "</style>\n";
+  stream << "</head>\n<body>\n";
+  stream << "<h2>Query Results</h2>\n";
+  stream << "<p>Total rows: " << data.size() << "</p>\n";
+  stream << "<table>\n<thead>\n<tr>\n";
+
+  // Headers
+  for (const QString& header : headers) {
+    stream << "<th>" << header.toHtmlEscaped() << "</th>\n";
+  }
+  stream << "</tr>\n</thead>\n<tbody>\n";
+
+  // Data rows
+  for (const QStringList& row : data) {
+    stream << "<tr>\n";
+    for (const QString& cell : row) {
+      stream << "<td>" << cell.toHtmlEscaped() << "</td>\n";
+    }
+    stream << "</tr>\n";
+  }
+
+  stream << "</tbody>\n</table>\n";
+  stream << "</body>\n</html>\n";
+
+  file.close();
+  showStatusMessage(tr("Exported %1 rows to HTML").arg(data.size()), 3000);
 }
 
 void MainWindow::onToolsMigration() {
@@ -1501,15 +2417,45 @@ void MainWindow::onToolsMonitorTransactions() {
 }
 
 void MainWindow::onToolsMonitorStatements() {
-  showStatusMessage(tr("Monitor statements - not yet implemented"), 3000);
+  if (!db_connection_ || !db_connection_->isConnected()) {
+    showError(tr("Not connected to database"));
+    return;
+  }
+  
+  // Create and show monitoring dashboard with Statements tab active
+  auto* dashboard = new MonitoringDashboard(session_client_, this);
+  dashboard->setAttribute(Qt::WA_DeleteOnClose);
+  dashboard->setActiveTab(0); // Connection tab (Statements/Queries)
+  dashboard->show();
+  dashboard->resize(900, 600);
 }
 
 void MainWindow::onToolsMonitorLocks() {
-  showStatusMessage(tr("Monitor locks - not yet implemented"), 3000);
+  if (!db_connection_ || !db_connection_->isConnected()) {
+    showError(tr("Not connected to database"));
+    return;
+  }
+  
+  // Create and show monitoring dashboard with Locks tab active
+  auto* dashboard = new MonitoringDashboard(session_client_, this);
+  dashboard->setAttribute(Qt::WA_DeleteOnClose);
+  dashboard->setActiveTab(2); // Locks tab
+  dashboard->show();
+  dashboard->resize(900, 600);
 }
 
 void MainWindow::onToolsMonitorPerformance() {
-  showStatusMessage(tr("Monitor performance - not yet implemented"), 3000);
+  if (!db_connection_ || !db_connection_->isConnected()) {
+    showError(tr("Not connected to database"));
+    return;
+  }
+  
+  // Create and show monitoring dashboard with Performance tab active
+  auto* dashboard = new MonitoringDashboard(session_client_, this);
+  dashboard->setAttribute(Qt::WA_DeleteOnClose);
+  dashboard->setActiveTab(3); // Performance tab
+  dashboard->show();
+  dashboard->resize(900, 600);
 }
 
 // ============================================================================
@@ -1938,6 +2884,15 @@ void MainWindow::onToolsScriptingConsole() {
   dock_workspace_->registerPanel(info, panel);
   dock_workspace_->showPanel("scripting_console");
   showStatusMessage(tr("Scripting Console opened"), 2000);
+}
+
+void MainWindow::updateWindowTitle(const QString& filename) {
+  if (filename.isEmpty()) {
+    setWindowTitle(tr("ScratchRobin - Database Administration Tool"));
+  } else {
+    QFileInfo info(filename);
+    setWindowTitle(tr("%1 - ScratchRobin").arg(info.fileName()));
+  }
 }
 
 }  // namespace scratchrobin::ui

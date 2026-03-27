@@ -20,6 +20,8 @@
 #include <QSpinBox>
 #include <QSplitter>
 #include <QTimer>
+#include <QFileDialog>
+#include <QDateTime>
 
 namespace scratchrobin::ui {
 
@@ -179,7 +181,36 @@ void SessionManagerPanel::loadSessions()
 {
     model_->removeRows(0, model_->rowCount());
     
-    // TODO: Load from SessionClient when API is available
+    if (client_) {
+        // Query active sessions from database
+        std::string sql = 
+            "SELECT pid, usename, datname, client_addr, backend_start, "
+            "state, wait_event_type, query_start, query "
+            "FROM pg_stat_activity "
+            "WHERE state IS NOT NULL "
+            "ORDER BY backend_start DESC";
+        
+        auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+        
+        if (response.status.ok) {
+            for (const auto& row : response.result_set.rows) {
+                if (row.size() < 9) continue;
+                
+                QList<QStandardItem*> items;
+                items << new QStandardItem(QString::fromStdString(row[0])); // PID
+                items << new QStandardItem(QString::fromStdString(row[1])); // Username
+                items << new QStandardItem(QString::fromStdString(row[2])); // Database
+                items << new QStandardItem(QString::fromStdString(row[3])); // Client
+                items << new QStandardItem(QString::fromStdString(row[4])); // Connected
+                items << new QStandardItem(QString::fromStdString(row[5])); // State
+                items << new QStandardItem(QString::fromStdString(row[6])); // Wait Event
+                items << new QStandardItem(QString::fromStdString(row[7])); // Query Start
+                items << new QStandardItem(QString::fromStdString(row[8]).left(100)); // Query
+                
+                model_->appendRow(items);
+            }
+        }
+    }
     
     // Update stats
     totalLabel_->setText(tr("Total: %1").arg(model_->rowCount()));
@@ -222,7 +253,10 @@ void SessionManagerPanel::onKillSession()
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     
     if (reply == QMessageBox::Yes) {
-        // TODO: Execute via SessionClient when API is available
+        if (client_) {
+            std::string sql = QString("SELECT pg_terminate_backend(%1)").arg(pid).toStdString();
+            client_->ExecuteSql(4044, "scratchbird", sql);
+        }
         refresh();
     }
 }
@@ -239,7 +273,15 @@ void SessionManagerPanel::onKillAllUserSessions()
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     
     if (reply == QMessageBox::Yes) {
-        // TODO: Execute via SessionClient when API is available
+        // Kill all sessions for this user except current
+        if (client_) {
+            std::string sql = QString(
+                "SELECT pg_terminate_backend(pid) "
+                "FROM pg_stat_activity "
+                "WHERE usename = '%1' AND pid != pg_backend_pid()"
+            ).arg(username).toStdString();
+            client_->ExecuteSql(4044, "scratchbird", sql);
+        }
         refresh();
     }
 }
@@ -256,7 +298,11 @@ void SessionManagerPanel::onCancelQuery()
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     
     if (reply == QMessageBox::Yes) {
-        // TODO: Execute via SessionClient when API is available
+        // Cancel query by sending cancel signal (using pg_cancel_backend)
+        if (client_) {
+            std::string sql = QString("SELECT pg_cancel_backend(%1)").arg(pid).toStdString();
+            client_->ExecuteSql(4044, "scratchbird", sql);
+        }
         refresh();
     }
 }
@@ -349,7 +395,30 @@ void SessionDetailsDialog::setupUi()
 
 void SessionDetailsDialog::loadSessionDetails()
 {
-    // TODO: Load additional details from SessionClient when API is available
+    if (!client_) return;
+    
+    // Load additional session statistics
+    std::string sql = QString(
+        "SELECT backend_start, xact_start, query_start, state_change, "
+        "wait_event_type, wait_event, backend_xid, backend_xmin "
+        "FROM pg_stat_activity WHERE pid = %1"
+    ).arg(session_.pid).toStdString();
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok && !response.result_set.rows.empty()) {
+        const auto& row = response.result_set.rows[0];
+        QString details = detailsEdit_->toPlainText();
+        details += "\n\nAdditional Details:\n";
+        details += "-" + QString(50, '-') + "\n";
+        if (row.size() > 0) details += QString("Backend Start: %1\n").arg(QString::fromStdString(row[0]));
+        if (row.size() > 1) details += QString("Transaction Start: %1\n").arg(QString::fromStdString(row[1]));
+        if (row.size() > 2) details += QString("Query Start: %1\n").arg(QString::fromStdString(row[2]));
+        if (row.size() > 3) details += QString("State Change: %1\n").arg(QString::fromStdString(row[3]));
+        if (row.size() > 4 && !row[4].empty()) details += QString("Wait Event Type: %1\n").arg(QString::fromStdString(row[4]));
+        if (row.size() > 5 && !row[5].empty()) details += QString("Wait Event: %1\n").arg(QString::fromStdString(row[5]));
+        detailsEdit_->setPlainText(details);
+    }
 }
 
 // ============================================================================
@@ -414,7 +483,45 @@ void SessionHistoryDialog::loadHistory()
 {
     model_->removeRows(0, model_->rowCount());
     
-    // TODO: Load from SessionClient when API is available
+    if (!client_) return;
+    
+    int limit = limitSpin_->value();
+    
+    // Query statement statistics from pg_stat_statements if available
+    std::string sql = QString(
+        "SELECT queryid, calls, total_exec_time, rows, "
+        "shared_blks_hit, shared_blks_read, query "
+        "FROM pg_stat_statements "
+        "WHERE query NOT LIKE '%%pg_stat%%' "
+        "ORDER BY total_exec_time DESC "
+        "LIMIT %1"
+    ).arg(limit).toStdString();
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() < 7) continue;
+            
+            QList<QStandardItem*> items;
+            items << new QStandardItem("N/A"); // Timestamp (not available in pg_stat_statements)
+            items << new QStandardItem(QString::fromStdString(row[2])); // Duration
+            items << new QStandardItem(QString::fromStdString(row[3])); // Rows
+            items << new QStandardItem(QString::fromStdString(row[1])); // Calls (as status)
+            items << new QStandardItem(QString::fromStdString(row[6]).left(200)); // Query
+            
+            model_->appendRow(items);
+        }
+    } else {
+        // pg_stat_statements not available, show sample data
+        QList<QStandardItem*> items;
+        items << new QStandardItem(QDateTime::currentDateTime().toString());
+        items << new QStandardItem("0");
+        items << new QStandardItem("0");
+        items << new QStandardItem("N/A");
+        items << new QStandardItem("Statistics extension not available");
+        model_->appendRow(items);
+    }
 }
 
 void SessionHistoryDialog::onRefresh()
@@ -424,8 +531,41 @@ void SessionHistoryDialog::onRefresh()
 
 void SessionHistoryDialog::onExport()
 {
-    // TODO: Export to CSV
-    QMessageBox::information(this, tr("Export"), tr("History exported successfully."));
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Export Session History"),
+                                                    QString(), tr("CSV Files (*.csv)"));
+    if (fileName.isEmpty()) return;
+    
+    QFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, tr("Export Failed"), 
+                             tr("Could not open file for writing: %1").arg(fileName));
+        return;
+    }
+    
+    QTextStream stream(&file);
+    
+    // Headers
+    QStringList headers;
+    for (int col = 0; col < model_->columnCount(); ++col) {
+        if (col > 0) stream << ",";
+        stream << "\"" << model_->headerData(col, Qt::Horizontal).toString() << "\"";
+    }
+    stream << "\n";
+    
+    // Data
+    for (int row = 0; row < model_->rowCount(); ++row) {
+        for (int col = 0; col < model_->columnCount(); ++col) {
+            if (col > 0) stream << ",";
+            QString value = model_->item(row, col)->text();
+            value.replace("\"", "\"\""); // Escape quotes
+            stream << "\"" << value << "\"";
+        }
+        stream << "\n";
+    }
+    
+    file.close();
+    QMessageBox::information(this, tr("Export"), 
+                             tr("History exported successfully to %1").arg(fileName));
 }
 
 } // namespace scratchrobin::ui

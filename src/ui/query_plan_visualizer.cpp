@@ -19,6 +19,9 @@
 #include <QFileDialog>
 #include <QHeaderView>
 #include <QInputDialog>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 
 namespace scratchrobin::ui {
 
@@ -331,9 +334,137 @@ void QueryPlanVisualizerPanel::onSavePlan() {
     }
 }
 
+static PlanNode parsePlanNode(const QJsonObject& obj) {
+    PlanNode node;
+    
+    // Parse node type
+    QString nodeType = obj["Node Type"].toString();
+    if (nodeType == "Seq Scan") node.type = PlanNodeType::SeqScan;
+    else if (nodeType == "Index Scan") node.type = PlanNodeType::IndexScan;
+    else if (nodeType == "Index Only Scan") node.type = PlanNodeType::IndexOnlyScan;
+    else if (nodeType == "Bitmap Heap Scan") node.type = PlanNodeType::BitmapHeapScan;
+    else if (nodeType == "Bitmap Index Scan") node.type = PlanNodeType::BitmapIndexScan;
+    else if (nodeType == "Nested Loop") node.type = PlanNodeType::NestedLoop;
+    else if (nodeType == "Merge Join") node.type = PlanNodeType::MergeJoin;
+    else if (nodeType == "Hash Join") node.type = PlanNodeType::HashJoin;
+    else if (nodeType == "Hash") node.type = PlanNodeType::Hash;
+    else if (nodeType == "Sort") node.type = PlanNodeType::Sort;
+    else if (nodeType == "Aggregate") node.type = PlanNodeType::Aggregate;
+    else if (nodeType == "Group") node.type = PlanNodeType::Group;
+    else if (nodeType == "Limit") node.type = PlanNodeType::Limit;
+    else if (nodeType == "Subquery Scan") node.type = PlanNodeType::SubqueryScan;
+    else if (nodeType == "Function Scan") node.type = PlanNodeType::FunctionScan;
+    else if (nodeType == "Values Scan") node.type = PlanNodeType::ValuesScan;
+    else if (nodeType == "CTE Scan") node.type = PlanNodeType::CteScan;
+    else node.type = PlanNodeType::SeqScan;  // Default fallback
+    
+    // Parse basic fields
+    node.relationName = obj["Relation Name"].toString();
+    node.schema = obj["Schema"].toString();
+    node.alias = obj["Alias"].toString();
+    node.indexName = obj["Index Name"].toString();
+    
+    // Parse cost/timing
+    node.startupCost = obj["Startup Cost"].toDouble();
+    node.totalCost = obj["Total Cost"].toDouble();
+    node.actualStartupTime = obj["Actual Startup Time"].toDouble();
+    node.actualTotalTime = obj["Actual Total Time"].toDouble();
+    node.planRows = obj["Plan Rows"].toInt();
+    node.actualRows = obj["Actual Rows"].toInt();
+    node.planWidth = obj["Plan Width"].toInt();
+    node.actualLoops = obj["Actual Loops"].toInt(1);
+    
+    // Parse conditions
+    node.joinFilter = obj["Join Filter"].toString();
+    node.filter = obj["Filter"].toString();
+    node.indexCond = obj["Index Cond"].toString();
+    node.recheckCond = obj["Recheck Cond"].toString();
+    node.hashCond = obj["Hash Cond"].toString();
+    node.mergeCond = obj["Merge Cond"].toString();
+    {
+        QJsonArray arr = obj["Sort Key"].toArray();
+        QStringList keys;
+        for (const auto& v : arr) keys.append(v.toString());
+        node.sortKey = keys.join(", ");
+    }
+    node.sortMethod = obj["Sort Method"].toString();
+    node.sortSpaceUsed = obj["Sort Space Used"].toString();
+    {
+        QJsonArray arr = obj["Group Key"].toArray();
+        QStringList keys;
+        for (const auto& v : arr) keys.append(v.toString());
+        node.groupKey = keys.join(", ");
+    }
+    node.strategy = obj["Strategy"].toString();
+    node.parallelWorkers = obj["Workers Planned"].toString();
+    {
+        QJsonArray arr = obj["Output"].toArray();
+        QStringList keys;
+        for (const auto& v : arr) keys.append(v.toString());
+        node.output = keys.join(", ");
+    }
+    
+    // Parse children
+    QJsonArray plans = obj["Plans"].toArray();
+    for (const auto& plan : plans) {
+        PlanNode child = parsePlanNode(plan.toObject());
+        child.parent = &node;
+        node.children.append(child);
+    }
+    
+    return node;
+}
+
 void QueryPlanVisualizerPanel::onLoadPlan() {
-    QMessageBox::information(this, tr("Load Plan"),
-        tr("Load plan from file - not yet implemented."));
+    QString fileName = QFileDialog::getOpenFileName(this,
+        tr("Load Query Plan"),
+        QString(),
+        tr("JSON Files (*.json);;Text Files (*.txt);;All Files (*)"));
+    
+    if (fileName.isEmpty()) return;
+    
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly)) {
+        QMessageBox::critical(this, tr("Error"),
+            tr("Cannot open file for reading."));
+        return;
+    }
+    
+    QByteArray data = file.readAll();
+    file.close();
+    
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (doc.isNull()) {
+        QMessageBox::critical(this, tr("Error"),
+            tr("Invalid JSON format."));
+        return;
+    }
+    
+    // PostgreSQL EXPLAIN (FORMAT JSON) returns an array with one object
+    QJsonArray rootArray = doc.array();
+    if (rootArray.isEmpty()) {
+        QMessageBox::critical(this, tr("Error"),
+            tr("Empty plan array."));
+        return;
+    }
+    
+    QJsonObject planObj = rootArray[0].toObject();
+    QJsonObject plan = planObj["Plan"].toObject();
+    
+    // Clear current plan
+    currentPlan_.clear();
+    
+    // Parse plan
+    currentPlan_.rootNode = parsePlanNode(plan);
+    currentPlan_.planningTime = planObj["Planning Time"].toDouble();
+    currentPlan_.executionTime = planObj["Execution Time"].toDouble();
+    currentPlan_.triggers = planObj["Triggers"].toArray().size();
+    
+    // Refresh display
+    // Refresh would update the display here
+    
+    QMessageBox::information(this, tr("Plan Loaded"),
+        tr("Query plan loaded from:\n%1").arg(fileName));
 }
 
 void QueryPlanVisualizerPanel::onExportPlan() {
@@ -358,9 +489,75 @@ void QueryPlanVisualizerPanel::onViewText() {
     viewTabs_->setCurrentIndex(2);
 }
 
+static void buildFlameData(const PlanNode& node, QStringList& lines, int depth = 0) {
+    QString indent(depth * 2, ' ');
+    double time = node.actualTotalTime > 0 ? node.actualTotalTime : node.totalCost;
+    
+    QString line = indent;
+    switch (node.type) {
+        case PlanNodeType::SeqScan: line += "[Seq Scan] "; break;
+        case PlanNodeType::IndexScan: line += "[Index Scan] "; break;
+        case PlanNodeType::IndexOnlyScan: line += "[Index Only Scan] "; break;
+        case PlanNodeType::BitmapHeapScan: line += "[Bitmap Heap Scan] "; break;
+        case PlanNodeType::NestedLoop: line += "[Nested Loop] "; break;
+        case PlanNodeType::MergeJoin: line += "[Merge Join] "; break;
+        case PlanNodeType::HashJoin: line += "[Hash Join] "; break;
+        case PlanNodeType::Hash: line += "[Hash] "; break;
+        case PlanNodeType::Sort: line += "[Sort] "; break;
+        case PlanNodeType::Aggregate: line += "[Aggregate] "; break;
+        case PlanNodeType::Group: line += "[Group] "; break;
+        case PlanNodeType::Limit: line += "[Limit] "; break;
+        default: line += "[Node] "; break;
+    }
+    
+    if (!node.relationName.isEmpty()) {
+        line += node.relationName + " ";
+    }
+    line += QString("(%1 ms, %2 rows)").arg(time, 0, 'f', 2).arg(node.actualRows > 0 ? node.actualRows : node.planRows);
+    
+    lines.append(line);
+    
+    for (const auto& child : node.children) {
+        buildFlameData(child, lines, depth + 1);
+    }
+}
+
 void QueryPlanVisualizerPanel::onViewFlame() {
-    QMessageBox::information(this, tr("Flame View"),
-        tr("Flame graph view not yet implemented."));
+    if (currentPlan_.rootNode.relationName.isEmpty() && currentPlan_.rootNode.children.isEmpty()) {
+        QMessageBox::information(this, tr("No Plan"),
+            tr("No query plan loaded. Generate or load a plan first."));
+        return;
+    }
+    
+    // Build flame graph text representation
+    QStringList flameData;
+    flameData.append("=== Flame Graph View ===");
+    flameData.append("Time (ms) and row counts for each operation:");
+    flameData.append("");
+    
+    buildFlameData(currentPlan_.rootNode, flameData);
+    
+    flameData.append("");
+    flameData.append(QString("Planning Time: %1 ms").arg(currentPlan_.planningTime));
+    flameData.append(QString("Execution Time: %1 ms").arg(currentPlan_.executionTime));
+    
+    // Show in a dialog
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Flame Graph View"));
+    dialog.resize(800, 600);
+    
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* textEdit = new QTextEdit(&dialog);
+    textEdit->setReadOnly(true);
+    textEdit->setFont(QFont("Consolas", 10));
+    textEdit->setPlainText(flameData.join("\n"));
+    layout->addWidget(textEdit);
+    
+    auto* closeBtn = new QPushButton(tr("Close"), &dialog);
+    connect(closeBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
+    layout->addWidget(closeBtn);
+    
+    dialog.exec();
 }
 
 void QueryPlanVisualizerPanel::onNodeSelected(const QModelIndex& index) {

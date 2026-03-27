@@ -137,21 +137,114 @@ void ForeignDataWrapperManagerPanel::panelActivated()
 void ForeignDataWrapperManagerPanel::loadFDWs()
 {
     fdwModel_->removeRows(0, fdwModel_->rowCount());
+    
+    if (!client_) return;
+    
+    std::string sql = 
+        "SELECT fdwname, fdwowner::regrole::text "
+        "FROM pg_foreign_data_wrapper "
+        "ORDER BY fdwname";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() < 2) continue;
+            
+            QList<QStandardItem*> items;
+            items << new QStandardItem(QString::fromStdString(row[0])); // Name
+            items << new QStandardItem(QString::fromStdString(row[1])); // Owner
+            items << new QStandardItem(QString()); // Handler
+            
+            fdwModel_->appendRow(items);
+        }
+    }
 }
 
 void ForeignDataWrapperManagerPanel::loadServers()
 {
     serverModel_->removeRows(0, serverModel_->rowCount());
+    
+    if (!client_) return;
+    
+    std::string sql = 
+        "SELECT s.srvname, f.fdwname, s.srvowner::regrole::text "
+        "FROM pg_foreign_server s "
+        "JOIN pg_foreign_data_wrapper f ON s.srvfdw = f.oid "
+        "ORDER BY s.srvname";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() < 3) continue;
+            
+            QList<QStandardItem*> items;
+            items << new QStandardItem(QString::fromStdString(row[0])); // Name
+            items << new QStandardItem(QString::fromStdString(row[1])); // FDW
+            items << new QStandardItem(QString::fromStdString(row[2])); // Owner
+            
+            serverModel_->appendRow(items);
+        }
+    }
 }
 
 void ForeignDataWrapperManagerPanel::loadUserMappings()
 {
     mappingModel_->removeRows(0, mappingModel_->rowCount());
+    
+    if (!client_) return;
+    
+    std::string sql = 
+        "SELECT um.umid::regrole::text as local_user, s.srvname "
+        "FROM pg_user_mapping um "
+        "JOIN pg_foreign_server s ON um.umserver = s.oid "
+        "ORDER BY s.srvname, um.umid::regrole::text";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() < 2) continue;
+            
+            QList<QStandardItem*> items;
+            items << new QStandardItem(QString::fromStdString(row[0])); // Local User
+            items << new QStandardItem(QString::fromStdString(row[1])); // Server
+            
+            mappingModel_->appendRow(items);
+        }
+    }
 }
 
 void ForeignDataWrapperManagerPanel::loadForeignTables()
 {
     tableModel_->removeRows(0, tableModel_->rowCount());
+    
+    if (!client_) return;
+    
+    std::string sql = 
+        "SELECT c.relname, n.nspname, s.srvname "
+        "FROM pg_class c "
+        "JOIN pg_namespace n ON c.relnamespace = n.oid "
+        "JOIN pg_foreign_table ft ON c.oid = ft.ftrelid "
+        "JOIN pg_foreign_server s ON ft.ftserver = s.oid "
+        "WHERE c.relkind = 'f' "
+        "ORDER BY n.nspname, c.relname";
+    
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (row.size() < 3) continue;
+            
+            QList<QStandardItem*> items;
+            items << new QStandardItem(QString::fromStdString(row[0])); // Table
+            items << new QStandardItem(QString::fromStdString(row[1])); // Schema
+            items << new QStandardItem(QString::fromStdString(row[2])); // Server
+            
+            tableModel_->appendRow(items);
+        }
+    }
 }
 
 void ForeignDataWrapperManagerPanel::onCreateFDW()
@@ -186,13 +279,87 @@ void ForeignDataWrapperManagerPanel::onImportForeignSchema()
 
 void ForeignDataWrapperManagerPanel::onDropObject()
 {
-    // TODO: Drop selected object
+    int tab = tabWidget_->currentIndex();
+    
+    if (tab == 0) { // FDWs
+        auto index = fdwTree_->currentIndex();
+        if (!index.isValid()) return;
+        QString name = fdwModel_->item(index.row(), 0)->text();
+        
+        auto reply = QMessageBox::question(this, tr("Drop FDW"),
+            tr("Drop foreign data wrapper '%1'?").arg(name));
+        if (reply == QMessageBox::Yes && client_) {
+            std::string sql = QString("DROP FOREIGN DATA WRAPPER IF EXISTS %1 CASCADE").arg(name).toStdString();
+            client_->ExecuteSql(4044, "scratchbird", sql);
+            refresh();
+        }
+    } else if (tab == 1) { // Servers
+        auto index = serverTree_->currentIndex();
+        if (!index.isValid()) return;
+        QString name = serverModel_->item(index.row(), 0)->text();
+        
+        auto reply = QMessageBox::question(this, tr("Drop Server"),
+            tr("Drop server '%1'?").arg(name));
+        if (reply == QMessageBox::Yes && client_) {
+            std::string sql = QString("DROP SERVER IF EXISTS %1 CASCADE").arg(name).toStdString();
+            client_->ExecuteSql(4044, "scratchbird", sql);
+            refresh();
+        }
+    } else if (tab == 2) { // User Mappings
+        auto index = mappingTree_->currentIndex();
+        if (!index.isValid()) return;
+        QString user = mappingModel_->item(index.row(), 0)->text();
+        QString server = mappingModel_->item(index.row(), 1)->text();
+        
+        auto reply = QMessageBox::question(this, tr("Drop User Mapping"),
+            tr("Drop user mapping for '%1' on server '%2'?").arg(user).arg(server));
+        if (reply == QMessageBox::Yes && client_) {
+            std::string sql = QString("DROP USER MAPPING IF EXISTS FOR %1 SERVER %2").arg(user).arg(server).toStdString();
+            client_->ExecuteSql(4044, "scratchbird", sql);
+            refresh();
+        }
+    } else if (tab == 3) { // Foreign Tables
+        auto index = tableTree_->currentIndex();
+        if (!index.isValid()) return;
+        QString table = tableModel_->item(index.row(), 0)->text();
+        QString schema = tableModel_->item(index.row(), 1)->text();
+        
+        auto reply = QMessageBox::question(this, tr("Drop Foreign Table"),
+            tr("Drop foreign table '%1.%2'?").arg(schema).arg(table));
+        if (reply == QMessageBox::Yes && client_) {
+            std::string sql = QString("DROP FOREIGN TABLE IF EXISTS %1.%2 CASCADE").arg(schema).arg(table).toStdString();
+            client_->ExecuteSql(4044, "scratchbird", sql);
+            refresh();
+        }
+    }
 }
 
 void ForeignDataWrapperManagerPanel::onTestConnection()
 {
-    // TODO: Test connection to selected server
-    QMessageBox::information(this, tr("Test Connection"), tr("Connection successful."));
+    auto index = serverTree_->currentIndex();
+    if (!index.isValid()) {
+        QMessageBox::information(this, tr("Test Connection"), tr("Please select a server."));
+        return;
+    }
+    
+    QString server = serverModel_->item(index.row(), 0)->text();
+    
+    if (!client_) {
+        QMessageBox::information(this, tr("Test Connection"), tr("Connection test not available (offline)."));
+        return;
+    }
+    
+    // Try to query the foreign server
+    std::string sql = QString("SELECT 1 FROM pg_foreign_server WHERE srvname = '%1'").arg(server).toStdString();
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    if (response.status.ok && !response.result_set.rows.empty()) {
+        QMessageBox::information(this, tr("Test Connection"),
+            tr("Server '%1' is configured. Note: Actual connection test depends on FDW implementation.").arg(server));
+    } else {
+        QMessageBox::warning(this, tr("Test Connection"),
+            tr("Could not verify server '%1'.").arg(server));
+    }
 }
 
 void ForeignDataWrapperManagerPanel::onFilterChanged(const QString& filter)
@@ -242,7 +409,20 @@ void CreateFdwDialog::onPreview()
 
 void CreateFdwDialog::onCreate()
 {
-    accept();
+    if (!client_) {
+        accept();
+        return;
+    }
+    
+    QString sql = generateDdl();
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql.toStdString());
+    
+    if (response.status.ok) {
+        accept();
+    } else {
+        QMessageBox::warning(this, tr("Error"),
+            tr("Failed to create FDW: %1").arg(QString::fromStdString(response.status.message)));
+    }
 }
 
 QString CreateFdwDialog::generateDdl()
@@ -293,6 +473,19 @@ void CreateForeignServerDialog::setupUi()
 
 void CreateForeignServerDialog::loadFDWs()
 {
+    if (!client_) return;
+    
+    std::string sql = "SELECT fdwname FROM pg_foreign_data_wrapper ORDER BY fdwname";
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    fdwCombo_->clear();
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (!row.empty()) {
+                fdwCombo_->addItem(QString::fromStdString(row[0]));
+            }
+        }
+    }
 }
 
 void CreateForeignServerDialog::onPreview()
@@ -302,12 +495,31 @@ void CreateForeignServerDialog::onPreview()
 
 void CreateForeignServerDialog::onCreate()
 {
-    accept();
+    if (!client_) {
+        accept();
+        return;
+    }
+    
+    QString sql = generateDdl();
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql.toStdString());
+    
+    if (response.status.ok) {
+        accept();
+    } else {
+        QMessageBox::warning(this, tr("Error"),
+            tr("Failed to create server: %1").arg(QString::fromStdString(response.status.message)));
+    }
 }
 
 void CreateForeignServerDialog::onTestConnection()
 {
-    QMessageBox::information(this, tr("Test"), tr("Connection test not implemented."));
+    if (!client_) {
+        QMessageBox::information(this, tr("Test"), tr("Connection test not available (offline)."));
+        return;
+    }
+    
+    QMessageBox::information(this, tr("Test"),
+        tr("Connection test requires server to be created first."));
 }
 
 QString CreateForeignServerDialog::generateDdl()
@@ -360,10 +572,37 @@ void CreateUserMappingDialog::setupUi()
 
 void CreateUserMappingDialog::loadServers()
 {
+    if (!client_) return;
+    
+    std::string sql = "SELECT srvname FROM pg_foreign_server ORDER BY srvname";
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    serverCombo_->clear();
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (!row.empty()) {
+                serverCombo_->addItem(QString::fromStdString(row[0]));
+            }
+        }
+    }
 }
 
 void CreateUserMappingDialog::loadUsers()
 {
+    if (!client_) return;
+    
+    std::string sql = "SELECT rolname FROM pg_roles WHERE rolcanlogin ORDER BY rolname";
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    userCombo_->clear();
+    userCombo_->addItem("PUBLIC");
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (!row.empty()) {
+                userCombo_->addItem(QString::fromStdString(row[0]));
+            }
+        }
+    }
 }
 
 void CreateUserMappingDialog::onPreview()
@@ -373,7 +612,20 @@ void CreateUserMappingDialog::onPreview()
 
 void CreateUserMappingDialog::onCreate()
 {
-    accept();
+    if (!client_) {
+        accept();
+        return;
+    }
+    
+    QString sql = generateDdl();
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql.toStdString());
+    
+    if (response.status.ok) {
+        accept();
+    } else {
+        QMessageBox::warning(this, tr("Error"),
+            tr("Failed to create user mapping: %1").arg(QString::fromStdString(response.status.message)));
+    }
 }
 
 QString CreateUserMappingDialog::generateDdl()
@@ -429,6 +681,19 @@ void CreateForeignTableDialog::setupUi()
 
 void CreateForeignTableDialog::loadServers()
 {
+    if (!client_) return;
+    
+    std::string sql = "SELECT srvname FROM pg_foreign_server ORDER BY srvname";
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    serverCombo_->clear();
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (!row.empty()) {
+                serverCombo_->addItem(QString::fromStdString(row[0]));
+            }
+        }
+    }
 }
 
 void CreateForeignTableDialog::onPreview()
@@ -438,7 +703,20 @@ void CreateForeignTableDialog::onPreview()
 
 void CreateForeignTableDialog::onCreate()
 {
-    accept();
+    if (!client_) {
+        accept();
+        return;
+    }
+    
+    QString sql = generateDdl();
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql.toStdString());
+    
+    if (response.status.ok) {
+        accept();
+    } else {
+        QMessageBox::warning(this, tr("Error"),
+            tr("Failed to create foreign table: %1").arg(QString::fromStdString(response.status.message)));
+    }
 }
 
 void CreateForeignTableDialog::onLoadRemoteTables()
@@ -497,6 +775,19 @@ void ImportForeignSchemaDialog::setupUi()
 
 void ImportForeignSchemaDialog::loadServers()
 {
+    if (!client_) return;
+    
+    std::string sql = "SELECT srvname FROM pg_foreign_server ORDER BY srvname";
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql);
+    
+    serverCombo_->clear();
+    if (response.status.ok) {
+        for (const auto& row : response.result_set.rows) {
+            if (!row.empty()) {
+                serverCombo_->addItem(QString::fromStdString(row[0]));
+            }
+        }
+    }
 }
 
 void ImportForeignSchemaDialog::onPreview()
@@ -506,7 +797,20 @@ void ImportForeignSchemaDialog::onPreview()
 
 void ImportForeignSchemaDialog::onImport()
 {
-    accept();
+    if (!client_) {
+        accept();
+        return;
+    }
+    
+    QString sql = generateDdl();
+    auto response = client_->ExecuteSql(4044, "scratchbird", sql.toStdString());
+    
+    if (response.status.ok) {
+        accept();
+    } else {
+        QMessageBox::warning(this, tr("Error"),
+            tr("Failed to import foreign schema: %1").arg(QString::fromStdString(response.status.message)));
+    }
 }
 
 void ImportForeignSchemaDialog::onLoadRemoteSchemas()

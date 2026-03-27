@@ -47,6 +47,9 @@ private:
     bool exportToCsv();
     bool exportToSql();
     bool exportToJson();
+    bool exportToExcel();
+    bool exportToXml();
+    bool exportToHtml();
 
     // Data
     QList<QStringList> data_;

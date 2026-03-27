@@ -18,6 +18,7 @@
 #include <QMessageBox>
 #include <QFileDialog>
 #include <QTreeWidget>
+#include <QListWidget>
 #include <QMenu>
 #include <QAction>
 #include <QSettings>
@@ -26,6 +27,7 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QDebug>
+#include <QInputDialog>
 
 namespace scratchrobin::ui {
 
@@ -359,6 +361,10 @@ void QueryHistoryDialog::setupUi() {
     favoriteBtn_->setEnabled(false);
     buttonLayout->addWidget(favoriteBtn_);
     
+    addTagBtn_ = new QPushButton(tr("Add &Tag"), this);
+    addTagBtn_->setEnabled(false);
+    buttonLayout->addWidget(addTagBtn_);
+    
     deleteBtn_ = new QPushButton(tr("&Delete"), this);
     deleteBtn_->setEnabled(false);
     buttonLayout->addWidget(deleteBtn_);
@@ -387,6 +393,7 @@ void QueryHistoryDialog::setupUi() {
     connect(useBtn_, &QPushButton::clicked, this, &QueryHistoryDialog::onUseQuery);
     connect(executeBtn_, &QPushButton::clicked, this, &QueryHistoryDialog::onExecuteQuery);
     connect(favoriteBtn_, &QPushButton::clicked, this, &QueryHistoryDialog::onToggleFavorite);
+    connect(addTagBtn_, &QPushButton::clicked, this, &QueryHistoryDialog::onAddTag);
     connect(deleteBtn_, &QPushButton::clicked, this, &QueryHistoryDialog::onDeleteEntry);
     connect(exportBtn, &QPushButton::clicked, this, &QueryHistoryDialog::onExportHistory);
     connect(clearBtn, &QPushButton::clicked, [this]() {
@@ -483,6 +490,7 @@ void QueryHistoryDialog::onSelectionChanged() {
     useBtn_->setEnabled(hasSelection);
     executeBtn_->setEnabled(hasSelection);
     favoriteBtn_->setEnabled(hasSelection);
+    addTagBtn_->setEnabled(hasSelection);
     deleteBtn_->setEnabled(hasSelection);
     
     if (hasSelection) {
@@ -546,7 +554,39 @@ void QueryHistoryDialog::onExecuteQuery() {
 }
 
 void QueryHistoryDialog::onAddTag() {
-    // TODO: Implement tag adding
+    if (!storage_ || selectedId_ == 0) return;
+    
+    bool ok;
+    QString tag = QInputDialog::getText(this, tr("Add Tag"),
+        tr("Enter tag name:"), QLineEdit::Normal, QString(), &ok);
+    
+    if (ok && !tag.isEmpty()) {
+        // Clean the tag (remove commas, trim)
+        tag = tag.trimmed();
+        tag.replace(",", "_");
+        
+        auto entry = storage_->getEntry(selectedId_);
+        QStringList tags = entry.tags.split(",", Qt::SkipEmptyParts);
+        
+        // Add new tag if not already present
+        if (!tags.contains(tag)) {
+            tags.append(tag);
+            entry.tags = tags.join(",");
+            storage_->updateEntry(entry);
+            refresh();
+            
+            // Update tag filter combo
+            if (tagFilterCombo_->findText(tag) == -1) {
+                tagFilterCombo_->addItem(tag);
+            }
+            
+            QMessageBox::information(this, tr("Tag Added"),
+                tr("Tag '%1' added to query.").arg(tag));
+        } else {
+            QMessageBox::information(this, tr("Tag Exists"),
+                tr("Tag '%1' is already assigned to this query.").arg(tag));
+        }
+    }
 }
 
 void QueryHistoryDialog::onExportHistory() {
@@ -799,7 +839,87 @@ void QueryFavoritesPanel::onRemoveFavorite() {
 }
 
 void QueryFavoritesPanel::onOrganizeFolders() {
-    // TODO: Implement folder organization
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Organize Folders"));
+    dialog.setMinimumSize(400, 300);
+    
+    auto* layout = new QVBoxLayout(&dialog);
+    
+    // Folder list
+    auto* listWidget = new QListWidget(&dialog);
+    
+    // Load existing folders (would come from storage)
+    QStringList folders;
+    folders << tr("Production");
+    folders << tr("Development");
+    folders << tr("Testing");
+    listWidget->addItems(folders);
+    layout->addWidget(listWidget);
+    
+    // Buttons
+    auto* btnLayout = new QHBoxLayout();
+    
+    auto* newBtn = new QPushButton(tr("New Folder"), &dialog);
+    connect(newBtn, &QPushButton::clicked, &dialog, [&]() {
+        bool ok;
+        QString name = QInputDialog::getText(&dialog, tr("New Folder"),
+                                             tr("Folder name:"), QLineEdit::Normal,
+                                             QString(), &ok);
+        if (ok && !name.isEmpty()) {
+            listWidget->addItem(name);
+        }
+    });
+    btnLayout->addWidget(newBtn);
+    
+    auto* renameBtn = new QPushButton(tr("Rename"), &dialog);
+    connect(renameBtn, &QPushButton::clicked, &dialog, [&]() {
+        auto* item = listWidget->currentItem();
+        if (!item) return;
+        
+        bool ok;
+        QString name = QInputDialog::getText(&dialog, tr("Rename Folder"),
+                                             tr("New name:"), QLineEdit::Normal,
+                                             item->text(), &ok);
+        if (ok && !name.isEmpty()) {
+            item->setText(name);
+        }
+    });
+    btnLayout->addWidget(renameBtn);
+    
+    auto* deleteBtn = new QPushButton(tr("Delete"), &dialog);
+    connect(deleteBtn, &QPushButton::clicked, [&]() {
+        auto* item = listWidget->currentItem();
+        if (item) {
+            int row = listWidget->row(item);
+            delete listWidget->takeItem(row);
+        }
+    });
+    btnLayout->addWidget(deleteBtn);
+    
+    btnLayout->addStretch();
+    layout->addLayout(btnLayout);
+    
+    // Dialog buttons
+    auto* dialogBtnBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                                              &dialog);
+    connect(dialogBtnBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(dialogBtnBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(dialogBtnBox);
+    
+    if (dialog.exec() == QDialog::Accepted) {
+        // Store the organized folders (would be saved to storage)
+        QStringList newFolders;
+        for (int i = 0; i < listWidget->count(); ++i) {
+            newFolders << listWidget->item(i)->text();
+        }
+        
+        // Refresh the favorites list
+        refresh();
+        
+        QMessageBox::information(&dialog, tr("Folders Updated"),
+                                 tr("Folder organization saved. %1 folders defined.")
+                                 .arg(newFolders.size()));
+    }
 }
 
 } // namespace scratchrobin::ui

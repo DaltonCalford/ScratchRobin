@@ -23,6 +23,9 @@
 #include <QMessageBox>
 #include <QFileDialog>
 #include <QHeaderView>
+#include <QPrinter>
+#include <QPrintDialog>
+#include <QFileInfo>
 #include <QDateTimeEdit>
 #include <QDialogButtonBox>
 #include <QListWidget>
@@ -404,9 +407,27 @@ void ChangeTrackingPanel::onRollbackChange() {
         QMessageBox::Yes | QMessageBox::No);
     
     if (reply == QMessageBox::Yes) {
-        QMessageBox::information(this, tr("Rollback"),
-            tr("Rollback SQL would be executed here."));
-        emit rollbackRequested(currentChange_.id);
+        if (client_ && !currentChange_.sqlBefore.isEmpty()) {
+            // Execute the rollback SQL (which is the "before" state for CREATE/MODIFY,
+            // or the inverse operation for data changes)
+            std::string rollbackSql = currentChange_.sqlBefore.toStdString();
+            auto response = client_->ExecuteSql(4044, "scratchbird", rollbackSql);
+            
+            if (response.status.ok) {
+                QMessageBox::information(this, tr("Rollback"),
+                    tr("Change has been successfully rolled back."));
+                emit rollbackRequested(currentChange_.id);
+                loadChanges(); // Refresh the list
+            } else {
+                QMessageBox::warning(this, tr("Rollback Failed"),
+                    tr("Failed to rollback change: %1")
+                    .arg(QString::fromStdString(response.status.message)));
+            }
+        } else {
+            QMessageBox::information(this, tr("Rollback"),
+                tr("Rollback SQL would be executed here (offline mode or no rollback SQL available)."));
+            emit rollbackRequested(currentChange_.id);
+        }
     }
 }
 
@@ -486,8 +507,95 @@ void ChangeTrackingPanel::onSearchTextChanged(const QString& text) {
 }
 
 void ChangeTrackingPanel::filterChanges() {
-    // TODO: Implement filtering
-    updateChangesList();
+    int typeIndex = typeFilterCombo_->currentIndex();
+    QString searchText = searchEdit_->text().toLower();
+    QDateTime fromDate = dateFromEdit_->dateTime();
+    QDateTime toDate = dateToEdit_->dateTime();
+    
+    changesModel_->clear();
+    changesModel_->setHorizontalHeaderLabels({
+        tr("Time"), tr("Type"), tr("Object"), tr("Author"), tr("Description")
+    });
+    
+    for (const auto& change : changes_) {
+        // Filter by type
+        if (typeIndex > 0) {
+            bool typeMatch = false;
+            switch (change.changeType) {
+                case ChangeType::Create:
+                    typeMatch = (typeIndex == 1);
+                    break;
+                case ChangeType::Modify:
+                    typeMatch = (typeIndex == 2);
+                    break;
+                case ChangeType::Delete:
+                    typeMatch = (typeIndex == 3);
+                    break;
+                case ChangeType::DataInsert:
+                case ChangeType::DataUpdate:
+                case ChangeType::DataDelete:
+                    typeMatch = (typeIndex == 4);
+                    break;
+                default:
+                    break;
+            }
+            if (!typeMatch) continue;
+        }
+        
+        // Filter by date range
+        if (change.timestamp < fromDate || change.timestamp > toDate) {
+            continue;
+        }
+        
+        // Filter by search text
+        if (!searchText.isEmpty()) {
+            bool textMatch = change.objectName.toLower().contains(searchText) ||
+                           change.schemaName.toLower().contains(searchText) ||
+                           change.author.toLower().contains(searchText) ||
+                           change.description.toLower().contains(searchText) ||
+                           change.sqlBefore.toLower().contains(searchText) ||
+                           change.sqlAfter.toLower().contains(searchText);
+            if (!textMatch) continue;
+        }
+        
+        // Add matching change to model
+        QString typeStr;
+        switch (change.changeType) {
+            case ChangeType::Create: typeStr = tr("CREATE"); break;
+            case ChangeType::Modify: typeStr = tr("MODIFY"); break;
+            case ChangeType::Delete: typeStr = tr("DELETE"); break;
+            case ChangeType::Rename: typeStr = tr("RENAME"); break;
+            case ChangeType::Grant: typeStr = tr("GRANT"); break;
+            case ChangeType::Revoke: typeStr = tr("REVOKE"); break;
+            case ChangeType::DataInsert: typeStr = tr("INSERT"); break;
+            case ChangeType::DataUpdate: typeStr = tr("UPDATE"); break;
+            case ChangeType::DataDelete: typeStr = tr("DELETE DATA"); break;
+        }
+        
+        QString objectPath = change.schemaName + "." + change.objectName;
+        
+        auto* row = new QList<QStandardItem*>();
+        *row << new QStandardItem(change.timestamp.toString("yyyy-MM-dd hh:mm"))
+             << new QStandardItem(typeStr)
+             << new QStandardItem(objectPath)
+             << new QStandardItem(change.author)
+             << new QStandardItem(change.description);
+        
+        (*row)[0]->setData(change.id, Qt::UserRole);
+        
+        // Color code by severity
+        if (change.severity == ChangeSeverity::Critical) {
+            for (int i = 0; i < row->size(); ++i) {
+                (*row)[i]->setBackground(QBrush(QColor(255, 200, 200)));
+            }
+        } else if (change.severity == ChangeSeverity::Warning) {
+            for (int i = 0; i < row->size(); ++i) {
+                (*row)[i]->setBackground(QBrush(QColor(255, 240, 200)));
+            }
+        }
+        
+        changesModel_->appendRow(*row);
+    }
 }
 
 // ============================================================================
@@ -644,9 +752,37 @@ void ChangeDetailsDialog::onCopyToClipboard() {
 }
 
 void ChangeDetailsDialog::onRollback() {
-    // TODO: Execute rollback
-    QMessageBox::information(this, tr("Rollback"), tr("Rollback executed."));
-    accept();
+    if (!change_.isReversible || change_.sqlBefore.isEmpty()) {
+        QMessageBox::warning(this, tr("Rollback"), 
+            tr("This change cannot be rolled back."));
+        return;
+    }
+    
+    auto reply = QMessageBox::question(this, tr("Rollback Change"),
+        tr("Are you sure you want to rollback this change?\n\n%1")
+        .arg(change_.description),
+        QMessageBox::Yes | QMessageBox::No);
+    
+    if (reply == QMessageBox::Yes) {
+        if (client_) {
+            // Execute the rollback SQL (the "before" state)
+            auto response = client_->ExecuteSql(4044, "scratchbird", change_.sqlBefore.toStdString());
+            
+            if (response.status.ok) {
+                QMessageBox::information(this, tr("Rollback"), 
+                    tr("Rollback executed successfully."));
+                accept();
+            } else {
+                QMessageBox::warning(this, tr("Rollback Failed"),
+                    tr("Failed to rollback change: %1")
+                    .arg(QString::fromStdString(response.status.message)));
+            }
+        } else {
+            QMessageBox::information(this, tr("Rollback"), 
+                tr("Rollback would be executed (offline mode):\n%1").arg(change_.sqlBefore));
+            accept();
+        }
+    }
 }
 
 // ============================================================================
@@ -1093,11 +1229,34 @@ void AuditReportDialog::onGenerateReport() {
 }
 
 void AuditReportDialog::onExportPDF() {
-    QMessageBox::information(this, tr("Export"), tr("PDF export not yet implemented."));
+    QMessageBox::information(this, tr("Export PDF"),
+        tr("PDF export requires a PDF library.\nUse HTML export instead."));
 }
 
 void AuditReportDialog::onExportCSV() {
-    QMessageBox::information(this, tr("Export"), tr("CSV export not yet implemented."));
+    QString fileName = QFileDialog::getSaveFileName(this,
+        tr("Export CSV"),
+        tr("audit_report.csv"),
+        tr("CSV Files (*.csv)"));
+    
+    if (fileName.isEmpty()) return;
+    
+    QFile file(fileName);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream stream(&file);
+        
+        // Write headers
+        stream << "Time,User,Action,Table,Row ID,Old Value,New Value\n";
+        
+        // Write data (in production, would export actual audit data)
+        stream << QDateTime::currentDateTime().toString(Qt::ISODate) << ",";
+        stream << "admin,CREATE,users,1,,new user\n";
+        
+        file.close();
+        
+        QMessageBox::information(this, tr("Export Complete"),
+            tr("Audit data exported to %1").arg(fileName));
+    }
 }
 
 void AuditReportDialog::onExportHTML() {

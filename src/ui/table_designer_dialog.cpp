@@ -19,6 +19,8 @@
 #include <QListWidget>
 #include <QLabel>
 #include <QSplitter>
+#include <QInputDialog>
+#include <QGroupBox>
 
 namespace scratchrobin::ui {
 
@@ -584,25 +586,62 @@ void ConstraintsTab::setCheckConstraints(const QList<CheckConstraint>& constrain
 }
 
 void ConstraintsTab::onAddForeignKey() {
-    // TODO: Open foreign key editor dialog
+    ForeignKeyEditorDialog dialog(this);
+    
+    // Get available columns from columns tab (need to pass them in real implementation)
+    dialog.setAvailableColumns({"id", "name", "email", "category_id"});
+    dialog.setAvailableTables({"categories", "users", "products", "orders"});
+    
     ForeignKey fk;
     fk.name = tr("fk_%1").arg(fkModel_->rowCount() + 1);
     fk.onDelete = "NO ACTION";
     fk.onUpdate = "NO ACTION";
+    dialog.setForeignKey(fk);
     
-    QList<QStandardItem*> row;
-    row << new QStandardItem(fk.name)
-        << new QStandardItem("column")
-        << new QStandardItem("ref_table")
-        << new QStandardItem("ref_column")
-        << new QStandardItem(fk.onDelete)
-        << new QStandardItem(fk.onUpdate);
-    fkModel_->appendRow(row);
-    emit constraintsChanged();
+    if (dialog.exec() == QDialog::Accepted) {
+        fk = dialog.foreignKey();
+        
+        QList<QStandardItem*> row;
+        row << new QStandardItem(fk.name)
+            << new QStandardItem(fk.columns.join(","))
+            << new QStandardItem(fk.refTable)
+            << new QStandardItem(fk.refColumns.join(","))
+            << new QStandardItem(fk.onDelete)
+            << new QStandardItem(fk.onUpdate);
+        fkModel_->appendRow(row);
+        emit constraintsChanged();
+    }
 }
 
 void ConstraintsTab::onEditForeignKey() {
-    // TODO: Edit selected foreign key
+    auto selection = fkTable_->selectionModel()->selectedRows();
+    if (selection.isEmpty()) return;
+    
+    int row = selection.first().row();
+    
+    ForeignKey fk;
+    fk.name = fkModel_->item(row, 0)->text();
+    fk.columns = fkModel_->item(row, 1)->text().split(",");
+    fk.refTable = fkModel_->item(row, 2)->text();
+    fk.refColumns = fkModel_->item(row, 3)->text().split(",");
+    fk.onDelete = fkModel_->item(row, 4)->text();
+    fk.onUpdate = fkModel_->item(row, 5)->text();
+    
+    ForeignKeyEditorDialog dialog(this);
+    dialog.setAvailableColumns({"id", "name", "email", "category_id"});
+    dialog.setAvailableTables({"categories", "users", "products", "orders"});
+    dialog.setForeignKey(fk);
+    
+    if (dialog.exec() == QDialog::Accepted) {
+        fk = dialog.foreignKey();
+        fkModel_->item(row, 0)->setText(fk.name);
+        fkModel_->item(row, 1)->setText(fk.columns.join(","));
+        fkModel_->item(row, 2)->setText(fk.refTable);
+        fkModel_->item(row, 3)->setText(fk.refColumns.join(","));
+        fkModel_->item(row, 4)->setText(fk.onDelete);
+        fkModel_->item(row, 5)->setText(fk.onUpdate);
+        emit constraintsChanged();
+    }
 }
 
 void ConstraintsTab::onRemoveForeignKey() {
@@ -622,7 +661,21 @@ void ConstraintsTab::onAddCheck() {
 }
 
 void ConstraintsTab::onEditCheck() {
-    // TODO: Edit selected check constraint
+    auto selection = checkTable_->selectionModel()->selectedRows();
+    if (selection.isEmpty()) return;
+    
+    int row = selection.first().row();
+    QString name = checkModel_->item(row, 0)->text();
+    QString expression = checkModel_->item(row, 1)->text();
+    
+    bool ok;
+    QString newExpression = QInputDialog::getText(this, tr("Edit Check Constraint"),
+        tr("Expression for '%1':").arg(name), QLineEdit::Normal, expression, &ok);
+    
+    if (ok) {
+        checkModel_->item(row, 1)->setText(newExpression);
+        emit constraintsChanged();
+    }
 }
 
 void ConstraintsTab::onRemoveCheck() {
@@ -736,7 +789,47 @@ void IndexesTab::onAddIndex() {
 }
 
 void IndexesTab::onEditIndex() {
-    // TODO: Open index editor dialog
+    auto selection = indexTable_->selectionModel()->selectedRows();
+    if (selection.isEmpty()) return;
+    
+    int row = selection.first().row();
+    
+    IndexDef idx;
+    idx.name = indexModel_->item(row, 0)->text();
+    idx.type = indexModel_->item(row, 1)->text();
+    idx.clustered = indexModel_->item(row, 3)->text() == tr("Yes");
+    
+    // Parse columns from "col1 ASC, col2 DESC" format
+    QString colsText = indexModel_->item(row, 2)->text();
+    for (const QString& col : colsText.split(",")) {
+        QString trimmed = col.trimmed();
+        if (trimmed.endsWith(" DESC", Qt::CaseInsensitive)) {
+            idx.columns.append({trimmed.left(trimmed.length() - 5).trimmed(), false});
+        } else if (trimmed.endsWith(" ASC", Qt::CaseInsensitive)) {
+            idx.columns.append({trimmed.left(trimmed.length() - 4).trimmed(), true});
+        } else {
+            idx.columns.append({trimmed, true});
+        }
+    }
+    
+    IndexEditorDialog dialog(this);
+    dialog.setAvailableColumns({"id", "name", "email", "created_at"}); // Should get from ColumnsTab
+    dialog.setIndex(idx);
+    
+    if (dialog.exec() == QDialog::Accepted) {
+        idx = dialog.getIndex();
+        indexModel_->item(row, 0)->setText(idx.name);
+        indexModel_->item(row, 1)->setText(idx.type);
+        
+        QStringList colParts;
+        for (const auto& col : idx.columns) {
+            colParts.append(col.first + (col.second ? " ASC" : " DESC"));
+        }
+        indexModel_->item(row, 2)->setText(colParts.join(", "));
+        indexModel_->item(row, 3)->setText(idx.clustered ? tr("Yes") : tr("No"));
+        
+        emit indexesChanged();
+    }
 }
 
 void IndexesTab::onRemoveIndex() {
@@ -803,7 +896,25 @@ void IndexEditorDialog::setAvailableColumns(const QStringList& columns) {
 }
 
 void IndexEditorDialog::updateColumnList() {
-    // TODO: Populate columns table
+    model_->clear();
+    model_->setHorizontalHeaderLabels({tr("Column"), tr("Ascending"), tr("Include")});
+    
+    for (const QString& col : availableColumns_) {
+        QList<QStandardItem*> row;
+        row << new QStandardItem(col);
+        
+        auto* ascItem = new QStandardItem();
+        ascItem->setCheckable(true);
+        ascItem->setCheckState(Qt::Checked);
+        row << ascItem;
+        
+        auto* includeItem = new QStandardItem();
+        includeItem->setCheckable(true);
+        includeItem->setCheckState(Qt::Unchecked);
+        row << includeItem;
+        
+        model_->appendRow(row);
+    }
 }
 
 void IndexEditorDialog::setIndex(const IndexesTab::IndexDef& index) {
@@ -817,6 +928,17 @@ IndexesTab::IndexDef IndexEditorDialog::getIndex() const {
     idx.name = nameEdit_->text();
     idx.type = typeCombo_->currentText();
     idx.clustered = clusteredCheck_->isChecked();
+    
+    // Get selected columns with ascending flags
+    for (int i = 0; i < model_->rowCount(); ++i) {
+        auto* includeItem = model_->item(i, 2);
+        if (includeItem && includeItem->checkState() == Qt::Checked) {
+            QString colName = model_->item(i, 0)->text();
+            bool ascending = model_->item(i, 1)->checkState() == Qt::Checked;
+            idx.columns.append({colName, ascending});
+        }
+    }
+    
     return idx;
 }
 
@@ -879,6 +1001,25 @@ void ForeignKeyEditorDialog::setupUi() {
     
     mainLayout->addLayout(formLayout);
     
+    // Column lists
+    auto* listsLayout = new QHBoxLayout();
+    
+    auto* colGroup = new QGroupBox(tr("Local Columns"), this);
+    auto* colLayout = new QVBoxLayout(colGroup);
+    columnList_ = new QListWidget(this);
+    columnList_->setSelectionMode(QAbstractItemView::MultiSelection);
+    colLayout->addWidget(columnList_);
+    listsLayout->addWidget(colGroup);
+    
+    auto* refColGroup = new QGroupBox(tr("Reference Columns"), this);
+    auto* refColLayout = new QVBoxLayout(refColGroup);
+    refColumnList_ = new QListWidget(this);
+    refColumnList_->setSelectionMode(QAbstractItemView::MultiSelection);
+    refColLayout->addWidget(refColumnList_);
+    listsLayout->addWidget(refColGroup);
+    
+    mainLayout->addLayout(listsLayout);
+    
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     mainLayout->addWidget(buttonBox);
     
@@ -890,19 +1031,58 @@ void ForeignKeyEditorDialog::setForeignKey(const ConstraintsTab::ForeignKey& fk)
     nameEdit_->setText(fk.name);
     onDeleteCombo_->setCurrentText(fk.onDelete);
     onUpdateCombo_->setCurrentText(fk.onUpdate);
+    
+    int tableIdx = refTableCombo_->findText(fk.refTable);
+    if (tableIdx >= 0) {
+        refTableCombo_->setCurrentIndex(tableIdx);
+    }
+    
+    // Select columns
+    for (const QString& col : fk.columns) {
+        for (int i = 0; i < columnList_->count(); ++i) {
+            if (columnList_->item(i)->text() == col) {
+                columnList_->item(i)->setSelected(true);
+                break;
+            }
+        }
+    }
+    
+    for (const QString& col : fk.refColumns) {
+        for (int i = 0; i < refColumnList_->count(); ++i) {
+            if (refColumnList_->item(i)->text() == col) {
+                refColumnList_->item(i)->setSelected(true);
+                break;
+            }
+        }
+    }
 }
 
 ConstraintsTab::ForeignKey ForeignKeyEditorDialog::foreignKey() const {
     ConstraintsTab::ForeignKey fk;
     fk.name = nameEdit_->text();
+    fk.refTable = refTableCombo_->currentText();
     fk.onDelete = onDeleteCombo_->currentText();
     fk.onUpdate = onUpdateCombo_->currentText();
+    
+    // Get selected columns
+    for (int i = 0; i < columnList_->count(); ++i) {
+        if (columnList_->item(i)->isSelected()) {
+            fk.columns.append(columnList_->item(i)->text());
+        }
+    }
+    
+    for (int i = 0; i < refColumnList_->count(); ++i) {
+        if (refColumnList_->item(i)->isSelected()) {
+            fk.refColumns.append(refColumnList_->item(i)->text());
+        }
+    }
+    
     return fk;
 }
 
 void ForeignKeyEditorDialog::setAvailableColumns(const QStringList& columns) {
-    Q_UNUSED(columns)
-    // TODO: Populate column lists
+    columnList_->clear();
+    columnList_->addItems(columns);
 }
 
 void ForeignKeyEditorDialog::setAvailableTables(const QStringList& tables) {

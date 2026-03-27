@@ -150,6 +150,27 @@ struct Macro {
     bool stopOnError = true;
 };
 
+// Filter for macro list
+struct MacroFilter {
+    QString category;
+    QString searchText;
+    
+    bool matches(const Macro& macro) const {
+        if (!category.isEmpty() && macro.category != category) {
+            return false;
+        }
+        if (!searchText.isEmpty()) {
+            bool matchesSearch = macro.name.toLower().contains(searchText) ||
+                                macro.description.toLower().contains(searchText) ||
+                                macro.tags.join(",").toLower().contains(searchText);
+            if (!matchesSearch) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
 struct MacroRecordingState {
     bool isRecording = false;
     bool isPaused = false;
@@ -224,6 +245,7 @@ private:
     QList<Macro> macros_;
     Macro currentMacro_;
     MacroRecordingState recordingState_;
+    MacroFilter currentFilter_;
     int currentActionIndex_ = -1;
     
     // UI

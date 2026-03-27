@@ -352,11 +352,37 @@ bool IconManager::updateIconBitmap(const std::string& id, const wxBitmapBundle& 
 }
 
 void IconManager::saveCustomIconsToConfig() {
-    // TODO: Implement using core::AppConfig
+    // Save custom icon paths to AppConfig
+    // Note: Full implementation requires AppConfig enhancement for custom icon storage
+    auto& config = scratchrobin::core::AppConfig::get();
+    
+    // Collect custom icons (those with file paths, not built-in)
+    std::vector<std::pair<std::string, std::string>> custom_icons;
+    for (const auto& [id, info] : icons_) {
+        if (!info.file_path.empty() && info.is_custom) {
+            custom_icons.push_back({id, info.file_path});
+        }
+    }
+    
+    // Store in config when AppConfig supports icon preferences
+    // For now, this prepares the data for future persistence
+    if (!custom_icons.empty()) {
+        config.setModified(true);
+    }
 }
 
 void IconManager::loadCustomIconsFromConfig() {
-    // TODO: Implement using core::AppConfig
+    // Load custom icon paths from AppConfig
+    // Note: Full implementation requires AppConfig enhancement for custom icon storage
+    auto& config = scratchrobin::core::AppConfig::get();
+    
+    // When AppConfig supports icon preferences, load them here:
+    // - Load custom icon path mappings
+    // - Verify files still exist
+    // - Reload icons using loadSVGFromFile()
+    
+    // Current stub: Config persistence will be added in future AppConfig update
+    Q_UNUSED(config)
 }
 
 const char* IconManager::getSVGData(const std::string& id) {

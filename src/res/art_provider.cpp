@@ -25,9 +25,9 @@ const char* GetSVGData(const wxArtID& id) {
     if (id == ART_CharacterSets) return CHARSET_SVG;
     if (id == ART_Collation) return COLLATION_SVG;
     if (id == ART_Collations) return COLLATION_SVG;
-    if (id == ART_Computed) return COLUMN_SVG;  // TODO: Custom computed column SVG
+    if (id == ART_Computed) return COMPUTED_COLUMN_SVG;
     if (id == ART_DatabaseConnected) return DATABASE_SVG;
-    if (id == ART_DatabaseDisconnected) return DEFAULT_OBJECT_SVG;  // TODO: Grayed database
+    if (id == ART_DatabaseDisconnected) return DATABASE_DISCONNECTED_SVG;
     if (id == ART_DatabaseServer) return ROOT_SVG;
     if (id == ART_DBTrigger) return DB_TRIGGER_SVG;
     if (id == ART_DBTriggers) return DB_TRIGGER_SVG;
@@ -54,7 +54,7 @@ const char* GetSVGData(const wxArtID& id) {
     if (id == ART_Packages) return FOLDER_SVG;
     if (id == ART_ParameterInput) return INPUT_SVG;
     if (id == ART_ParameterOutput) return OUTPUT_SVG;
-    if (id == ART_PrimaryAndForeignKey) return COLUMN_PK_SVG;  // TODO: Combined PK+FK icon
+    if (id == ART_PrimaryAndForeignKey) return COLUMN_PK_FK_SVG;
     if (id == ART_PrimaryKey) return COLUMN_PK_SVG;
     if (id == ART_Procedure) return PROCEDURE_SVG;
     if (id == ART_Procedures) return FOLDER_SVG;
@@ -62,13 +62,13 @@ const char* GetSVGData(const wxArtID& id) {
     if (id == ART_Roles) return FOLDER_SVG;
     if (id == ART_Root) return ROOT_SVG;
     if (id == ART_Server) return ROOT_SVG;
-    if (id == ART_SystemIndex) return INDEX_SVG;  // TODO: Grayed version
+    if (id == ART_SystemIndex) return SYSTEM_INDEX_SVG;
     if (id == ART_SystemIndices) return FOLDER_SVG;
     if (id == ART_SystemDomain) return SYSTEM_DOMAIN_SVG;
     if (id == ART_SystemDomains) return FOLDER_SVG;
-    if (id == ART_SystemPackage) return PACKAGE_SVG;  // TODO: Grayed version
+    if (id == ART_SystemPackage) return SYSTEM_PACKAGE_SVG;
     if (id == ART_SystemPackages) return FOLDER_SVG;
-    if (id == ART_SystemRole) return ROLE_SVG;  // TODO: Grayed version
+    if (id == ART_SystemRole) return SYSTEM_ROLE_SVG;
     if (id == ART_SystemRoles) return FOLDER_SVG;
     if (id == ART_SystemTable) return SYSTEM_TABLE_SVG;
     if (id == ART_SystemTables) return FOLDER_SVG;

@@ -175,6 +175,7 @@ class TableMappingDialog : public QDialog {
 public:
     explicit TableMappingDialog(const QString& sourceTable, 
                                 const QString& targetTable,
+                                backend::SessionClient* client = nullptr,
                                 QWidget* parent = nullptr);
 
 public slots:
@@ -188,6 +189,7 @@ private:
     
     QString sourceTable_;
     QString targetTable_;
+    backend::SessionClient* client_ = nullptr;
     
     QTableView* mappingTable_ = nullptr;
     QStandardItemModel* model_ = nullptr;

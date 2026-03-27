@@ -13,6 +13,7 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -235,6 +236,8 @@ class ServerMonitor {
 
   MetricsCallback metrics_callback_;
   AlertCallback alert_callback_;
+  
+  mutable std::mutex mutex_;
 
   void MonitoringLoop();
   void CheckAlertConditions(const ServerPerformanceMetrics& metrics);

@@ -340,6 +340,7 @@ private:
     QString generateIndexDDL(const QString& indexName);
     QString generateViewDDL(const QString& viewName);
     QString generateProcedureDDL(const QString& procName);
+    QString generateTriggerDDL(const QString& triggerName);
     QString generateFullSchemaDDL();
 
     backend::SessionClient* client_ = nullptr;

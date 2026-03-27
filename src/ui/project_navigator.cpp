@@ -491,17 +491,60 @@ void ProjectNavigator::onCopyName() {
 
 void ProjectNavigator::onRefreshItem() {
   if (!context_item_) return;
-  // TODO: Refresh specific item
+  
+  // Determine the type of item and refresh appropriately
+  QTreeWidgetItem* parent = context_item_->parent();
+  
+  if (!parent) {
+    // This is a server item
+    QString serverName = context_item_->text(0);
+    emit serverSelected(serverName);
+    // Could reload server info here
+  } else if (parent->text(0) == "Databases") {
+    // This is a database item
+    QTreeWidgetItem* serverItem = parent->parent();
+    if (serverItem) {
+      emit databaseSelected(serverItem->text(0), context_item_->text(0));
+    }
+  } else if (parent->text(0) == "Tables") {
+    // This is a table item
+    QTreeWidgetItem* dbItem = parent->parent();
+    QTreeWidgetItem* serverItem = dbItem ? dbItem->parent() : nullptr;
+    if (dbItem && serverItem) {
+      emit tableSelected(serverItem->text(0), dbItem->text(0), context_item_->text(0));
+    }
+  }
+  
+  // Trigger full refresh for now
   refresh();
 }
 
 void ProjectNavigator::onNewConnection() {
-  // TODO: Signal to open connection dialog
+  emit newConnectionRequested();
 }
 
 void ProjectNavigator::onDisconnect() {
   if (!context_item_) return;
-  // TODO: Disconnect from server
+  
+  // Get the server name - could be the item itself or its parent
+  QString serverName;
+  QTreeWidgetItem* parent = context_item_->parent();
+  
+  if (!parent) {
+    // This is a server item
+    serverName = context_item_->text(0);
+  } else {
+    // Find the server item (top-level parent)
+    QTreeWidgetItem* current = context_item_;
+    while (current->parent()) {
+      current = current->parent();
+    }
+    serverName = current->text(0);
+  }
+  
+  if (!serverName.isEmpty()) {
+    emit disconnectRequested(serverName);
+  }
 }
 
 }  // namespace scratchrobin::ui

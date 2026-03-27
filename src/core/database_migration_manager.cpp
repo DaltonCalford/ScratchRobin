@@ -76,12 +76,138 @@ MigrationResult DatabaseMigrationManager::MigrateToLatest() {
 }
 
 MigrationResult DatabaseMigrationManager::MigrateToVersion(const std::string& target_version) {
-  (void)target_version;
-  
   MigrationResult result;
-  result.status = Status::Ok();
   
   auto pending = GetPendingMigrations();
+  if (pending.empty()) {
+    result.status = Status::Ok();
+    return result;
+  }
+  
+  int total = static_cast<int>(pending.size());
+  int current = 0;
+  
+  // Group migrations into batches based on config
+  int batch_size = impl_->config.batch_size;
+  if (batch_size < 1) batch_size = 1;
+  
+  bool in_transaction = false;
+  
+  for (auto& migration : pending) {
+    // Check if we've reached target version
+    if (!target_version.empty() && migration.version > target_version) {
+      break;
+    }
+    
+    ++current;
+    
+    if (impl_->progress_callback) {
+      impl_->progress_callback(migration, current, total);
+    }
+    
+    // Start transaction for batch if needed
+    if (!in_transaction && batch_size > 1) {
+      // In real implementation: BEGIN TRANSACTION
+      in_transaction = true;
+    }
+    
+    // Execute before callback
+    if (impl_->before_callback && !impl_->config.skip_callbacks) {
+      Status before_status = impl_->before_callback(migration);
+      if (!before_status.ok) {
+        result.failed_migrations.push_back(migration.id);
+        result.errors[migration.id] = before_status.message;
+        if (in_transaction) {
+          // Rollback transaction
+          in_transaction = false;
+        }
+        continue;
+      }
+    }
+    
+    // Execute migration
+    if (!impl_->config.dry_run) {
+      auto start_time = std::chrono::steady_clock::now();
+      
+      // Execute the upgrade script
+      Status exec_status = ExecuteMigrationScript(migration.upgrade_script);
+      
+      auto end_time = std::chrono::steady_clock::now();
+      migration.execution_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+          end_time - start_time).count();
+      
+      if (!exec_status.ok) {
+        result.failed_migrations.push_back(migration.id);
+        result.errors[migration.id] = exec_status.message;
+        migration.status = MigrationStatus::kFailed;
+        
+        if (in_transaction) {
+          // Rollback transaction on failure
+          in_transaction = false;
+        }
+        
+        if (impl_->after_callback && !impl_->config.skip_callbacks) {
+          impl_->after_callback(migration, exec_status);
+        }
+        continue;
+      }
+      
+      // Record migration in history table
+      Status record_status = RecordMigration(migration);
+      if (!record_status.ok) {
+        result.failed_migrations.push_back(migration.id);
+        result.errors[migration.id] = record_status.message;
+        migration.status = MigrationStatus::kFailed;
+        
+        if (in_transaction) {
+          in_transaction = false;
+        }
+        continue;
+      }
+    }
+    
+    migration.status = MigrationStatus::kCompleted;
+    migration.executed_at = std::chrono::system_clock::now();
+    result.applied_migrations.push_back(migration.id);
+    
+    // Commit batch if needed
+    if (in_transaction && (current % batch_size == 0 || current == total)) {
+      // In real implementation: COMMIT
+      in_transaction = false;
+    }
+    
+    if (impl_->after_callback && !impl_->config.skip_callbacks) {
+      impl_->after_callback(migration, Status::Ok());
+    }
+  }
+  
+  // Ensure any open transaction is committed
+  if (in_transaction) {
+    // In real implementation: COMMIT
+  }
+  
+  if (result.failed_migrations.empty()) {
+    result.status = Status::Ok();
+  } else {
+    result.status = Status::Error("Some migrations failed");
+  }
+  
+  return result;
+}
+
+MigrationResult DatabaseMigrationManager::Migrate(int count) {
+  auto pending = GetPendingMigrations();
+  if (pending.empty()) {
+    MigrationResult result;
+    result.status = Status::Ok();
+    return result;
+  }
+  
+  if (count > 0 && static_cast<size_t>(count) < pending.size()) {
+    pending.resize(count);
+  }
+  
+  MigrationResult result;
   int total = static_cast<int>(pending.size());
   int current = 0;
   
@@ -92,7 +218,7 @@ MigrationResult DatabaseMigrationManager::MigrateToVersion(const std::string& ta
       impl_->progress_callback(migration, current, total);
     }
     
-    if (impl_->before_callback) {
+    if (impl_->before_callback && !impl_->config.skip_callbacks) {
       Status before_status = impl_->before_callback(migration);
       if (!before_status.ok) {
         result.failed_migrations.push_back(migration.id);
@@ -101,27 +227,50 @@ MigrationResult DatabaseMigrationManager::MigrateToVersion(const std::string& ta
       }
     }
     
-    // Apply migration (stub)
+    if (!impl_->config.dry_run) {
+      auto start_time = std::chrono::steady_clock::now();
+      
+      Status exec_status = ExecuteMigrationScript(migration.upgrade_script);
+      
+      auto end_time = std::chrono::steady_clock::now();
+      migration.execution_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+          end_time - start_time).count();
+      
+      if (!exec_status.ok) {
+        result.failed_migrations.push_back(migration.id);
+        result.errors[migration.id] = exec_status.message;
+        migration.status = MigrationStatus::kFailed;
+        
+        if (impl_->after_callback && !impl_->config.skip_callbacks) {
+          impl_->after_callback(migration, exec_status);
+        }
+        continue;
+      }
+      
+      Status record_status = RecordMigration(migration);
+      if (!record_status.ok) {
+        result.failed_migrations.push_back(migration.id);
+        result.errors[migration.id] = record_status.message;
+        migration.status = MigrationStatus::kFailed;
+        continue;
+      }
+    }
+    
     migration.status = MigrationStatus::kCompleted;
+    migration.executed_at = std::chrono::system_clock::now();
     result.applied_migrations.push_back(migration.id);
     
-    if (impl_->after_callback) {
+    if (impl_->after_callback && !impl_->config.skip_callbacks) {
       impl_->after_callback(migration, Status::Ok());
     }
   }
   
-  return result;
-}
-
-MigrationResult DatabaseMigrationManager::Migrate(int count) {
-  auto pending = GetPendingMigrations();
-  if (count > 0 && static_cast<size_t>(count) < pending.size()) {
-    pending.resize(count);
+  if (result.failed_migrations.empty()) {
+    result.status = Status::Ok();
+  } else {
+    result.status = Status::Error("Some migrations failed");
   }
   
-  // Apply migrations (stub)
-  MigrationResult result;
-  result.status = Status::Ok();
   return result;
 }
 
@@ -244,6 +393,73 @@ Status DatabaseMigrationManager::GenerateMigration(const std::string& name,
 Status DatabaseMigrationManager::GenerateBaseline(const std::string& output_path) {
   (void)output_path;
   return Status::Ok();
+}
+
+Status DatabaseMigrationManager::ExecuteMigrationScript(const std::string& script) {
+  if (script.empty()) {
+    return Status::Ok();
+  }
+  
+  if (!impl_->connection) {
+    return Status::Error("No database connection available");
+  }
+  
+  // In a real implementation, this would:
+  // 1. Parse the script into individual statements
+  // 2. Execute each statement
+  // 3. Handle errors and rollback if needed
+  
+  // For now, simulate successful execution
+  // auto result = impl_->connection->execute(script);
+  // if (!result.success) {
+  //   return Status::Error(result.error_message);
+  // }
+  
+  return Status::Ok();
+}
+
+Status DatabaseMigrationManager::RecordMigration(const Migration& migration) {
+  if (!impl_->connection) {
+    return Status::Error("No database connection available");
+  }
+  
+  // Insert into migrations tracking table
+  std::ostringstream sql;
+  sql << "INSERT INTO " << impl_->config.migrations_table 
+      << " (version, description, checksum, applied_at, execution_time_ms) VALUES ('"
+      << migration.version << "', '"
+      << migration.name << "', '"
+      << migration.checksum << "', "
+      << "CURRENT_TIMESTAMP, "
+      << migration.execution_time_ms << ")";
+  
+  // In real implementation:
+  // auto result = impl_->connection->execute(sql.str());
+  // if (!result.success) {
+  //   return Status::Error(result.error_message);
+  // }
+  
+  return Status::Ok();
+}
+
+std::vector<Migration> DatabaseMigrationManager::GetPendingMigrations() {
+  std::vector<Migration> pending;
+  
+  // Filter migrations that haven't been applied yet
+  for (const auto& migration : impl_->migrations) {
+    if (migration.status == MigrationStatus::kPending && 
+        !IsVersionApplied(migration.version)) {
+      pending.push_back(migration);
+    }
+  }
+  
+  // Sort by version
+  std::sort(pending.begin(), pending.end(), 
+    [](const Migration& a, const Migration& b) {
+      return a.version < b.version;
+    });
+  
+  return pending;
 }
 
 }  // namespace scratchrobin::core

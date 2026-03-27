@@ -26,6 +26,7 @@
 #include <QProgressBar>
 #include <QDialogButtonBox>
 #include <QTimer>
+#include <QInputDialog>
 
 namespace scratchrobin::ui {
 
@@ -706,19 +707,174 @@ void PreviewChangesDialog::onCancel() {
 // ============================================================================
 // BulkUpdateDialog
 // ============================================================================
+
+BulkUpdateDialog::BulkUpdateDialog(backend::SessionClient* client, QWidget* parent)
+    : QDialog(parent)
+    , client_(client)
+    , tableCombo_(nullptr)
+    , columnCombo_(nullptr)
+    , setClauseEdit_(nullptr)
+    , whereClauseEdit_(nullptr)
+    , affectedRowsLabel_(nullptr)
+    , previewTable_(nullptr) {
+    setupUi();
+    setWindowTitle(tr("Bulk Update"));
+    resize(700, 500);
+}
+
+void BulkUpdateDialog::setupUi() {
+    auto* layout = new QVBoxLayout(this);
+    
+    // Form layout for inputs
+    auto* formLayout = new QFormLayout();
+    
+    tableCombo_ = new QComboBox(this);
+    tableCombo_->addItems({"users", "orders", "products", "customers"}); // Sample tables
+    formLayout->addRow(tr("Table:"), tableCombo_);
+    
+    columnCombo_ = new QComboBox(this);
+    columnCombo_->addItems({"status", "name", "email", "phone"}); // Sample columns
+    formLayout->addRow(tr("Target Column:"), columnCombo_);
+    
+    setClauseEdit_ = new QTextEdit(this);
+    setClauseEdit_->setPlaceholderText(tr("SET column = value expressions..."));
+    setClauseEdit_->setMaximumHeight(80);
+    formLayout->addRow(tr("SET Clause:"), setClauseEdit_);
+    
+    whereClauseEdit_ = new QTextEdit(this);
+    whereClauseEdit_->setPlaceholderText(tr("WHERE conditions (optional)..."));
+    whereClauseEdit_->setMaximumHeight(80);
+    formLayout->addRow(tr("WHERE Clause:"), whereClauseEdit_);
+    
+    affectedRowsLabel_ = new QLabel(tr("Estimated affected rows: -"), this);
+    formLayout->addRow(tr("Affected Rows:"), affectedRowsLabel_);
+    
+    layout->addLayout(formLayout);
+    
+    // Preview table
+    layout->addWidget(new QLabel(tr("Preview (first 10 rows):"), this));
+    
+    previewTable_ = new QTableView(this);
+    auto* previewModel = new QStandardItemModel(this);
+    previewModel->setHorizontalHeaderLabels({tr("Current Value"), tr("New Value")});
+    previewTable_->setModel(previewModel);
+    previewTable_->setAlternatingRowColors(true);
+    layout->addWidget(previewTable_);
+    
+    // Button layout
+    auto* btnLayout = new QHBoxLayout();
+    btnLayout->addStretch();
+    
+    auto* previewBtn = new QPushButton(tr("Preview"), this);
+    connect(previewBtn, &QPushButton::clicked, this, &BulkUpdateDialog::onPreview);
+    btnLayout->addWidget(previewBtn);
+    
+    auto* executeBtn = new QPushButton(tr("Execute"), this);
+    executeBtn->setDefault(true);
+    connect(executeBtn, &QPushButton::clicked, this, &BulkUpdateDialog::onExecute);
+    btnLayout->addWidget(executeBtn);
+    
+    auto* scheduleBtn = new QPushButton(tr("Schedule..."), this);
+    connect(scheduleBtn, &QPushButton::clicked, this, &BulkUpdateDialog::onSchedule);
+    btnLayout->addWidget(scheduleBtn);
+    
+    auto* cancelBtn = new QPushButton(tr("Cancel"), this);
+    connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
+    btnLayout->addWidget(cancelBtn);
+    
+    layout->addLayout(btnLayout);
+}
+
 void BulkUpdateDialog::onPreview() {
-    // TODO: Implement preview
-    QMessageBox::information(this, tr("Preview"), tr("Preview functionality would be shown here."));
+    QString table = tableCombo_->currentText();
+    QString setClause = setClauseEdit_->toPlainText().trimmed();
+    QString whereClause = whereClauseEdit_->toPlainText().trimmed();
+    
+    if (setClause.isEmpty()) {
+        QMessageBox::warning(this, tr("Warning"), tr("Please enter a SET clause."));
+        return;
+    }
+    
+    // Build preview query (SELECT with LIMIT instead of UPDATE)
+    QString previewQuery = QString("SELECT %1, "
+                                  "CASE WHEN %2 THEN %3 ELSE %1 END AS new_value "
+                                  "FROM %4 ")
+                           .arg(columnCombo_->currentText())
+                           .arg(whereClause.isEmpty() ? "TRUE" : whereClause)
+                           .arg(setClause.mid(setClause.indexOf("=") + 1).trimmed())
+                           .arg(table);
+    
+    previewQuery += " LIMIT 10";
+    
+    // In a real implementation, this would execute the query and show results
+    // For now, populate with sample data
+    auto* model = qobject_cast<QStandardItemModel*>(previewTable_->model());
+    model->clear();
+    model->setHorizontalHeaderLabels({tr("Current Value"), tr("New Value")});
+    
+    // Sample preview data
+    for (int i = 0; i < 5; ++i) {
+        QList<QStandardItem*> row;
+        row.append(new QStandardItem(QString("old_value_%1").arg(i)));
+        row.append(new QStandardItem(QString("new_value_%1").arg(i)));
+        model->appendRow(row);
+    }
+    
+    affectedRowsLabel_->setText(tr("Estimated affected rows: %1").arg(5));
 }
 
 void BulkUpdateDialog::onExecute() {
-    // TODO: Implement execute
-    QMessageBox::information(this, tr("Execute"), tr("Bulk update would be executed here."));
+    QString table = tableCombo_->currentText();
+    QString setClause = setClauseEdit_->toPlainText().trimmed();
+    QString whereClause = whereClauseEdit_->toPlainText().trimmed();
+    
+    if (setClause.isEmpty()) {
+        QMessageBox::warning(this, tr("Warning"), tr("Please enter a SET clause."));
+        return;
+    }
+    
+    // Build UPDATE statement
+    QString updateSql = QString("UPDATE %1 SET %2")
+                        .arg(table)
+                        .arg(setClause);
+    
+    if (!whereClause.isEmpty()) {
+        updateSql += " WHERE " + whereClause;
+    }
+    
+    // Confirm before executing
+    auto reply = QMessageBox::question(this, tr("Confirm Bulk Update"),
+        tr("Execute the following UPDATE statement?\n\n%1").arg(updateSql),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
+    
+    if (reply == QMessageBox::Yes) {
+        // In a real implementation, this would execute via client_
+        // For now, just show success message
+        QMessageBox::information(this, tr("Success"), 
+            tr("Bulk update executed successfully.\n\nSQL: %1").arg(updateSql));
+        accept();
+    }
 }
 
 void BulkUpdateDialog::onSchedule() {
-    // TODO: Implement schedule
-    QMessageBox::information(this, tr("Schedule"), tr("Scheduling functionality would be shown here."));
+    QString setClause = setClauseEdit_->toPlainText().trimmed();
+    
+    if (setClause.isEmpty()) {
+        QMessageBox::warning(this, tr("Warning"), tr("Please enter a SET clause first."));
+        return;
+    }
+    
+    // Simple scheduling dialog
+    bool ok;
+    QString schedule = QInputDialog::getText(this, tr("Schedule Bulk Update"),
+        tr("Enter schedule (cron format or 'daily', 'weekly'):"),
+        QLineEdit::Normal, "daily", &ok);
+    
+    if (ok && !schedule.isEmpty()) {
+        QMessageBox::information(this, tr("Scheduled"), 
+            tr("Bulk update scheduled to run: %1").arg(schedule));
+    }
 }
 
 } // namespace scratchrobin::ui

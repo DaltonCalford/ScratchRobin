@@ -141,14 +141,54 @@ QueryResult ScratchbirdConnection::getSchemas() {
 }
 
 QueryResult ScratchbirdConnection::getTables(const std::string& schema) {
-    (void)schema;  // Schema filtering not yet implemented in C API
-    return query(sb_metadata_tables_query());
+    std::string sql = sb_metadata_tables_query();
+    
+    // Add schema filtering if specified
+    if (!schema.empty() && schema != "*") {
+        // Replace the ORDER BY clause with a WHERE clause for schema filtering
+        size_t order_by_pos = sql.find("ORDER BY");
+        if (order_by_pos != std::string::npos) {
+            sql.insert(order_by_pos, "AND schema_id = '" + escapeString(schema) + "' ");
+        }
+    }
+    
+    return query(sql);
 }
 
 QueryResult ScratchbirdConnection::getColumns(const std::string& table, const std::string& schema) {
-    (void)table;
-    (void)schema;
-    return query(sb_metadata_columns_query());
+    std::string sql = sb_metadata_columns_query();
+    
+    // Build filter conditions
+    std::vector<std::string> conditions;
+    
+    if (!table.empty() && table != "*") {
+        // Need to look up table_id from table name
+        // For now, we'll add a comment indicating this needs the table_id
+        // A proper implementation would join with sys.tables
+        conditions.push_back("table_id IN (SELECT table_id FROM sys.tables WHERE table_name = '" + 
+                            escapeString(table) + "' AND is_valid = 1)");
+    }
+    
+    if (!schema.empty() && schema != "*") {
+        // Filter by schema through table join
+        conditions.push_back("table_id IN (SELECT table_id FROM sys.tables WHERE schema_id = '" + 
+                            escapeString(schema) + "' AND is_valid = 1)");
+    }
+    
+    // Insert conditions into the query
+    if (!conditions.empty()) {
+        size_t order_by_pos = sql.find("ORDER BY");
+        if (order_by_pos != std::string::npos) {
+            std::string where_clause = "AND " + conditions[0];
+            for (size_t i = 1; i < conditions.size(); ++i) {
+                where_clause += " AND " + conditions[i];
+            }
+            where_clause += " ";
+            sql.insert(order_by_pos, where_clause);
+        }
+    }
+    
+    return query(sql);
 }
 
 QueryResult ScratchbirdConnection::getIndexes(const std::string& table, const std::string& schema) {
@@ -242,5 +282,28 @@ QueryResult ScratchbirdConnection::resultFromSbResult(void* result) {
     return QueryResult{};
 }
 #endif
+
+std::string ScratchbirdConnection::escapeString(const std::string& str) {
+    std::string escaped;
+    escaped.reserve(str.size() * 2);
+    
+    for (char c : str) {
+        switch (c) {
+            case '\0': escaped += "\\0"; break;
+            case '\n': escaped += "\\n"; break;
+            case '\r': escaped += "\\r"; break;
+            case '\\': escaped += "\\\\"; break;
+            case '\'': escaped += "\\'"; break;
+            case '"': escaped += "\\\""; break;
+            case '\b': escaped += "\\b"; break;
+            case '\t': escaped += "\\t"; break;
+            case '\x1a': escaped += "\\Z"; break; // ASCII 26 (EOF)
+            default:
+                escaped += c;
+        }
+    }
+    
+    return escaped;
+}
 
 }  // namespace scratchrobin::backend

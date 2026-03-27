@@ -24,11 +24,12 @@
 
 #include "core/result_set.h"
 #include "core/status.h"
+#include "backend/scratchbird_connection.h"
 
 namespace scratchrobin::core {
 
-// Forward declarations
-class Connection;
+// Use backend connection type
+using Connection = backend::ScratchbirdConnection;
 
 // Query execution state
 enum class QueryExecutionState {
